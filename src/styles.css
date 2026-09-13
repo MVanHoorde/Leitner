@@ -219,6 +219,25 @@ input:focus, select:focus { border-color: var(--cyan); }
 .stats dt { color: var(--gris); }
 .stats dd { margin: 0; font-weight: 600; }
 
+.succes {
+  background: var(--cyan-pale);
+  border: 1px solid var(--cyan);
+  border-left-width: 6px;
+  border-radius: var(--rayon);
+  padding: 16px 18px;
+}
+
+/* Tableau de bord */
+.graphique { display: block; width: 100%; height: auto; font-family: inherit; }
+.defilement { overflow-x: auto; }
+.tableau { width: 100%; border-collapse: collapse; font-size: 16px; }
+.tableau th { padding: 8px; text-align: left; font-size: 14px; color: var(--gris); border-bottom: 2px solid var(--bord); white-space: nowrap; }
+.tableau td { padding: 8px; border-bottom: 1px solid var(--bord); }
+.tableau tbody tr { cursor: pointer; }
+.tableau .centre { text-align: center; }
+.cellule-eleve { display: flex; align-items: center; gap: 10px; min-width: 200px; }
+.mini { flex: none; width: 48px; height: 48px; object-fit: cover; border-radius: 6px; background: #E6ECF4; font-size: 0; }
+
 /* Révision : la photo occupe toute la hauteur disponible */
 body.plein #app { height: 100vh; height: 100dvh; min-height: 0; }
 body.plein main {
