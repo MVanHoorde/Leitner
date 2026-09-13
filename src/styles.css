@@ -238,6 +238,118 @@ input:focus, select:focus { border-color: var(--cyan); }
 .cellule-eleve { display: flex; align-items: center; gap: 10px; min-width: 200px; }
 .mini { flex: none; width: 48px; height: 48px; object-fit: cover; border-radius: 6px; background: #E6ECF4; font-size: 0; }
 
+/* Import */
+.visuellement-cache {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+label.bouton { cursor: pointer; }
+.pile:has(> .visuellement-cache:focus-visible) > label.bouton { outline: 3px solid var(--cyan); outline-offset: 2px; }
+.bouton.occupe { opacity: .5; pointer-events: none; }
+
+.reglages-grille { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.apercu-grille { display: block; width: 100%; height: auto; border: 1px solid var(--bord); border-radius: 8px; background: #fff; }
+
+.barre-appariement {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0;
+  background: var(--fond);
+  border-bottom: 1px solid var(--bord);
+}
+.barre-appariement p { margin: 0; font-weight: 600; }
+.appariement { display: grid; grid-template-columns: 3fr 2fr; gap: 20px; align-items: start; }
+.appariement-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
+.vignette-appariement {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  background: #fff;
+  border: 3px solid var(--bord);
+  border-radius: 10px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.vignette-appariement img { width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 6px; background: #E6ECF4; }
+.vignette-appariement.incertaine { border-color: var(--orange); }
+.vignette-appariement.choisie { border-color: var(--cyan); background: var(--cyan-pale); }
+.vignette-appariement.ignoree img { opacity: .3; }
+.vignette-appariement .legende { font-size: 13px; line-height: 1.2; overflow-wrap: anywhere; }
+.numero {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--marine);
+  border-radius: 999px;
+}
+.vignette-appariement .numero { position: absolute; top: 10px; left: 10px; }
+.appariement-noms { display: flex; flex-direction: column; gap: 8px; }
+.nom-appariement {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 52px;
+  padding: 8px 14px;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--marine);
+  text-align: left;
+  background: #fff;
+  border: 2px solid var(--marine);
+  border-radius: 10px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.nom-appariement.pris { border-color: var(--bord); color: var(--gris); }
+.nom-appariement:disabled { cursor: default; }
+
+.verification { display: flex; flex-direction: column; gap: 12px; }
+.ligne-verif {
+  display: grid;
+  grid-template-columns: 110px 1fr auto;
+  gap: 14px;
+  align-items: start;
+  padding: 12px;
+  background: #fff;
+  border: 1px solid var(--bord);
+  border-left: 6px solid var(--bord);
+  border-radius: var(--rayon);
+}
+.ligne-verif.incertaine { background: var(--orange-pale); border-color: var(--orange); }
+.photo-verif { width: 110px; aspect-ratio: 3 / 4; object-fit: cover; border-radius: 8px; background: #E6ECF4; }
+.champs-verif { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+.remarque { grid-column: 1 / -1; margin: 0; font-weight: 700; color: #9A4A12; }
+.barre-enregistrement { position: sticky; bottom: 76px; display: flex; padding: 8px 0; background: var(--fond); }
+.barre-enregistrement .bouton { flex: 1; }
+
+@media (max-width: 640px) {
+  .appariement { grid-template-columns: 1fr; }
+  .ligne-verif { grid-template-columns: 80px 1fr; }
+  .photo-verif { width: 80px; }
+  .ligne-verif > .bouton { grid-column: 1 / -1; }
+}
+
 /* Révision : la photo occupe toute la hauteur disponible */
 body.plein #app { height: 100vh; height: 100dvh; min-height: 0; }
 body.plein main {
