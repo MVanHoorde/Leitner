@@ -231,6 +231,83 @@ input:focus, select:focus { border-color: var(--cyan); }
 .stats dt { color: var(--gris); }
 .stats dd { margin: 0; font-weight: 600; }
 
+/* Révision : la photo occupe toute la hauteur disponible */
+body.plein #app { height: 100vh; height: 100dvh; min-height: 0; }
+body.plein main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-width: 1100px;
+  padding: 12px 16px;
+  overflow: hidden;
+}
+body.plein .confidentialite { display: none; }
+
+.revision { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+.bandeau-libre {
+  flex: none;
+  padding: 8px 14px;
+  font-size: 16px;
+  font-weight: 600;
+  background: var(--cyan-pale);
+  border: 2px solid var(--cyan);
+  border-radius: var(--rayon);
+}
+.revision-entete { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 16px; color: var(--gris); }
+.badge {
+  padding: 2px 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--marine);
+  background: var(--orange-pale);
+  border: 1px solid var(--orange);
+  border-radius: 999px;
+}
+.carte-revision { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+.scene { position: relative; flex: 1; min-height: 0; }
+.photo-revision {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.scene .sans-photo { background: #E6ECF4; border-radius: var(--rayon); }
+.panneau-reponse { flex: none; display: flex; flex-direction: column; gap: 10px; }
+.consigne { margin: 0; text-align: center; color: var(--gris); }
+.identite { text-align: center; }
+.identite-nom { font-size: 28px; font-weight: 700; line-height: 1.2; }
+.identite-classe { font-size: 20px; color: var(--gris); }
+.identite.grande {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: var(--blanc);
+  border: 1px solid var(--bord);
+  border-radius: var(--rayon);
+}
+.identite.grande .identite-nom { font-size: clamp(32px, 6vw, 56px); }
+.identite.grande .identite-classe { font-size: clamp(22px, 3vw, 30px); }
+.bouton.grand { min-height: 64px; font-size: 20px; }
+.auto-evaluation > .bouton { flex: 1 1 0; }
+.choix { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.choix .bouton { min-height: 64px; font-size: 18px; }
+.choix .bouton:disabled { opacity: 1; }
+.choix .juste { background: var(--cyan); border-color: var(--cyan); color: var(--marine); }
+.choix .faux { background: var(--orange); border-color: var(--orange); color: #fff; }
+.verdict { margin: 0; text-align: center; font-size: 20px; font-weight: 700; }
+
+@media (orientation: landscape) and (min-width: 900px) {
+  .carte-revision { flex-direction: row; }
+  .scene { flex: 1.6; }
+  .panneau-reponse { flex: 1; min-width: 0; justify-content: center; }
+  .choix { grid-template-columns: 1fr; }
+}
+
 .annonce {
   position: fixed;
   left: 50%;
@@ -551,12 +628,17 @@ const REGLAGES_DEFAUT = Object.freeze({
   tailleSession: 20,
   plafondRetard: 40,
   objectif: null,
+  modeRevision: 'photo',
   decalageJours: 0,
 });
 
 const SUIVI_DEFAUT = Object.freeze({
   premierImport: null,
   persistanceDemandee: false,
+  /** Première session du jour : { date, id }. Les suivantes sont en entraînement libre. */
+  sessionAlgo: null,
+  /** Nouvelles cartes introduites : { date, n }. */
+  nouvellesDuJour: null,
 });
 
 const MOTIF_PHOTO = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
@@ -661,6 +743,11 @@ const Etat = {
     await Base.modifier({ suppressions: { eleves: [id], cartes: [id] } });
     this.eleves.delete(id);
     this.cartes.delete(id);
+  },
+
+  async enregistrerCarte(carte) {
+    await Base.modifier({ ecritures: { cartes: [carte] } });
+    this.cartes.set(carte.id, carte);
   },
 
   async enregistrerReglages(changements) {
@@ -867,8 +954,8 @@ function demoDejaChargee() {
   return CLASSES_DEMO.some(([classe]) => classes.includes(classe));
 }
 
-// ---- 80-ecrans.js ----
-/* Navigation par ancre (#/ecran/parametre) et écrans. */
+// ---- 40-navigation.js ----
+/* Navigation par ancre (#/ecran/parametre) et composants partagés. */
 
 const Ecrans = {};
 
@@ -898,19 +985,28 @@ function majBandeauDate() {
   }
 }
 
+/** Gestionnaire clavier de l'écran courant (remplacé à chaque affichage). */
+let toucheEcran = null;
+document.addEventListener('keydown', (evenement) => {
+  if (toucheEcran && !['INPUT', 'TEXTAREA', 'SELECT'].includes(evenement.target.tagName)) toucheEcran(evenement);
+});
+
 async function afficher() {
+  if (typeof Verrou !== 'undefined' && Verrou.verrouille) return;
   const { nom, param } = lireRoute();
   const ecran = Ecrans[nom] || Ecrans.accueil;
   const zone = $('#ecran');
+  toucheEcran = null;
   zone.replaceChildren();
+  document.body.classList.toggle('plein', Boolean(ecran.pleinEcran));
   definirTitre(ecran.titre);
   majBandeauDate();
 
   const retour = $('#retour');
   retour.hidden = !ecran.parent;
   if (ecran.parent) {
-    retour.textContent = `‹ ${Ecrans[ecran.parent].titreCourt}`;
-    retour.onclick = () => aller(ecran.parent);
+    retour.textContent = `‹ ${ecran.libelleRetour || Ecrans[ecran.parent].titreCourt}`;
+    retour.onclick = () => (ecran.surRetour ? ecran.surRetour() : aller(ecran.parent));
   }
 
   window.scrollTo(0, 0);
@@ -927,6 +1023,10 @@ async function afficher() {
 function photoEleve(eleve, classe) {
   if (!eleve.photo) return el('div', { class: `${classe} sans-photo`, text: 'Sans photo' });
   return el('img', { class: classe, src: eleve.photo, alt: `Photo de ${eleve.prenom} ${eleve.nom}`, draggable: 'false' });
+}
+
+function nomComplet(eleve) {
+  return `${eleve.prenom} ${eleve.nom}`.trim();
 }
 
 function filtreClasses(auChangement) {
@@ -955,6 +1055,29 @@ function filtreClasses(auChangement) {
   return barre;
 }
 
+/** Groupe de boutons exclusifs. options : [[valeur, libelle], …] */
+function selecteur(options, valeurInitiale, auChangement, etiquette) {
+  const barre = el('div', { class: 'puces', role: 'group', 'aria-label': etiquette });
+  let valeur = valeurInitiale;
+  const majEtat = () => {
+    for (const bouton of barre.children) bouton.setAttribute('aria-pressed', String(bouton.dataset.valeur === valeur));
+  };
+  for (const [v, libelle] of options) {
+    barre.append(el('button', {
+      type: 'button',
+      class: 'puce',
+      'data-valeur': v,
+      onclick: () => {
+        valeur = v;
+        majEtat();
+        auChangement(v);
+      },
+    }, libelle));
+  }
+  majEtat();
+  return barre;
+}
+
 function boutonMenu(libelle, detail, onclick, variante = '') {
   return el('button', { type: 'button', class: `bouton menu ${variante}`, onclick },
     el('span', { class: 'libelle', text: libelle }),
@@ -968,11 +1091,15 @@ function champ(libelle, controle, aide) {
     aide && el('span', { class: 'champ-aide', text: aide }));
 }
 
+function chiffre(valeur, libelle) {
+  return el('div', { class: 'chiffre' }, el('strong', { text: valeur }), el('span', { text: libelle }));
+}
+
 function effacementComplet(libelle = 'Tout effacer') {
   return confirmationDeuxTemps({
     libelle,
     question: 'Effacer définitivement toutes les données ?',
-    detail: `${pluriel(Etat.eleves.size, 'élève')}, leurs photos, la progression et les réglages `
+    detail: 'Tous les élèves, leurs photos, la progression, les réglages et le mot de passe '
       + 'seront supprimés de cet appareil. Cette action est irréversible.',
     libelleConfirmer: 'Oui, tout effacer',
     action: async () => {
@@ -982,6 +1109,563 @@ function effacementComplet(libelle = 'Tout effacer') {
     },
   });
 }
+
+// ---- 50-leitner.js ----
+/* Moteur Leitner calibré pour trois semaines, et files de révision. */
+
+/** Jours d'attente avant la prochaine révision, pour les compartiments 1 à 5. */
+const INTERVALLES = [1, 2, 3, 5, 8];
+const SECONDES_PAR_CARTE = 8;
+const MAX_REPRISES = 2;
+
+const MODES = {
+  photo: 'Photo → identité',
+  identite: 'Identité → photo',
+  qcm: 'QCM',
+};
+
+function estimerDuree(nombreCartes) {
+  const minutes = Math.ceil((nombreCartes * SECONDES_PAR_CARTE) / 60);
+  return nombreCartes === 0 ? '0 min' : `≈ ${minutes} min`;
+}
+
+const Leitner = {
+  /** Résultat d'une réponse de la session algorithmique. Fonction pure. */
+  appliquer(carte, reussi, jour) {
+    const compartiment = reussi ? Math.min(5, carte.compartiment + 1) : 1;
+    return {
+      ...carte,
+      compartiment,
+      introduite: carte.introduite ?? jour,
+      echeance: Dates.ajouter(jour, INTERVALLES[compartiment - 1]),
+      passages: carte.passages + 1,
+      reussites: carte.reussites + (reussi ? 1 : 0),
+      dernierPassage: jour,
+      dernierEchec: reussi ? carte.dernierEchec : jour,
+    };
+  },
+
+  /** Nombre minimal de jours avant d'atteindre le compartiment 5 sans aucun échec. */
+  joursAvantMaitrise(carte, jour) {
+    if (carte.introduite === null) return INTERVALLES.slice(1, 4).reduce((a, b) => a + b, 0);
+    if (carte.compartiment === 5) return 0;
+    const attente = Math.max(0, Dates.ecart(jour, carte.echeance));
+    return attente + INTERVALLES.slice(carte.compartiment, 4).reduce((a, b) => a + b, 0);
+  },
+
+  /** Révisions restantes (sans échec) pour atteindre le compartiment 5. */
+  revisionsRestantes(carte) {
+    if (carte.introduite === null) return 4;
+    return 5 - carte.compartiment;
+  },
+
+  quotaNouvelles(jour) {
+    const { nouvellesDuJour } = Etat.suivi;
+    const dejaIntroduites = nouvellesDuJour && nouvellesDuJour.date === jour ? nouvellesDuJour.n : 0;
+    return Math.max(0, Etat.reglages.nouvellesParJour - dejaIntroduites);
+  },
+
+  sessionAlgoFaite(jour) {
+    return Boolean(Etat.suivi.sessionAlgo && Etat.suivi.sessionAlgo.date === jour);
+  },
+
+  cartesDeClasse(classe) {
+    return Etat.listeEleves(classe).map((e) => Etat.cartes.get(e.id)).filter(Boolean);
+  },
+
+  /** Situation du jour pour une classe (ou toutes). */
+  bilan(classe, jour = Dates.aujourdhui()) {
+    const cartes = this.cartesDeClasse(classe);
+    const dues = cartes
+      .filter((c) => c.introduite !== null && c.echeance <= jour)
+      .sort((a, b) => (a.echeance < b.echeance ? -1 : a.echeance > b.echeance ? 1 : a.compartiment - b.compartiment));
+    const nouvelles = cartes.filter((c) => c.introduite === null);
+    const quota = this.quotaNouvelles(jour);
+    return {
+      cartes,
+      dues,
+      enRetard: dues.filter((c) => c.echeance < jour).length,
+      nouvelles,
+      nouvellesDuJour: Math.min(quota, nouvelles.length),
+      sessionAlgoFaite: this.sessionAlgoFaite(jour),
+    };
+  },
+
+
+  /** Cartes les plus fragiles d'abord : compartiment bas, échec récent. */
+  trierParFragilite(cartes) {
+    const rang = (c) => (c.introduite === null ? 1.5 : c.compartiment);
+    return [...cartes].sort((a, b) => rang(a) - rang(b)
+      || (b.dernierEchec || '').localeCompare(a.dernierEchec || '')
+      || (a.echeance || '').localeCompare(b.echeance || ''));
+  },
+
+  fileLibre(classe) {
+    const cartes = this.cartesDeClasse(classe);
+    const etudiees = cartes.filter((c) => c.introduite !== null);
+    return this.trierParFragilite(etudiees.length ? etudiees : cartes).map((c) => c.id);
+  },
+};
+
+/* ---------- Session de révision en cours ---------- */
+
+const Session = {
+  active: null,
+
+  /**
+   * type : 'jour' (algorithmique si c'est la première du jour), 'libre' ou 'cours'.
+   */
+  demarrer({ type, mode, classe, limiteDues = null }) {
+    const jour = Dates.aujourdhui();
+    const algo = type === 'jour' && !Leitner.sessionAlgoFaite(jour);
+    this.active = {
+      id: nouvelId(),
+      type,
+      mode,
+      classe,
+      algo,
+      jour,
+      limiteDues,
+      duesPrises: 0,
+      vues: new Set(),
+      lot: 0,
+      file: [],
+      position: 0,
+      resultats: [],
+    };
+    return this.chargerLot();
+  },
+
+  /** Cartes encore disponibles pour la session algorithmique : dues les plus anciennes, puis nouvelles. */
+  resteAlgo() {
+    const s = this.active;
+    const b = Leitner.bilan(s.classe, s.jour);
+    let dues = b.dues.filter((c) => !s.vues.has(c.id));
+    if (s.limiteDues !== null) dues = dues.slice(0, Math.max(0, s.limiteDues - s.duesPrises));
+    const nouvelles = b.nouvelles.filter((c) => !s.vues.has(c.id)).slice(0, b.nouvellesDuJour);
+    return { dues: dues.map((c) => c.id), nouvelles: nouvelles.map((c) => c.id) };
+  },
+
+  /** Prépare le lot suivant. Renvoie le nombre de cartes ajoutées. */
+  chargerLot() {
+    const s = this.active;
+    const taille = Etat.reglages.tailleSession;
+    let ids;
+    if (s.algo) {
+      const { dues, nouvelles } = this.resteAlgo();
+      ids = [...dues, ...nouvelles].slice(0, taille);
+      s.duesPrises += ids.filter((id) => dues.includes(id)).length;
+    } else {
+      let candidats = Leitner.fileLibre(s.classe).filter((id) => !s.vues.has(id));
+      if (!candidats.length) {
+        s.vues.clear();
+        candidats = Leitner.fileLibre(s.classe);
+      }
+      ids = s.type === 'cours' && s.lot === 0 ? candidats : candidats.slice(0, taille);
+    }
+    melanger(ids);
+    s.file = ids.map((id) => ({ id, reprises: 0, reprise: false }));
+    s.position = 0;
+    s.resultats = [];
+    s.lot += 1;
+    for (const id of ids) s.vues.add(id);
+    return ids.length;
+  },
+
+  /** Nombre de cartes que « continuer » proposerait. */
+  restant() {
+    const s = this.active;
+    if (!s) return 0;
+    if (s.algo) {
+      const { dues, nouvelles } = this.resteAlgo();
+      return dues.length + nouvelles.length;
+    }
+    return Leitner.fileLibre(s.classe).length;
+  },
+
+  elementCourant() {
+    const s = this.active;
+    return s && s.position < s.file.length ? s.file[s.position] : null;
+  },
+
+  async repondre(reussi) {
+    const s = this.active;
+    const element = this.elementCourant();
+    if (!element) return;
+
+    if (!element.reprise) {
+      s.resultats.push({ id: element.id, reussi });
+      const carte = Etat.cartes.get(element.id);
+      if (s.algo && carte) {
+        const nouvelle = carte.introduite === null;
+        await Etat.enregistrerCarte(Leitner.appliquer(carte, reussi, s.jour));
+        const suivi = {};
+        if (!Leitner.sessionAlgoFaite(s.jour)) suivi.sessionAlgo = { date: s.jour, id: s.id };
+        if (nouvelle) {
+          const courant = Etat.suivi.nouvellesDuJour;
+          suivi.nouvellesDuJour = { date: s.jour, n: (courant && courant.date === s.jour ? courant.n : 0) + 1 };
+        }
+        if (Object.keys(suivi).length) await Etat.enregistrerSuivi(suivi);
+      }
+    }
+    // Une carte ratée revient en fin de lot, sans nouvelle notation.
+    if (!reussi && element.reprises < MAX_REPRISES) {
+      s.file.push({ id: element.id, reprises: element.reprises + 1, reprise: true });
+    }
+    s.position += 1;
+  },
+
+  arreter() {
+    this.active = null;
+  },
+};
+
+// ---- 60-revision.js ----
+/* Écrans de révision : préparation, carte, fin de série, prochain cours. */
+
+function lancerSession(options) {
+  const nombre = Session.demarrer(options);
+  if (!nombre) {
+    Session.arreter();
+    annoncer('Aucune carte à réviser pour cette sélection.');
+    return;
+  }
+  aller('session');
+}
+
+/** Trois distracteurs pris dans la même classe, pour obliger à regarder le visage. */
+function distracteurs(eleve) {
+  const memeClasse = melanger(Etat.listeEleves(eleve.classe).filter((e) => e.id !== eleve.id));
+  const choix = memeClasse.slice(0, 3);
+  if (choix.length < 3) {
+    const autres = melanger(Etat.listeEleves().filter((e) => e.classe !== eleve.classe));
+    choix.push(...autres.slice(0, 3 - choix.length));
+  }
+  return choix;
+}
+
+function blocIdentite(eleve, variante = '') {
+  return el('div', { class: `identite ${variante}` },
+    el('div', { class: 'identite-nom', text: nomComplet(eleve) || 'Nom inconnu' }),
+    el('div', { class: 'identite-classe', text: eleve.classe }));
+}
+
+function selecteurMode(auChangement) {
+  return selecteur(Object.entries(MODES), Etat.reglages.modeRevision, async (mode) => {
+    await Etat.enregistrerReglages({ modeRevision: mode });
+    if (auChangement) auChangement(mode);
+  }, 'Mode de révision');
+}
+
+/* ---------- Préparation de la session du jour ---------- */
+
+Ecrans.reviser = {
+  titre: 'Réviser',
+  titreCourt: 'Réviser',
+  parent: 'accueil',
+  rendre(zone) {
+    if (!Etat.eleves.size) {
+      zone.append(el('p', { text: 'Aucun élève enregistré. Importez un trombinoscope pour commencer.' }));
+      return;
+    }
+    const infos = el('div', { class: 'pile' });
+    const majInfos = () => {
+      const jour = Dates.aujourdhui();
+      const b = Leitner.bilan(Etat.filtreClasse, jour);
+      const taille = Etat.reglages.tailleSession;
+      const mode = () => Etat.reglages.modeRevision;
+      infos.replaceChildren();
+
+      if (b.sessionAlgoFaite) {
+        const disponibles = Leitner.fileLibre(Etat.filtreClasse).length;
+        infos.append(
+          el('div', { class: 'bandeau-libre' }, 'Entraînement libre : la session du jour est faite. '
+            + 'Les compartiments et les dates ne seront pas modifiés.'),
+          el('p', { class: 'discret', text: 'Les cartes les plus fragiles passent en premier.' }),
+          el('button', {
+            type: 'button',
+            class: 'bouton principal bloc grand',
+            onclick: () => lancerSession({ type: 'libre', mode: mode(), classe: Etat.filtreClasse }),
+          }, `S’entraîner (${Math.min(taille, disponibles)} cartes)`));
+        return;
+      }
+
+      const total = b.dues.length + b.nouvellesDuJour;
+      infos.append(el('div', { class: 'chiffres' },
+        chiffre(b.dues.length, b.enRetard ? `dues, dont ${b.enRetard} en retard` : 'cartes dues'),
+        chiffre(b.nouvellesDuJour, b.nouvellesDuJour > 1 ? 'nouvelles' : 'nouvelle'),
+        chiffre(estimerDuree(total), 'pour tout traiter')));
+
+      if (!total) {
+        infos.append(
+          el('div', { class: 'panneau' }, el('p', { text: 'Rien à réviser aujourd’hui pour cette sélection.' })),
+          el('button', {
+            type: 'button',
+            class: 'bouton bloc grand',
+            onclick: () => lancerSession({ type: 'libre', mode: mode(), classe: Etat.filtreClasse }),
+          }, 'Entraînement libre'));
+        return;
+      }
+
+      const plafond = Etat.reglages.plafondRetard;
+      if (b.dues.length > plafond) {
+        infos.append(el('div', { class: 'alerte pile' },
+          el('p', {}, el('strong', { text: `${b.dues.length} cartes attendent.` })),
+          el('p', { text: `Pour garder des sessions courtes, commencez par les ${plafond} plus anciennes. `
+            + 'Les autres resteront dues pour les jours suivants.' }),
+          el('button', {
+            type: 'button',
+            class: 'bouton principal bloc grand',
+            onclick: () => lancerSession({ type: 'jour', mode: mode(), classe: Etat.filtreClasse, limiteDues: plafond }),
+          }, `Traiter les ${plafond} plus anciennes`),
+          el('button', {
+            type: 'button',
+            class: 'bouton bloc',
+            onclick: () => lancerSession({ type: 'jour', mode: mode(), classe: Etat.filtreClasse }),
+          }, 'Tout garder dans la file')));
+        return;
+      }
+
+      infos.append(
+        el('p', { class: 'discret', text: `Séries de ${taille} cartes, avec un bouton pour continuer.` }),
+        el('button', {
+          type: 'button',
+          class: 'bouton principal bloc grand',
+          onclick: () => lancerSession({ type: 'jour', mode: mode(), classe: Etat.filtreClasse }),
+        }, 'Commencer la session du jour'));
+    };
+
+    zone.append(el('div', { class: 'pile' },
+      el('h2', { text: 'Classe' }),
+      filtreClasses(majInfos),
+      el('h2', { text: 'Mode' }),
+      selecteurMode(),
+      infos));
+    majInfos();
+  },
+};
+
+/* ---------- Prochain cours ---------- */
+
+Ecrans['prochain-cours'] = {
+  titre: 'Prochain cours',
+  titreCourt: 'Prochain cours',
+  parent: 'accueil',
+  rendre(zone) {
+    const classes = Etat.classes();
+    if (!classes.length) {
+      zone.append(el('p', { text: 'Aucune classe enregistrée.' }));
+      return;
+    }
+    zone.append(el('div', { class: 'pile' },
+      el('p', { text: 'Touchez la classe : tous ses élèves défilent, les plus fragiles d’abord. '
+        + 'C’est un entraînement libre, la progression n’est pas modifiée.' }),
+      selecteurMode(),
+      ...classes.map((classe) => {
+        const cartes = Leitner.cartesDeClasse(classe);
+        const fragiles = cartes.filter((c) => c.introduite === null || c.compartiment <= 2).length;
+        return boutonMenu(classe, `${pluriel(cartes.length, 'élève')} · ${fragiles} à consolider`,
+          () => lancerSession({ type: 'cours', mode: Etat.reglages.modeRevision, classe }));
+      })));
+  },
+};
+
+/* ---------- Carte en cours ---------- */
+
+Ecrans.session = {
+  titre: 'Révision',
+  titreCourt: 'Révision',
+  parent: 'accueil',
+  libelleRetour: 'Arrêter',
+  pleinEcran: true,
+  surRetour() {
+    const retour = Session.active && Session.active.type === 'cours' ? 'prochain-cours' : 'reviser';
+    Session.arreter();
+    aller(retour);
+  },
+  rendre(zone) {
+    const s = Session.active;
+    if (!s) {
+      document.body.classList.remove('plein');
+      zone.append(el('div', { class: 'pile' },
+        el('p', { text: 'Aucune session en cours.' }),
+        el('button', { type: 'button', class: 'bouton principal', onclick: () => aller('reviser') }, 'Réviser')));
+      return;
+    }
+    let element = Session.elementCourant();
+    while (element && !Etat.eleves.has(element.id)) {
+      s.position += 1;
+      element = Session.elementCourant();
+    }
+    if (element) rendreCarte(zone, element);
+    else rendreFinDeSerie(zone);
+  },
+};
+
+function rendreCarte(zone, element) {
+  const s = Session.active;
+  const eleve = Etat.eleves.get(element.id);
+  const carte = Etat.cartes.get(element.id);
+  definirTitre(s.type === 'cours' ? `Prochain cours · ${s.classe}` : MODES[s.mode]);
+
+  const scene = el('div', { class: 'scene' });
+  const panneau = el('div', { class: 'panneau-reponse' });
+  zone.append(el('div', { class: 'revision' },
+    !s.algo && el('div', { class: 'bandeau-libre' },
+      'Entraînement libre : compartiments et dates inchangés'),
+    el('div', { class: 'revision-entete' },
+      el('span', { text: `Carte ${s.position + 1} sur ${s.file.length}` }),
+      element.reprise && el('span', { class: 'badge', text: 'À revoir' }),
+      s.algo && carte.introduite === null && el('span', { class: 'badge', text: 'Nouvel élève' }),
+      s.classe === null && el('span', { text: eleve.classe })),
+    el('div', { class: 'carte-revision' }, scene, panneau)));
+
+  if (s.mode === 'qcm') modeQcm(eleve, element, scene, panneau);
+  else modeRetournement(eleve, s.mode, scene, panneau);
+}
+
+function boutonsAutoEvaluation() {
+  const repondre = async (reussi) => {
+    for (const b of rangee.querySelectorAll('button')) b.disabled = true;
+    toucheEcran = null;
+    await Session.repondre(reussi);
+    afficher();
+  };
+  const rangee = el('div', { class: 'rangee auto-evaluation' },
+    el('button', { type: 'button', class: 'bouton accent grand', onclick: () => repondre(false) }, 'Je ne savais pas'),
+    el('button', { type: 'button', class: 'bouton principal grand', onclick: () => repondre(true) }, 'Je savais'));
+  toucheEcran = (e) => {
+    if (e.key === 'ArrowLeft' || e.key === '1') repondre(false);
+    if (e.key === 'ArrowRight' || e.key === '2') repondre(true);
+  };
+  return rangee;
+}
+
+/** Modes 1 et 2 : on se représente la réponse, on retourne la carte, on s'auto-évalue. */
+function modeRetournement(eleve, mode, scene, panneau) {
+  if (mode === 'photo') scene.append(photoEleve(eleve, 'photo-revision'));
+  else scene.append(blocIdentite(eleve, 'grande'));
+
+  const retourner = () => {
+    if (mode === 'identite') scene.replaceChildren(photoEleve(eleve, 'photo-revision'));
+    panneau.replaceChildren(blocIdentite(eleve), boutonsAutoEvaluation());
+  };
+  panneau.append(
+    el('p', { class: 'consigne', text: mode === 'photo'
+      ? 'Nom, prénom, classe ?'
+      : 'Représentez-vous son visage.' }),
+    el('button', { type: 'button', class: 'bouton principal bloc grand', onclick: retourner }, 'Retourner la carte'));
+  toucheEcran = (e) => {
+    if (e.key === ' ' || e.key === 'Enter') {
+      e.preventDefault();
+      retourner();
+    }
+  };
+}
+
+/** Mode 3 : quatre noms de la même classe, correction automatique. */
+function modeQcm(eleve, element, scene, panneau) {
+  if (!element.options) element.options = melanger([eleve, ...distracteurs(eleve)]).map((e) => e.id);
+  scene.append(photoEleve(eleve, 'photo-revision'));
+
+  const suite = el('div', { class: 'pile' });
+  const grille = el('div', { class: 'choix' });
+  let repondu = false;
+
+  const choisir = async (id, bouton) => {
+    if (repondu) return;
+    repondu = true;
+    const reussi = id === eleve.id;
+    for (const b of grille.children) {
+      b.disabled = true;
+      if (b.dataset.id === eleve.id) b.classList.add('juste');
+      else if (b === bouton) b.classList.add('faux');
+    }
+    toucheEcran = null;
+    await Session.repondre(reussi);
+    suite.replaceChildren(
+      el('p', { class: 'verdict', text: reussi ? 'Bonne réponse' : `C’était ${nomComplet(eleve)}` }),
+      el('button', { type: 'button', class: 'bouton principal bloc grand', onclick: afficher }, 'Suivant'));
+    toucheEcran = (e) => {
+      if (e.key === ' ' || e.key === 'Enter') {
+        e.preventDefault();
+        afficher();
+      }
+    };
+  };
+
+  for (const id of element.options) {
+    const option = Etat.eleves.get(id);
+    if (!option) continue;
+    const bouton = el('button', { type: 'button', class: 'bouton', 'data-id': id }, nomComplet(option));
+    bouton.addEventListener('click', () => choisir(id, bouton));
+    grille.append(bouton);
+  }
+  panneau.append(grille, suite);
+  toucheEcran = (e) => {
+    const rang = Number(e.key);
+    if (rang >= 1 && rang <= grille.children.length) grille.children[rang - 1].click();
+  };
+}
+
+/* ---------- Fin de série ---------- */
+
+function rendreFinDeSerie(zone) {
+  const s = Session.active;
+  document.body.classList.remove('plein');
+  definirTitre('Série terminée');
+  toucheEcran = null;
+
+  const reussies = s.resultats.filter((r) => r.reussi).length;
+  const ratees = s.resultats.filter((r) => !r.reussi).map((r) => Etat.eleves.get(r.id)).filter(Boolean);
+  const restant = Session.restant();
+  const taille = Math.min(restant, Etat.reglages.tailleSession);
+
+  const pile = el('div', { class: 'pile' },
+    el('div', { class: 'chiffres' },
+      chiffre(`${reussies} / ${s.resultats.length}`, 'reconnus du premier coup'),
+      chiffre(ratees.length, 'à retravailler')));
+
+  if (s.algo) {
+    pile.append(el('p', { class: 'discret', text: restant
+      ? `Il reste ${pluriel(restant, 'carte')} dans la session du jour.`
+      : 'Session du jour terminée. Les prochaines sessions d’aujourd’hui seront en entraînement libre.' }));
+  }
+
+  if (ratees.length) {
+    pile.append(el('section', { class: 'panneau pile' },
+      el('h3', { text: 'À retravailler' }),
+      el('div', { class: 'grille-eleves' }, ratees.map((e) => el('div', { class: 'tuile-eleve' },
+        photoEleve(e, 'vignette'),
+        el('span', { class: 'tuile-nom', text: nomComplet(e) }),
+        el('span', { class: 'tuile-classe', text: e.classe }))))));
+  }
+
+  const actions = el('div', { class: 'rangee' });
+  if (restant > 0) {
+    actions.append(el('button', {
+      type: 'button',
+      class: 'bouton principal grand',
+      onclick: () => {
+        if (Session.chargerLot()) afficher();
+        else annoncer('Plus aucune carte à proposer.');
+      },
+    }, `Continuer (${pluriel(taille, 'carte')})`));
+  }
+  actions.append(el('button', {
+    type: 'button',
+    class: 'bouton grand',
+    onclick: () => {
+      Session.arreter();
+      aller('accueil');
+    },
+  }, 'Terminer'));
+  pile.append(actions);
+  zone.append(pile);
+}
+
+// ---- 80-ecrans.js ----
+/* Accueil, élèves, réglages. */
 
 async function chargerDemo(bouton) {
   bouton.disabled = true;
@@ -999,6 +1683,18 @@ async function chargerDemo(bouton) {
 
 /* ---------- Accueil ---------- */
 
+function rappelConservation() {
+  const { premierImport } = Etat.suivi;
+  if (!premierImport) return null;
+  const jours = Dates.ecart(premierImport, Dates.aujourdhui());
+  if (jours <= 60) return null;
+  return el('section', { class: 'alerte pile', role: 'alert' },
+    el('h2', { text: `Données conservées depuis ${jours} jours` }),
+    el('p', { text: "Cette application contient des photos d'élèves. Si vous n'en avez plus "
+      + "l'usage, effacez-les de cette tablette." }),
+    effacementComplet('Effacer toutes les données maintenant'));
+}
+
 Ecrans.accueil = {
   titre: 'Reconnaître mes élèves',
   titreCourt: 'Accueil',
@@ -1008,16 +1704,8 @@ Ecrans.accueil = {
     zone.append(pile);
     const { premierImport } = Etat.suivi;
 
-    if (premierImport) {
-      const jours = Dates.ecart(premierImport, Dates.aujourdhui());
-      if (jours > 60) {
-        pile.append(el('section', { class: 'alerte pile', role: 'alert' },
-          el('h2', { text: `Données conservées depuis ${jours} jours` }),
-          el('p', { text: "Cette application contient des photos d'élèves. Si vous n'en avez plus "
-            + "l'usage, effacez-les de cette tablette." }),
-          effacementComplet('Effacer toutes les données maintenant')));
-      }
-    }
+    const rappel = rappelConservation();
+    if (rappel) pile.append(rappel);
 
     if (!Etat.eleves.size) {
       pile.append(
@@ -1027,49 +1715,33 @@ Ecrans.accueil = {
             + 'Chaque fichier correspond à une classe.' })),
         boutonMenu('Importer un trombinoscope PDF', 'Une classe par fichier', () => aller('import'), 'principal'),
         boutonMenu('Essayer avec des élèves fictifs', '36 élèves répartis en 3 classes', (e) => chargerDemo(e.currentTarget)),
-        boutonMenu('Réglages', null, () => aller('reglages')));
+        boutonMenu('Réglages et sauvegarde', 'Réimporter une sauvegarde, effacement', () => aller('reglages')));
       return;
     }
 
+    const jour = Dates.aujourdhui();
+    const bilan = Leitner.bilan(null, jour);
     const classes = Etat.classes();
+    const aFaire = bilan.dues.length + bilan.nouvellesDuJour;
+    const detailRevision = bilan.sessionAlgoFaite
+      ? 'Session du jour faite · entraînement libre'
+      : `${pluriel(bilan.dues.length, 'carte due', 'cartes dues')} · ${pluriel(bilan.nouvellesDuJour, 'nouvelle')} · ${estimerDuree(aFaire)}`;
+
     pile.append(
-      el('div', { class: 'chiffres' },
-        el('div', { class: 'chiffre' }, el('strong', { text: Etat.eleves.size }), el('span', { text: 'élèves' })),
-        el('div', { class: 'chiffre' }, el('strong', { text: classes.length }), el('span', { text: 'classes' }))),
-      boutonMenu('Réviser', 'Session du jour', () => aller('reviser'), 'principal'),
+      boutonMenu('Réviser', detailRevision, () => aller('reviser'), 'principal'),
       boutonMenu('Prochain cours', 'Revoir une classe avant d’entrer en salle', () => aller('prochain-cours')),
-      boutonMenu('Tableau de bord', 'Progression et objectif', () => aller('tableau')),
+      boutonMenu('Tableau de bord', 'Progression, objectif, suivi par élève', () => aller('tableau')),
       boutonMenu('Élèves', `${pluriel(Etat.eleves.size, 'élève')} · ${pluriel(classes.length, 'classe')}`, () => aller('eleves')),
       boutonMenu('Importer un trombinoscope PDF', 'Ajouter une classe', () => aller('import')),
       boutonMenu('Réglages et sauvegarde', 'Charge de travail, export, effacement', () => aller('reglages')));
 
     if (premierImport) {
-      const jours = Dates.ecart(premierImport, Dates.aujourdhui());
+      const jours = Dates.ecart(premierImport, jour);
       pile.append(el('p', { class: 'discret' },
         `Premier import le ${Dates.formater(premierImport)} (${Dates.depuis(jours)}).`));
     }
   },
 };
-
-/* ---------- Écrans des étapes suivantes ---------- */
-
-function ecranAVenir(titre, titreCourt, etape, contenu) {
-  return {
-    titre,
-    titreCourt,
-    parent: 'accueil',
-    rendre(zone) {
-      zone.append(el('div', { class: 'panneau pile' },
-        el('h2', { text: `Prévu à l’étape ${etape}` }),
-        el('p', { text: contenu })));
-    },
-  };
-}
-
-Ecrans.reviser = ecranAVenir('Réviser', 'Réviser', 2, 'Moteur Leitner et les trois modes de révision.');
-Ecrans['prochain-cours'] = ecranAVenir('Prochain cours', 'Prochain cours', 2, 'Entraînement libre sur une classe.');
-Ecrans.tableau = ecranAVenir('Tableau de bord', 'Tableau de bord', 3, 'Répartition par compartiment et objectif daté.');
-Ecrans.import = ecranAVenir('Importer un trombinoscope', 'Import', 4, 'Lecture du PDF, appariement manuel et vérification.');
 
 /* ---------- Élèves ---------- */
 
@@ -1093,13 +1765,25 @@ Ecrans.eleves = {
         onclick: () => aller('eleve', e.id),
       },
       photoEleve(e, 'vignette'),
-      el('span', { class: 'tuile-nom', text: `${e.prenom} ${e.nom}` }),
+      el('span', { class: 'tuile-nom', text: nomComplet(e) }),
       el('span', { class: 'tuile-classe', text: e.classe }))));
     };
     zone.append(el('div', { class: 'pile' }, filtreClasses(remplir), compteur, grille));
     remplir();
   },
 };
+
+function statistiquesEleve(carte) {
+  return el('dl', { class: 'stats' },
+    el('dt', { text: 'Compartiment' }),
+    el('dd', { text: carte.introduite ? `${carte.compartiment} sur 5` : 'Pas encore étudié' }),
+    el('dt', { text: 'Passages' }), el('dd', { text: carte.passages }),
+    el('dt', { text: 'Réussites' }), el('dd', { text: carte.reussites }),
+    el('dt', { text: 'Prochaine révision' }),
+    el('dd', { text: carte.echeance ? Dates.formater(carte.echeance) : '—' }),
+    el('dt', { text: 'Dernier échec' }),
+    el('dd', { text: carte.dernierEchec ? Dates.formater(carte.dernierEchec) : 'Aucun' }));
+}
 
 Ecrans.eleve = {
   titre: 'Fiche élève',
@@ -1111,8 +1795,7 @@ Ecrans.eleve = {
       zone.append(el('p', { text: 'Élève introuvable.' }));
       return;
     }
-    definirTitre(`${eleve.prenom} ${eleve.nom}`);
-    const carte = Etat.cartes.get(id);
+    definirTitre(nomComplet(eleve));
 
     const nom = el('input', { type: 'text', value: eleve.nom, autocomplete: 'off', required: true });
     const prenom = el('input', { type: 'text', value: eleve.prenom, autocomplete: 'off' });
@@ -1128,23 +1811,18 @@ Ecrans.eleve = {
         annoncer('Le nom est obligatoire.');
         return;
       }
-      const maj = await Etat.modifierEleve({ ...eleve, nom: nom.value, prenom: prenom.value, classe: classe.value });
-      definirTitre(`${maj.prenom} ${maj.nom}`);
+      const maj = await Etat.modifierEleve({ ...Etat.eleves.get(id), nom: nom.value, prenom: prenom.value, classe: classe.value });
+      definirTitre(nomComplet(maj));
       annoncer('Fiche enregistrée.');
     });
-
-    const stats = el('dl', { class: 'stats' },
-      el('dt', { text: 'Compartiment' }), el('dd', { text: carte.introduite ? `${carte.compartiment} sur 5` : 'Pas encore étudiée' }),
-      el('dt', { text: 'Passages' }), el('dd', { text: carte.passages }),
-      el('dt', { text: 'Dernier échec' }), el('dd', { text: carte.dernierEchec ? Dates.formater(carte.dernierEchec) : 'Aucun' }));
 
     zone.append(el('div', { class: 'pile' },
       photoEleve(eleve, 'photo-fiche'),
       formulaire,
-      el('section', { class: 'panneau' }, el('h3', { text: 'Progression' }), stats),
+      el('section', { class: 'panneau' }, el('h3', { text: 'Progression' }), statistiquesEleve(Etat.cartes.get(id))),
       confirmationDeuxTemps({
         libelle: 'Supprimer cet élève',
-        question: `Supprimer ${eleve.prenom} ${eleve.nom} ?`,
+        question: `Supprimer ${nomComplet(eleve)} ?`,
         detail: 'Sa photo et sa progression seront effacées.',
         libelleConfirmer: 'Oui, supprimer',
         action: async () => {
@@ -1185,26 +1863,25 @@ Ecrans.reglages = {
   async rendre(zone) {
     const etatStockage = el('p', { class: 'discret', text: 'Vérification du stockage…' });
 
-    const boutonDemo = el('button', { type: 'button', class: 'bouton bloc' },
-      demoDejaChargee() ? 'Élèves fictifs déjà chargés' : 'Ajouter 36 élèves fictifs');
-    boutonDemo.disabled = demoDejaChargee();
+    const dejaDemo = demoDejaChargee();
+    const boutonDemo = el('button', { type: 'button', class: 'bouton bloc', disabled: dejaDemo },
+      dejaDemo ? 'Élèves fictifs déjà chargés' : 'Ajouter 36 élèves fictifs');
     boutonDemo.addEventListener('click', () => chargerDemo(boutonDemo));
 
     zone.append(el('div', { class: 'pile' },
       el('section', { class: 'panneau pile' },
         el('h2', { text: 'Charge de travail' }),
         champReglage('Nouvelles cartes par jour', 'nouvellesParJour', 1, 150),
-        champReglage('Cartes par session', 'tailleSession', 5, 200, 'Un bouton « continuer » permet d’aller au-delà.'),
+        champReglage('Cartes par série', 'tailleSession', 5, 200, 'Un bouton « continuer » permet d’aller au-delà.'),
         champReglage('Cartes en retard traitées au maximum', 'plafondRetard', 5, 500,
           'En cas de gros retard, seules les plus anciennes sont proposées.')),
+
+      sectionSauvegarde(),
+      sectionMotDePasse(),
 
       el('section', { class: 'panneau pile' },
         el('h2', { text: 'Stockage' }),
         etatStockage),
-
-      el('section', { class: 'panneau pile' },
-        el('h2', { text: 'Sauvegarde' }),
-        el('p', { class: 'discret', text: 'Export et réimport JSON : prévus à l’étape 5.' })),
 
       el('section', { class: 'panneau pile' },
         el('h2', { text: 'Données de démonstration' }),
@@ -1223,7 +1900,7 @@ Ecrans.reglages = {
 
       el('section', { class: 'panneau pile' },
         el('h2', { text: 'Effacement' }),
-        el('p', { text: 'Supprime la base de données entière de cet appareil.' }),
+        el('p', { text: 'Supprime la base de données entière de cet appareil : élèves, photos, progression, mot de passe.' }),
         effacementComplet())));
 
     const persistant = navigator.storage && navigator.storage.persisted ? await navigator.storage.persisted() : false;
@@ -1234,6 +1911,12 @@ Ecrans.reglages = {
       + (estimation ? ` Espace utilisé : ${formaterOctets(estimation.usage || 0)}.` : '');
   },
 };
+
+// ---- 90-provisoire.js ----
+function sectionSauvegarde() { return el('section', { class: 'panneau' }, el('h2', { text: 'Sauvegarde' })); }
+function sectionMotDePasse() { return null; }
+Ecrans.tableau = { titre: 'Tableau de bord', titreCourt: 'Tableau', parent: 'accueil', rendre() {} };
+Ecrans.import = { titre: 'Import', titreCourt: 'Import', parent: 'accueil', rendre() {} };
 
 // ---- 99-demarrage.js ----
 async function demarrer() {

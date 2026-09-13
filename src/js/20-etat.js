@@ -5,12 +5,17 @@ const REGLAGES_DEFAUT = Object.freeze({
   tailleSession: 20,
   plafondRetard: 40,
   objectif: null,
+  modeRevision: 'photo',
   decalageJours: 0,
 });
 
 const SUIVI_DEFAUT = Object.freeze({
   premierImport: null,
   persistanceDemandee: false,
+  /** Première session du jour : { date, id }. Les suivantes sont en entraînement libre. */
+  sessionAlgo: null,
+  /** Nouvelles cartes introduites : { date, n }. */
+  nouvellesDuJour: null,
 });
 
 const MOTIF_PHOTO = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
@@ -115,6 +120,11 @@ const Etat = {
     await Base.modifier({ suppressions: { eleves: [id], cartes: [id] } });
     this.eleves.delete(id);
     this.cartes.delete(id);
+  },
+
+  async enregistrerCarte(carte) {
+    await Base.modifier({ ecritures: { cartes: [carte] } });
+    this.cartes.set(carte.id, carte);
   },
 
   async enregistrerReglages(changements) {
