@@ -1,0 +1,1264 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' blob:; worker-src blob:; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#1B2A4A">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Mes élèves">
+<title>Reconnaître mes élèves</title>
+<style>:root {
+  --marine: #1B2A4A;
+  --orange: #E8792E;
+  --cyan: #3FA9F5;
+  --fond: #F7F9FC;
+  --blanc: #FFFFFF;
+  --gris: #56647D;
+  --bord: #D6DEEA;
+  --orange-pale: #FCEBDD;
+  --cyan-pale: #E2F1FD;
+  --rouge: #B42318;
+  --rouge-pale: #FDECEA;
+  --rayon: 12px;
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--fond);
+  color: var(--marine);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 18px;
+  line-height: 1.45;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#app { display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; }
+
+.entete {
+  background: var(--marine);
+  color: #fff;
+  padding: max(12px, env(safe-area-inset-top)) 20px 12px;
+}
+.entete h1 { margin: 0; font-size: 22px; font-weight: 650; }
+
+.bandeau-test {
+  background: var(--cyan-pale);
+  border-bottom: 2px solid var(--cyan);
+  padding: 8px 20px;
+  font-size: 16px;
+}
+
+main {
+  flex: 1;
+  width: 100%;
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 20px;
+  outline: none;
+}
+
+.pied {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  background: var(--fond);
+  border-top: 1px solid var(--bord);
+  padding: 10px 20px max(10px, env(safe-area-inset-bottom));
+}
+.confidentialite { flex: 1; min-width: 200px; margin: 0; font-size: 14px; color: var(--gris); }
+
+h2 { margin: 0 0 12px; font-size: 20px; }
+h3 { margin: 0 0 8px; font-size: 18px; }
+p { margin: 0 0 10px; }
+p:last-child { margin-bottom: 0; }
+.pile > * + * { margin-top: 14px; }
+.discret { color: var(--gris); font-size: 16px; }
+
+:focus-visible { outline: 3px solid var(--cyan); outline-offset: 2px; }
+
+/* Boutons : cibles tactiles de 48 px minimum */
+.bouton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  min-width: 48px;
+  padding: 10px 18px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--marine);
+  background: var(--blanc);
+  border: 2px solid var(--marine);
+  border-radius: var(--rayon);
+  cursor: pointer;
+  touch-action: manipulation;
+  text-align: center;
+}
+.bouton:disabled { opacity: .5; cursor: default; }
+.bouton.principal { background: var(--marine); color: #fff; }
+.bouton.accent { background: var(--orange); border-color: var(--orange); color: #fff; }
+.bouton.danger { color: var(--rouge); border-color: var(--rouge); }
+.bouton.danger.plein { background: var(--rouge); color: #fff; }
+.bouton.bloc { display: flex; width: 100%; }
+
+.bouton.menu {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  min-height: 72px;
+  padding: 14px 20px;
+  text-align: left;
+}
+.menu .libelle { font-size: 20px; }
+.menu .detail { font-size: 15px; font-weight: 400; opacity: .85; }
+
+.rangee { display: flex; flex-wrap: wrap; gap: 12px; }
+.rangee > .bouton { flex: 1 1 160px; }
+
+.panneau {
+  background: var(--blanc);
+  border: 1px solid var(--bord);
+  border-radius: var(--rayon);
+  padding: 18px;
+}
+.alerte {
+  background: var(--orange-pale);
+  border: 1px solid var(--orange);
+  border-left-width: 6px;
+  border-radius: var(--rayon);
+  padding: 16px 18px;
+}
+.alerte.danger { background: var(--rouge-pale); border-color: var(--rouge); }
+
+/* Formulaires */
+.champ { display: block; }
+.champ-libelle { display: block; margin-bottom: 4px; font-weight: 600; }
+.champ-aide { display: block; margin-top: 4px; font-size: 15px; color: var(--gris); }
+input[type=text], input[type=number], input[type=date], input[type=password], select {
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 12px;
+  font: inherit;
+  color: inherit;
+  background: #fff;
+  border: 2px solid var(--bord);
+  border-radius: 10px;
+}
+input:focus, select:focus { border-color: var(--cyan); }
+
+/* Filtre par classe */
+.puces { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.puce {
+  flex: none;
+  min-height: 44px;
+  padding: 8px 16px;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--marine);
+  background: #fff;
+  border: 2px solid var(--bord);
+  border-radius: 999px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.puce[aria-pressed="true"] { background: var(--cyan); border-color: var(--cyan); }
+
+/* Chiffres clés */
+.chiffres { display: flex; flex-wrap: wrap; gap: 12px; }
+.chiffre {
+  flex: 1 1 130px;
+  background: var(--blanc);
+  border: 1px solid var(--bord);
+  border-radius: var(--rayon);
+  padding: 12px 16px;
+}
+.chiffre strong { display: block; font-size: 32px; line-height: 1.1; }
+.chiffre span { font-size: 15px; color: var(--gris); }
+
+/* Élèves */
+.grille-eleves { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.tuile-eleve {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  background: #fff;
+  border: 1px solid var(--bord);
+  border-radius: var(--rayon);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.vignette {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 8px;
+  background: #E6ECF4;
+}
+.sans-photo { display: flex; align-items: center; justify-content: center; font-size: 14px; color: var(--gris); }
+.tuile-nom { margin-top: 4px; font-size: 16px; font-weight: 600; line-height: 1.25; }
+.tuile-classe { font-size: 14px; color: var(--gris); }
+
+.photo-fiche {
+  display: block;
+  width: 100%;
+  max-width: 360px;
+  aspect-ratio: 1;
+  margin: 0 auto;
+  object-fit: cover;
+  border-radius: var(--rayon);
+  background: #E6ECF4;
+}
+.stats { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 0; }
+.stats dt { color: var(--gris); }
+.stats dd { margin: 0; font-weight: 600; }
+
+.annonce {
+  position: fixed;
+  left: 50%;
+  bottom: 96px;
+  z-index: 10;
+  max-width: calc(100% - 40px);
+  transform: translateX(-50%);
+  padding: 12px 20px;
+  font-size: 16px;
+  color: #fff;
+  background: var(--marine);
+  border-radius: var(--rayon);
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="entete">
+    <h1 id="titre">Reconnaître mes élèves</h1>
+  </header>
+  <div id="bandeau-date" class="bandeau-test" hidden></div>
+  <main id="ecran" tabindex="-1"></main>
+  <footer class="pied">
+    <button id="retour" class="bouton" type="button" hidden>‹ Accueil</button>
+    <p class="confidentialite">Données enregistrées uniquement sur cet appareil. Aucune connexion réseau.</p>
+  </footer>
+</div>
+<div id="annonce" class="annonce" role="status" aria-live="polite" hidden></div>
+<script>// ---- 00-outils.js ----
+'use strict';
+
+const $ = (selecteur, racine = document) => racine.querySelector(selecteur);
+
+const comparerFr = new Intl.Collator('fr', { sensitivity: 'base', numeric: true }).compare;
+
+/** Crée un élément DOM. Le texte passe toujours par textContent, jamais par innerHTML. */
+function el(balise, attributs, ...enfants) {
+  const noeud = document.createElement(balise);
+  for (const [cle, valeur] of Object.entries(attributs || {})) {
+    if (valeur === null || valeur === undefined || valeur === false) continue;
+    if (cle === 'class') noeud.className = valeur;
+    else if (cle === 'text') noeud.textContent = valeur;
+    else if (cle === 'value') noeud.value = valeur;
+    else if (cle.startsWith('on') && typeof valeur === 'function') noeud.addEventListener(cle.slice(2), valeur);
+    else noeud.setAttribute(cle, valeur === true ? '' : String(valeur));
+  }
+  for (const enfant of enfants.flat()) {
+    if (enfant === null || enfant === undefined || enfant === false) continue;
+    noeud.append(enfant instanceof Node ? enfant : String(enfant));
+  }
+  return noeud;
+}
+
+function nouvelId() {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  const octets = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(octets, (o) => o.toString(16).padStart(2, '0')).join('');
+}
+
+function pluriel(n, singulier, pluriel = singulier + 's') {
+  return `${n} ${n > 1 ? pluriel : singulier}`;
+}
+
+function formaterOctets(octets) {
+  if (octets < 1024 * 1024) return `${Math.max(1, Math.round(octets / 1024))} Ko`;
+  return `${(octets / 1024 / 1024).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} Mo`;
+}
+
+/* ---------- Dates calendaires locales, au format AAAA-MM-JJ ---------- */
+
+const Dates = {
+  /** Décalage en jours, utilisé uniquement pour tester l'application. */
+  decalage: 0,
+
+  versIso(date) {
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const jj = String(date.getDate()).padStart(2, '0');
+    return `${date.getFullYear()}-${mm}-${jj}`;
+  },
+
+  versDate(iso) {
+    const [a, m, j] = iso.split('-').map(Number);
+    return new Date(a, m - 1, j);
+  },
+
+  aujourdhui() {
+    const d = new Date();
+    d.setDate(d.getDate() + this.decalage);
+    return this.versIso(d);
+  },
+
+  ajouter(iso, jours) {
+    const d = this.versDate(iso);
+    d.setDate(d.getDate() + jours);
+    return this.versIso(d);
+  },
+
+  /** Nombre de jours de a à b (positif si b est après a). */
+  ecart(a, b) {
+    return Math.round((this.versDate(b) - this.versDate(a)) / 86400000);
+  },
+
+  formater(iso, avecJour = false) {
+    const options = { day: 'numeric', month: 'long', year: 'numeric' };
+    if (avecJour) options.weekday = 'long';
+    return this.versDate(iso).toLocaleDateString('fr-FR', options);
+  },
+
+  depuis(jours) {
+    if (jours <= 0) return "aujourd'hui";
+    if (jours === 1) return 'hier';
+    return `il y a ${jours} jours`;
+  },
+};
+
+/* ---------- Aléatoire reproductible (données de démonstration) ---------- */
+
+function hacherTexte(texte) {
+  let h = 2166136261;
+  for (const c of texte) {
+    h ^= c.codePointAt(0);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function generateurAleatoire(graine) {
+  let a = graine >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function melanger(tableau, alea = Math.random) {
+  for (let i = tableau.length - 1; i > 0; i--) {
+    const j = Math.floor(alea() * (i + 1));
+    [tableau[i], tableau[j]] = [tableau[j], tableau[i]];
+  }
+  return tableau;
+}
+
+/* ---------- Retours à l'utilisateur ---------- */
+
+let minuteurAnnonce = null;
+
+function annoncer(texte) {
+  const zone = $('#annonce');
+  zone.textContent = texte;
+  zone.hidden = false;
+  clearTimeout(minuteurAnnonce);
+  minuteurAnnonce = setTimeout(() => { zone.hidden = true; }, 3500);
+}
+
+/**
+ * Bouton d'action destructrice avec confirmation en deux temps :
+ * premier tap = explication, second tap = exécution.
+ */
+function confirmationDeuxTemps({ libelle, question, detail, libelleConfirmer, action, classeBouton = 'bouton danger bloc' }) {
+  const zone = el('div');
+  const etapeInitiale = () => {
+    zone.replaceChildren(el('button', { type: 'button', class: classeBouton, onclick: etapeConfirmation }, libelle));
+  };
+  const etapeConfirmation = () => {
+    const confirmer = el('button', { type: 'button', class: 'bouton danger plein' }, libelleConfirmer);
+    confirmer.addEventListener('click', async () => {
+      confirmer.disabled = true;
+      try {
+        await action();
+      } catch (erreur) {
+        annoncer(`Échec : ${erreur.message}`);
+        confirmer.disabled = false;
+      }
+    });
+    zone.replaceChildren(el('div', { class: 'alerte danger pile', role: 'alertdialog' },
+      el('p', {}, el('strong', { text: question })),
+      detail && el('p', { text: detail }),
+      el('div', { class: 'rangee' },
+        confirmer,
+        el('button', { type: 'button', class: 'bouton', onclick: etapeInitiale }, 'Annuler'))));
+    confirmer.focus();
+  };
+  etapeInitiale();
+  return zone;
+}
+
+// ---- 10-base.js ----
+/* Couche IndexedDB.
+ *
+ * Magasins :
+ *   eleves  { id, donnees }  — donnees = élève encodé par le codec
+ *   cartes  { id, donnees }  — état Leitner, id = id de l'élève
+ *   meta    { cle, valeur }  — réglages et suivi, jamais de donnée personnelle
+ *
+ * Le codec transforme chaque objet avant écriture et après lecture.
+ * Il est neutre tant que le chiffrement n'est pas activé.
+ */
+
+function attendreRequete(requete) {
+  return new Promise((resoudre, rejeter) => {
+    requete.onsuccess = () => resoudre(requete.result);
+    requete.onerror = () => rejeter(requete.error);
+  });
+}
+
+function attendreTransaction(tx) {
+  return new Promise((resoudre, rejeter) => {
+    tx.oncomplete = () => resoudre();
+    tx.onerror = () => rejeter(tx.error);
+    tx.onabort = () => rejeter(tx.error || new Error('Écriture annulée.'));
+  });
+}
+
+const Base = {
+  NOM: 'reconnaitre-mes-eleves',
+  VERSION: 1,
+  cnx: null,
+
+  codec: {
+    encoder: async (objet) => objet,
+    decoder: async (donnees) => donnees,
+  },
+
+  ouvrir() {
+    return new Promise((resoudre, rejeter) => {
+      if (!('indexedDB' in window)) {
+        rejeter(new Error("IndexedDB n'est pas disponible dans ce navigateur."));
+        return;
+      }
+      const requete = indexedDB.open(this.NOM, this.VERSION);
+      requete.onupgradeneeded = () => {
+        const db = requete.result;
+        if (!db.objectStoreNames.contains('eleves')) db.createObjectStore('eleves', { keyPath: 'id' });
+        if (!db.objectStoreNames.contains('cartes')) db.createObjectStore('cartes', { keyPath: 'id' });
+        if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'cle' });
+      };
+      requete.onsuccess = () => {
+        this.cnx = requete.result;
+        this.cnx.onversionchange = () => {
+          this.cnx.close();
+          this.cnx = null;
+        };
+        resoudre();
+      };
+      requete.onerror = () => rejeter(requete.error);
+    });
+  },
+
+  async lireTout(magasin) {
+    const tx = this.cnx.transaction(magasin, 'readonly');
+    const enregistrements = await attendreRequete(tx.objectStore(magasin).getAll());
+    return Promise.all(enregistrements.map((e) => this.codec.decoder(e.donnees)));
+  },
+
+  /**
+   * Écritures et suppressions groupées dans une seule transaction.
+   * L'encodage (asynchrone) est fait avant d'ouvrir la transaction,
+   * sinon IndexedDB la validerait prématurément.
+   */
+  async modifier({ ecritures = {}, suppressions = {} }) {
+    const magasins = [...new Set([...Object.keys(ecritures), ...Object.keys(suppressions)])];
+    if (!magasins.length) return;
+
+    const prets = {};
+    for (const [magasin, objets] of Object.entries(ecritures)) {
+      prets[magasin] = await Promise.all(
+        objets.map(async (objet) => ({ id: objet.id, donnees: await this.codec.encoder(objet) })));
+    }
+
+    const tx = this.cnx.transaction(magasins, 'readwrite');
+    const fin = attendreTransaction(tx);
+    for (const [magasin, enregistrements] of Object.entries(prets)) {
+      const store = tx.objectStore(magasin);
+      for (const e of enregistrements) store.put(e);
+    }
+    for (const [magasin, ids] of Object.entries(suppressions)) {
+      const store = tx.objectStore(magasin);
+      for (const id of ids) store.delete(id);
+    }
+    await fin;
+  },
+
+  async lireMeta(cle) {
+    const tx = this.cnx.transaction('meta', 'readonly');
+    const enregistrement = await attendreRequete(tx.objectStore('meta').get(cle));
+    return enregistrement ? enregistrement.valeur : undefined;
+  },
+
+  async ecrireMeta(cle, valeur) {
+    const tx = this.cnx.transaction('meta', 'readwrite');
+    const fin = attendreTransaction(tx);
+    tx.objectStore('meta').put({ cle, valeur });
+    await fin;
+  },
+
+  /** Supprime la base entière (pas seulement son contenu). */
+  detruire(surBlocage) {
+    if (this.cnx) {
+      this.cnx.close();
+      this.cnx = null;
+    }
+    return new Promise((resoudre, rejeter) => {
+      const requete = indexedDB.deleteDatabase(this.NOM);
+      requete.onsuccess = () => resoudre();
+      requete.onerror = () => rejeter(requete.error);
+      requete.onblocked = () => { if (surBlocage) surBlocage(); };
+    });
+  },
+};
+
+// ---- 20-etat.js ----
+/* État de l'application en mémoire, synchronisé avec IndexedDB. */
+
+const REGLAGES_DEFAUT = Object.freeze({
+  nouvellesParJour: 15,
+  tailleSession: 20,
+  plafondRetard: 40,
+  objectif: null,
+  decalageJours: 0,
+});
+
+const SUIVI_DEFAUT = Object.freeze({
+  premierImport: null,
+  persistanceDemandee: false,
+});
+
+const MOTIF_PHOTO = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
+
+/**
+ * Liste blanche : seuls id, nom, prénom, classe et photo d'un élève
+ * sont conservés. Tout autre champ (date de naissance, téléphone,
+ * entreprise…) est écarté ici, avant toute écriture en base.
+ */
+function nettoyerEleve(source) {
+  const texte = (valeur) => String(valeur ?? '').replace(/\s+/g, ' ').trim().slice(0, 80);
+  return {
+    id: typeof source.id === 'string' && source.id ? source.id : nouvelId(),
+    nom: texte(source.nom),
+    prenom: texte(source.prenom),
+    classe: texte(source.classe),
+    photo: typeof source.photo === 'string' && MOTIF_PHOTO.test(source.photo) ? source.photo : '',
+  };
+}
+
+function nouvelleCarte(id) {
+  return {
+    id,
+    compartiment: 1,
+    introduite: null,
+    echeance: null,
+    passages: 0,
+    reussites: 0,
+    dernierPassage: null,
+    dernierEchec: null,
+  };
+}
+
+async function demanderPersistance() {
+  if (!navigator.storage || !navigator.storage.persist) return false;
+  try {
+    if (await navigator.storage.persisted()) return true;
+    return await navigator.storage.persist();
+  } catch {
+    return false;
+  }
+}
+
+const Etat = {
+  eleves: new Map(),
+  cartes: new Map(),
+  reglages: { ...REGLAGES_DEFAUT },
+  suivi: { ...SUIVI_DEFAUT },
+  /** Classe choisie dans le filtre, partagée par tous les écrans. */
+  filtreClasse: null,
+
+  async charger() {
+    const [eleves, cartes, reglages, suivi] = await Promise.all([
+      Base.lireTout('eleves'),
+      Base.lireTout('cartes'),
+      Base.lireMeta('reglages'),
+      Base.lireMeta('suivi'),
+    ]);
+    this.eleves = new Map(eleves.map((e) => [e.id, e]));
+    this.cartes = new Map(cartes.map((c) => [c.id, c]));
+    this.reglages = { ...REGLAGES_DEFAUT, ...reglages };
+    this.suivi = { ...SUIVI_DEFAUT, ...suivi };
+
+    const manquantes = eleves.filter((e) => !this.cartes.has(e.id)).map((e) => nouvelleCarte(e.id));
+    if (manquantes.length) {
+      await Base.modifier({ ecritures: { cartes: manquantes } });
+      for (const c of manquantes) this.cartes.set(c.id, c);
+    }
+  },
+
+  classes() {
+    const noms = new Set();
+    for (const e of this.eleves.values()) if (e.classe) noms.add(e.classe);
+    return [...noms].sort(comparerFr);
+  },
+
+  listeEleves(classe = null) {
+    return [...this.eleves.values()]
+      .filter((e) => !classe || e.classe === classe)
+      .sort((a, b) => comparerFr(a.nom, b.nom) || comparerFr(a.prenom, b.prenom));
+  },
+
+  async ajouterEleves(sources) {
+    const eleves = sources.map(nettoyerEleve);
+    const cartes = eleves.map((e) => nouvelleCarte(e.id));
+    await Base.modifier({ ecritures: { eleves, cartes } });
+    for (const e of eleves) this.eleves.set(e.id, e);
+    for (const c of cartes) this.cartes.set(c.id, c);
+    if (!this.suivi.premierImport) await this.enregistrerSuivi({ premierImport: Dates.aujourdhui() });
+    demanderPersistance();
+    return eleves;
+  },
+
+  async modifierEleve(source) {
+    const eleve = nettoyerEleve(source);
+    await Base.modifier({ ecritures: { eleves: [eleve] } });
+    this.eleves.set(eleve.id, eleve);
+    return eleve;
+  },
+
+  async supprimerEleve(id) {
+    await Base.modifier({ suppressions: { eleves: [id], cartes: [id] } });
+    this.eleves.delete(id);
+    this.cartes.delete(id);
+  },
+
+  async enregistrerReglages(changements) {
+    Object.assign(this.reglages, changements);
+    await Base.ecrireMeta('reglages', { ...this.reglages });
+  },
+
+  async enregistrerSuivi(changements) {
+    Object.assign(this.suivi, changements);
+    await Base.ecrireMeta('suivi', { ...this.suivi });
+  },
+};
+
+// ---- 30-demo.js ----
+/* Jeu de données fictif : noms inventés et visages dessinés, aucune vraie photo. */
+
+const NOMS_DEMO = `MARTIN BERNARD THOMAS PETIT ROBERT RICHARD DURAND DUBOIS MOREAU LAURENT
+SIMON MICHEL LEFEVRE LEROY ROUX DAVID BERTRAND MOREL FOURNIER GIRARD BONNET DUPONT
+LAMBERT FONTAINE ROUSSEAU VINCENT MULLER FAURE ANDRE MERCIER BLANC GUERIN BOYER
+GARNIER CHEVALIER LEGRAND GAUTHIER GARCIA PERRIN ROBIN CLEMENT MORIN NICOLAS HENRY
+MASSON MARCHAND DUVAL DENIS DUMONT LEMAIRE MEYER DUFOUR MEUNIER BRUN BLANCHARD
+GIRAUD JOLY RIVIERE BRUNET GAILLARD BARBIER ARNAUD ROCHE RENARD SCHMITT COLIN VIDAL
+CARON PICARD FABRE AUBERT LEMOINE RENAUD DUMAS LACROIX OLIVIER BOURGEOIS BENOIT REY`.split(/\s+/);
+
+const PRENOMS_DEMO = `Emma Jade Louise Alice Chloé Lina Rose Anna Mila Ambre Julia Léa Manon Inès
+Camille Sarah Zoé Eva Romane Lou Gabriel Léo Raphaël Arthur Louis Lucas Adam Jules Hugo
+Maël Liam Noah Ethan Paul Nathan Sacha Tom Timéo Théo Enzo Clara Juliette Charlotte
+Agathe Margot Nina Lyna Elena Iris Aaron Marceau Naël Amir Isaac Kaïs Milo Noé Antoine
+Baptiste Élise Maya Léna Jeanne Olivia Alix Adèle Suzanne Malo Côme Basile Rayan Ilyes
+Axel Evan Mathis`.split(/\s+/);
+
+const CLASSES_DEMO = [['2nde 4', 14], ['1re STMG 2', 12], ['BTS MCO 1', 10]];
+
+const TEINTES = {
+  fonds: ['#DCE6F2', '#E9E2D0', '#D8EAD9', '#EADADF', '#E0E0EA', '#F0E4D4', '#D5E8EC'],
+  peaux: ['#F6DCC6', '#F2D3B8', '#E8BD98', '#D4A27C', '#B98160', '#8D5B3E', '#6B4330'],
+  cheveux: ['#1A1A1A', '#2B1D14', '#5A3A22', '#8C5A2B', '#C9A15B', '#A0522D', '#7A7A7A', '#E3C98F'],
+  yeux: ['#3B2A1E', '#2F5D8A', '#4E7A3E', '#1E1E1E', '#6B4A2B'],
+  vetements: ['#3D5A80', '#98C1D9', '#EE6C4D', '#293241', '#6A994E', '#BC4749', '#F2CC8F', '#81B29A', '#9C89B8'],
+};
+
+function nuancer(hex, facteur) {
+  const n = parseInt(hex.slice(1), 16);
+  const canal = (decalage) => Math.min(255, Math.round(((n >> decalage) & 255) * facteur));
+  return `rgb(${canal(16)}, ${canal(8)}, ${canal(0)})`;
+}
+
+/** Dessine un visage stylisé, reproductible à partir de la graine. Renvoie une data URL JPEG. */
+function dessinerVisage(graine, taille = 400) {
+  const alea = generateurAleatoire(hacherTexte(graine));
+  const choisir = (liste) => liste[Math.floor(alea() * liste.length)];
+  const entre = (min, max) => min + alea() * (max - min);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = taille;
+  const ctx = canvas.getContext('2d');
+  const u = taille / 100;
+  const TOUR = Math.PI * 2;
+  const ellipse = (x, y, rx, ry, debut = 0, fin = TOUR) => {
+    ctx.beginPath();
+    ctx.ellipse(x, y, rx, ry, 0, debut, fin);
+    ctx.fill();
+  };
+
+  const peau = choisir(TEINTES.peaux);
+  const cheveux = choisir(TEINTES.cheveux);
+  const coiffure = Math.floor(alea() * 6);
+  const cx = 50 * u;
+  const cy = entre(43, 47) * u;
+  const rx = entre(15, 19) * u;
+  const ry = entre(19.5, 23) * u;
+
+  ctx.fillStyle = choisir(TEINTES.fonds);
+  ctx.fillRect(0, 0, taille, taille);
+
+  // Cheveux longs, derrière la tête
+  if (coiffure === 3 || coiffure === 4) {
+    ctx.fillStyle = cheveux;
+    const longueur = coiffure === 4 ? 17 : 8;
+    ellipse(cx, cy + longueur * 0.6 * u, rx + 5 * u, ry + longueur * u);
+  }
+
+  // Buste et cou
+  ctx.fillStyle = choisir(TEINTES.vetements);
+  ellipse(cx, 101 * u, entre(32, 40) * u, 24 * u);
+  ctx.fillStyle = nuancer(peau, 0.9);
+  ctx.fillRect(cx - 6 * u, cy + ry - 8 * u, 12 * u, 16 * u);
+
+  // Oreilles et tête
+  ctx.fillStyle = peau;
+  for (const cote of [-1, 1]) ellipse(cx + cote * rx, cy + 2 * u, 3 * u, 5 * u);
+  ellipse(cx, cy, rx, ry);
+
+  // Cheveux sur la tête
+  ctx.fillStyle = cheveux;
+  switch (coiffure) {
+    case 0: // courts
+      ellipse(cx, cy - ry * 0.45, rx * 1.04, ry * 0.62, Math.PI, TOUR);
+      break;
+    case 1: // très courts
+      ctx.globalAlpha = 0.6;
+      ellipse(cx, cy - ry * 0.55, rx * 1.01, ry * 0.5, Math.PI, TOUR);
+      ctx.globalAlpha = 1;
+      break;
+    case 2: { // mèche sur le côté
+      const cote = alea() < 0.5 ? -1 : 1;
+      ellipse(cx, cy - ry * 0.45, rx * 1.06, ry * 0.65, Math.PI, TOUR);
+      ctx.beginPath();
+      ctx.ellipse(cx + cote * rx * 0.35, cy - ry * 0.5, rx * 0.75, ry * 0.3, cote * 0.35, 0, TOUR);
+      ctx.fill();
+      break;
+    }
+    case 3: // mi-longs
+    case 4: // longs
+      ellipse(cx, cy - ry * 0.4, rx * 1.12, ry * 0.7, Math.PI, TOUR);
+      break;
+    default: // bouclés
+      for (let a = Math.PI * 1.02; a <= Math.PI * 1.98; a += Math.PI / 10) {
+        ellipse(cx + Math.cos(a) * rx, cy - ry * 0.2 + Math.sin(a) * ry * 0.85, 6 * u, 6 * u);
+      }
+      ellipse(cx, cy - ry * 0.5, rx * 0.95, ry * 0.55, Math.PI, TOUR);
+  }
+
+  // Yeux et sourcils
+  const ey = cy - 1 * u;
+  const ex = entre(6, 8) * u;
+  const iris = choisir(TEINTES.yeux);
+  const inclinaison = entre(-1.2, 1.2) * u;
+  for (const cote of [-1, 1]) {
+    ctx.fillStyle = '#FFFFFF';
+    ellipse(cx + cote * ex, ey, 3.3 * u, 2.2 * u);
+    ctx.fillStyle = iris;
+    ellipse(cx + cote * ex, ey, 1.6 * u, 1.6 * u);
+    ctx.strokeStyle = cheveux;
+    ctx.lineWidth = entre(1, 1.8) * u;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(cx + cote * (ex - 3.5 * u), ey - 5 * u);
+    ctx.lineTo(cx + cote * (ex + 3.5 * u), ey - 5 * u + inclinaison);
+    ctx.stroke();
+  }
+
+  // Nez et bouche
+  ctx.strokeStyle = nuancer(peau, 0.75);
+  ctx.lineWidth = 1.2 * u;
+  ctx.beginPath();
+  ctx.moveTo(cx, ey + 2 * u);
+  ctx.lineTo(cx - 1.8 * u, ey + entre(7, 9) * u);
+  ctx.lineTo(cx + 1.2 * u, ey + entre(8, 9.5) * u);
+  ctx.stroke();
+
+  ctx.strokeStyle = '#8A3B3B';
+  ctx.lineWidth = 1.4 * u;
+  ctx.beginPath();
+  const largeurBouche = entre(3, 5.5) * u;
+  ctx.arc(cx, ey + 9 * u, largeurBouche, Math.PI * 0.2, Math.PI * 0.8);
+  ctx.stroke();
+
+  // Détails distinctifs
+  if (alea() < 0.28) { // lunettes
+    ctx.strokeStyle = '#222222';
+    ctx.lineWidth = 1 * u;
+    for (const cote of [-1, 1]) {
+      ctx.beginPath();
+      ctx.arc(cx + cote * ex, ey, 4.6 * u, 0, TOUR);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.moveTo(cx - ex + 4.6 * u, ey);
+    ctx.lineTo(cx + ex - 4.6 * u, ey);
+    ctx.stroke();
+  }
+  if (alea() < 0.12) { // barbe
+    ctx.fillStyle = cheveux;
+    ctx.globalAlpha = 0.45;
+    ellipse(cx, cy + ry * 0.45, rx * 0.92, ry * 0.55, 0, Math.PI);
+    ctx.globalAlpha = 1;
+  }
+  if (alea() < 0.18) { // boucles d'oreilles
+    ctx.fillStyle = '#D4AF37';
+    for (const cote of [-1, 1]) ellipse(cx + cote * rx, cy + 7.5 * u, 1.3 * u, 1.3 * u);
+  }
+
+  return canvas.toDataURL('image/jpeg', 0.8);
+}
+
+function genererDemo() {
+  const alea = generateurAleatoire(20260901);
+  const noms = melanger([...NOMS_DEMO], alea);
+  const eleves = [];
+  let rang = 0;
+  for (const [classe, effectif] of CLASSES_DEMO) {
+    for (let k = 0; k < effectif; k++, rang++) {
+      const nom = noms[rang % noms.length];
+      const prenom = PRENOMS_DEMO[Math.floor(alea() * PRENOMS_DEMO.length)];
+      eleves.push({ nom, prenom, classe, photo: dessinerVisage(`${classe}|${nom}|${prenom}`) });
+    }
+  }
+  return eleves;
+}
+
+function demoDejaChargee() {
+  const classes = Etat.classes();
+  return CLASSES_DEMO.some(([classe]) => classes.includes(classe));
+}
+
+// ---- 80-ecrans.js ----
+/* Navigation par ancre (#/ecran/parametre) et écrans. */
+
+const Ecrans = {};
+
+function lireRoute() {
+  const [nom, param] = location.hash.replace(/^#\/?/, '').split('/');
+  return { nom: nom || 'accueil', param: param === undefined ? null : decodeURIComponent(param) };
+}
+
+function aller(nom, param = null) {
+  const cible = `#/${nom}${param === null ? '' : '/' + encodeURIComponent(param)}`;
+  if (location.hash === cible) afficher();
+  else location.hash = cible;
+}
+
+function definirTitre(texte) {
+  $('#titre').textContent = texte;
+  document.title = texte === 'Reconnaître mes élèves' ? texte : `${texte} · Reconnaître mes élèves`;
+}
+
+function majBandeauDate() {
+  const bandeau = $('#bandeau-date');
+  bandeau.hidden = Dates.decalage === 0;
+  if (Dates.decalage !== 0) {
+    const signe = Dates.decalage > 0 ? '+' : '−';
+    bandeau.textContent = `Mode test : date simulée au ${Dates.formater(Dates.aujourdhui(), true)} `
+      + `(${signe}${pluriel(Math.abs(Dates.decalage), 'jour')})`;
+  }
+}
+
+async function afficher() {
+  const { nom, param } = lireRoute();
+  const ecran = Ecrans[nom] || Ecrans.accueil;
+  const zone = $('#ecran');
+  zone.replaceChildren();
+  definirTitre(ecran.titre);
+  majBandeauDate();
+
+  const retour = $('#retour');
+  retour.hidden = !ecran.parent;
+  if (ecran.parent) {
+    retour.textContent = `‹ ${Ecrans[ecran.parent].titreCourt}`;
+    retour.onclick = () => aller(ecran.parent);
+  }
+
+  window.scrollTo(0, 0);
+  try {
+    await ecran.rendre(zone, param);
+  } catch (erreur) {
+    console.error(erreur);
+    zone.append(el('div', { class: 'alerte danger' }, `Erreur d'affichage : ${erreur.message}`));
+  }
+}
+
+/* ---------- Composants partagés ---------- */
+
+function photoEleve(eleve, classe) {
+  if (!eleve.photo) return el('div', { class: `${classe} sans-photo`, text: 'Sans photo' });
+  return el('img', { class: classe, src: eleve.photo, alt: `Photo de ${eleve.prenom} ${eleve.nom}`, draggable: 'false' });
+}
+
+function filtreClasses(auChangement) {
+  const classes = Etat.classes();
+  if (Etat.filtreClasse && !classes.includes(Etat.filtreClasse)) Etat.filtreClasse = null;
+
+  const barre = el('div', { class: 'puces', role: 'group', 'aria-label': 'Filtrer par classe' });
+  const majEtat = () => {
+    for (const bouton of barre.children) {
+      bouton.setAttribute('aria-pressed', String(bouton.dataset.classe === (Etat.filtreClasse ?? '')));
+    }
+  };
+  for (const [valeur, libelle] of [[null, 'Toutes les classes'], ...classes.map((c) => [c, c])]) {
+    barre.append(el('button', {
+      type: 'button',
+      class: 'puce',
+      'data-classe': valeur ?? '',
+      onclick: () => {
+        Etat.filtreClasse = valeur;
+        majEtat();
+        auChangement();
+      },
+    }, libelle));
+  }
+  majEtat();
+  return barre;
+}
+
+function boutonMenu(libelle, detail, onclick, variante = '') {
+  return el('button', { type: 'button', class: `bouton menu ${variante}`, onclick },
+    el('span', { class: 'libelle', text: libelle }),
+    detail && el('span', { class: 'detail', text: detail }));
+}
+
+function champ(libelle, controle, aide) {
+  return el('label', { class: 'champ' },
+    el('span', { class: 'champ-libelle', text: libelle }),
+    controle,
+    aide && el('span', { class: 'champ-aide', text: aide }));
+}
+
+function effacementComplet(libelle = 'Tout effacer') {
+  return confirmationDeuxTemps({
+    libelle,
+    question: 'Effacer définitivement toutes les données ?',
+    detail: `${pluriel(Etat.eleves.size, 'élève')}, leurs photos, la progression et les réglages `
+      + 'seront supprimés de cet appareil. Cette action est irréversible.',
+    libelleConfirmer: 'Oui, tout effacer',
+    action: async () => {
+      await Base.detruire(() => annoncer("Fermez les autres onglets de l'application pour terminer l'effacement."));
+      location.hash = '';
+      location.reload();
+    },
+  });
+}
+
+async function chargerDemo(bouton) {
+  bouton.disabled = true;
+  bouton.textContent = 'Génération des élèves fictifs…';
+  await new Promise((r) => setTimeout(r, 20));
+  try {
+    const eleves = await Etat.ajouterEleves(genererDemo());
+    annoncer(`${pluriel(eleves.length, 'élève fictif', 'élèves fictifs')} ajoutés.`);
+    aller('eleves');
+  } catch (erreur) {
+    annoncer(`Échec : ${erreur.message}`);
+    bouton.disabled = false;
+  }
+}
+
+/* ---------- Accueil ---------- */
+
+Ecrans.accueil = {
+  titre: 'Reconnaître mes élèves',
+  titreCourt: 'Accueil',
+  parent: null,
+  rendre(zone) {
+    const pile = el('div', { class: 'pile' });
+    zone.append(pile);
+    const { premierImport } = Etat.suivi;
+
+    if (premierImport) {
+      const jours = Dates.ecart(premierImport, Dates.aujourdhui());
+      if (jours > 60) {
+        pile.append(el('section', { class: 'alerte pile', role: 'alert' },
+          el('h2', { text: `Données conservées depuis ${jours} jours` }),
+          el('p', { text: "Cette application contient des photos d'élèves. Si vous n'en avez plus "
+            + "l'usage, effacez-les de cette tablette." }),
+          effacementComplet('Effacer toutes les données maintenant')));
+      }
+    }
+
+    if (!Etat.eleves.size) {
+      pile.append(
+        el('section', { class: 'panneau pile' },
+          el('h2', { text: 'Bienvenue' }),
+          el('p', { text: 'Importez le trombinoscope PDF d’une classe pour commencer. '
+            + 'Chaque fichier correspond à une classe.' })),
+        boutonMenu('Importer un trombinoscope PDF', 'Une classe par fichier', () => aller('import'), 'principal'),
+        boutonMenu('Essayer avec des élèves fictifs', '36 élèves répartis en 3 classes', (e) => chargerDemo(e.currentTarget)),
+        boutonMenu('Réglages', null, () => aller('reglages')));
+      return;
+    }
+
+    const classes = Etat.classes();
+    pile.append(
+      el('div', { class: 'chiffres' },
+        el('div', { class: 'chiffre' }, el('strong', { text: Etat.eleves.size }), el('span', { text: 'élèves' })),
+        el('div', { class: 'chiffre' }, el('strong', { text: classes.length }), el('span', { text: 'classes' }))),
+      boutonMenu('Réviser', 'Session du jour', () => aller('reviser'), 'principal'),
+      boutonMenu('Prochain cours', 'Revoir une classe avant d’entrer en salle', () => aller('prochain-cours')),
+      boutonMenu('Tableau de bord', 'Progression et objectif', () => aller('tableau')),
+      boutonMenu('Élèves', `${pluriel(Etat.eleves.size, 'élève')} · ${pluriel(classes.length, 'classe')}`, () => aller('eleves')),
+      boutonMenu('Importer un trombinoscope PDF', 'Ajouter une classe', () => aller('import')),
+      boutonMenu('Réglages et sauvegarde', 'Charge de travail, export, effacement', () => aller('reglages')));
+
+    if (premierImport) {
+      const jours = Dates.ecart(premierImport, Dates.aujourdhui());
+      pile.append(el('p', { class: 'discret' },
+        `Premier import le ${Dates.formater(premierImport)} (${Dates.depuis(jours)}).`));
+    }
+  },
+};
+
+/* ---------- Écrans des étapes suivantes ---------- */
+
+function ecranAVenir(titre, titreCourt, etape, contenu) {
+  return {
+    titre,
+    titreCourt,
+    parent: 'accueil',
+    rendre(zone) {
+      zone.append(el('div', { class: 'panneau pile' },
+        el('h2', { text: `Prévu à l’étape ${etape}` }),
+        el('p', { text: contenu })));
+    },
+  };
+}
+
+Ecrans.reviser = ecranAVenir('Réviser', 'Réviser', 2, 'Moteur Leitner et les trois modes de révision.');
+Ecrans['prochain-cours'] = ecranAVenir('Prochain cours', 'Prochain cours', 2, 'Entraînement libre sur une classe.');
+Ecrans.tableau = ecranAVenir('Tableau de bord', 'Tableau de bord', 3, 'Répartition par compartiment et objectif daté.');
+Ecrans.import = ecranAVenir('Importer un trombinoscope', 'Import', 4, 'Lecture du PDF, appariement manuel et vérification.');
+
+/* ---------- Élèves ---------- */
+
+Ecrans.eleves = {
+  titre: 'Élèves',
+  titreCourt: 'Élèves',
+  parent: 'accueil',
+  rendre(zone) {
+    if (!Etat.eleves.size) {
+      zone.append(el('p', { text: 'Aucun élève enregistré.' }));
+      return;
+    }
+    const compteur = el('p', { class: 'discret' });
+    const grille = el('div', { class: 'grille-eleves' });
+    const remplir = () => {
+      const liste = Etat.listeEleves(Etat.filtreClasse);
+      compteur.textContent = pluriel(liste.length, 'élève');
+      grille.replaceChildren(...liste.map((e) => el('button', {
+        type: 'button',
+        class: 'tuile-eleve',
+        onclick: () => aller('eleve', e.id),
+      },
+      photoEleve(e, 'vignette'),
+      el('span', { class: 'tuile-nom', text: `${e.prenom} ${e.nom}` }),
+      el('span', { class: 'tuile-classe', text: e.classe }))));
+    };
+    zone.append(el('div', { class: 'pile' }, filtreClasses(remplir), compteur, grille));
+    remplir();
+  },
+};
+
+Ecrans.eleve = {
+  titre: 'Fiche élève',
+  titreCourt: 'Fiche',
+  parent: 'eleves',
+  rendre(zone, id) {
+    const eleve = Etat.eleves.get(id);
+    if (!eleve) {
+      zone.append(el('p', { text: 'Élève introuvable.' }));
+      return;
+    }
+    definirTitre(`${eleve.prenom} ${eleve.nom}`);
+    const carte = Etat.cartes.get(id);
+
+    const nom = el('input', { type: 'text', value: eleve.nom, autocomplete: 'off', required: true });
+    const prenom = el('input', { type: 'text', value: eleve.prenom, autocomplete: 'off' });
+    const classe = el('input', { type: 'text', value: eleve.classe, autocomplete: 'off', list: 'liste-classes' });
+    const listeClasses = el('datalist', { id: 'liste-classes' }, Etat.classes().map((c) => el('option', { value: c })));
+
+    const formulaire = el('form', { class: 'panneau pile' },
+      champ('Nom', nom), champ('Prénom', prenom), champ('Classe', classe), listeClasses,
+      el('button', { type: 'submit', class: 'bouton principal bloc' }, 'Enregistrer les modifications'));
+    formulaire.addEventListener('submit', async (evenement) => {
+      evenement.preventDefault();
+      if (!nom.value.trim()) {
+        annoncer('Le nom est obligatoire.');
+        return;
+      }
+      const maj = await Etat.modifierEleve({ ...eleve, nom: nom.value, prenom: prenom.value, classe: classe.value });
+      definirTitre(`${maj.prenom} ${maj.nom}`);
+      annoncer('Fiche enregistrée.');
+    });
+
+    const stats = el('dl', { class: 'stats' },
+      el('dt', { text: 'Compartiment' }), el('dd', { text: carte.introduite ? `${carte.compartiment} sur 5` : 'Pas encore étudiée' }),
+      el('dt', { text: 'Passages' }), el('dd', { text: carte.passages }),
+      el('dt', { text: 'Dernier échec' }), el('dd', { text: carte.dernierEchec ? Dates.formater(carte.dernierEchec) : 'Aucun' }));
+
+    zone.append(el('div', { class: 'pile' },
+      photoEleve(eleve, 'photo-fiche'),
+      formulaire,
+      el('section', { class: 'panneau' }, el('h3', { text: 'Progression' }), stats),
+      confirmationDeuxTemps({
+        libelle: 'Supprimer cet élève',
+        question: `Supprimer ${eleve.prenom} ${eleve.nom} ?`,
+        detail: 'Sa photo et sa progression seront effacées.',
+        libelleConfirmer: 'Oui, supprimer',
+        action: async () => {
+          await Etat.supprimerEleve(id);
+          annoncer('Élève supprimé.');
+          aller('eleves');
+        },
+      })));
+  },
+};
+
+/* ---------- Réglages ---------- */
+
+function champReglage(libelle, cle, min, max, aide) {
+  const entree = el('input', { type: 'number', inputmode: 'numeric', min, max, step: 1, value: Etat.reglages[cle] });
+  entree.addEventListener('change', async () => {
+    let valeur = Math.round(Number(entree.value));
+    if (!Number.isFinite(valeur) || entree.value === '') valeur = REGLAGES_DEFAUT[cle];
+    valeur = Math.min(max, Math.max(min, valeur));
+    entree.value = valeur;
+    await Etat.enregistrerReglages({ [cle]: valeur });
+    annoncer('Réglage enregistré.');
+  });
+  return champ(libelle, entree, aide);
+}
+
+async function decalerDate(jours) {
+  const decalage = jours === null ? 0 : Etat.reglages.decalageJours + jours;
+  await Etat.enregistrerReglages({ decalageJours: decalage });
+  Dates.decalage = decalage;
+  afficher();
+}
+
+Ecrans.reglages = {
+  titre: 'Réglages et sauvegarde',
+  titreCourt: 'Réglages',
+  parent: 'accueil',
+  async rendre(zone) {
+    const etatStockage = el('p', { class: 'discret', text: 'Vérification du stockage…' });
+
+    const boutonDemo = el('button', { type: 'button', class: 'bouton bloc' },
+      demoDejaChargee() ? 'Élèves fictifs déjà chargés' : 'Ajouter 36 élèves fictifs');
+    boutonDemo.disabled = demoDejaChargee();
+    boutonDemo.addEventListener('click', () => chargerDemo(boutonDemo));
+
+    zone.append(el('div', { class: 'pile' },
+      el('section', { class: 'panneau pile' },
+        el('h2', { text: 'Charge de travail' }),
+        champReglage('Nouvelles cartes par jour', 'nouvellesParJour', 1, 150),
+        champReglage('Cartes par session', 'tailleSession', 5, 200, 'Un bouton « continuer » permet d’aller au-delà.'),
+        champReglage('Cartes en retard traitées au maximum', 'plafondRetard', 5, 500,
+          'En cas de gros retard, seules les plus anciennes sont proposées.')),
+
+      el('section', { class: 'panneau pile' },
+        el('h2', { text: 'Stockage' }),
+        etatStockage),
+
+      el('section', { class: 'panneau pile' },
+        el('h2', { text: 'Sauvegarde' }),
+        el('p', { class: 'discret', text: 'Export et réimport JSON : prévus à l’étape 5.' })),
+
+      el('section', { class: 'panneau pile' },
+        el('h2', { text: 'Données de démonstration' }),
+        el('p', { class: 'discret', text: 'Noms inventés et visages dessinés, pour tester sans PDF.' }),
+        boutonDemo),
+
+      el('section', { class: 'panneau pile' },
+        el('h2', { text: 'Test : simuler une date' }),
+        el('p', { class: 'discret', text: `Date utilisée : ${Dates.formater(Dates.aujourdhui(), true)}. `
+          + 'Permet de vérifier le passage des jours et le rappel des 60 jours.' }),
+        el('div', { class: 'rangee' },
+          el('button', { type: 'button', class: 'bouton', onclick: () => decalerDate(-1) }, '− 1 jour'),
+          el('button', { type: 'button', class: 'bouton', onclick: () => decalerDate(1) }, '+ 1 jour'),
+          el('button', { type: 'button', class: 'bouton', onclick: () => decalerDate(7) }, '+ 7 jours'),
+          el('button', { type: 'button', class: 'bouton', onclick: () => decalerDate(null), disabled: Dates.decalage === 0 }, 'Date réelle'))),
+
+      el('section', { class: 'panneau pile' },
+        el('h2', { text: 'Effacement' }),
+        el('p', { text: 'Supprime la base de données entière de cet appareil.' }),
+        effacementComplet())));
+
+    const persistant = navigator.storage && navigator.storage.persisted ? await navigator.storage.persisted() : false;
+    const estimation = navigator.storage && navigator.storage.estimate ? await navigator.storage.estimate() : null;
+    etatStockage.textContent = (persistant
+      ? 'Stockage persistant accordé : le navigateur ne purgera pas les données.'
+      : 'Stockage non persistant : le navigateur pourrait purger les données en cas de manque d’espace.')
+      + (estimation ? ` Espace utilisé : ${formaterOctets(estimation.usage || 0)}.` : '');
+  },
+};
+
+// ---- 99-demarrage.js ----
+async function demarrer() {
+  try {
+    await Base.ouvrir();
+    await Etat.charger();
+    Dates.decalage = Etat.reglages.decalageJours || 0;
+
+    if (!Etat.suivi.persistanceDemandee) {
+      await demanderPersistance();
+      await Etat.enregistrerSuivi({ persistanceDemandee: true });
+    }
+
+    window.addEventListener('hashchange', afficher);
+    await afficher();
+  } catch (erreur) {
+    console.error(erreur);
+    $('#ecran').replaceChildren(el('div', { class: 'alerte danger pile' },
+      el('h2', { text: 'Impossible d’ouvrir la base locale' }),
+      el('p', { text: erreur.message }),
+      el('p', { text: 'La navigation privée bloque souvent IndexedDB. Ouvrez l’application dans une fenêtre normale.' })));
+  }
+}
+
+demarrer();
+</script>
+</body>
+</html>
