@@ -48,7 +48,8 @@ Ecrans.accueil = {
             + 'Chaque fichier correspond à une classe.' })),
         boutonMenu('Importer un trombinoscope PDF', 'Une classe par fichier', () => aller('import'), 'principal'),
         boutonMenu('Essayer avec des élèves fictifs', '36 élèves répartis en 3 classes', (e) => chargerDemo(e.currentTarget)),
-        boutonMenu('Réglages et sauvegarde', 'Réimporter une sauvegarde, effacement', () => aller('reglages')));
+        boutonMenu('Réglages et sauvegarde', 'Réimporter une sauvegarde, effacement', () => aller('reglages')),
+        boutonVerrouiller());
       return;
     }
 
@@ -73,8 +74,13 @@ Ecrans.accueil = {
       pile.append(el('p', { class: 'discret' },
         `Premier import le ${Dates.formater(premierImport)} (${Dates.depuis(jours)}).`));
     }
+    pile.append(boutonVerrouiller());
   },
 };
+
+function boutonVerrouiller() {
+  return el('button', { type: 'button', class: 'bouton bloc', onclick: () => Verrou.verrouiller() }, 'Verrouiller');
+}
 
 /* ---------- Élèves ---------- */
 

@@ -36,6 +36,23 @@ function nettoyerEleve(source) {
   };
 }
 
+/** Valide une carte venant d'une sauvegarde. */
+function nettoyerCarte(source) {
+  const date = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+  const entier = (v, min, max, defaut) => (Number.isInteger(v) ? Math.min(max, Math.max(min, v)) : defaut);
+  const introduite = date(source.introduite);
+  return {
+    id: String(source.id),
+    compartiment: entier(source.compartiment, 1, 5, 1),
+    introduite,
+    echeance: introduite ? (date(source.echeance) || introduite) : null,
+    passages: entier(source.passages, 0, 1e6, 0),
+    reussites: entier(source.reussites, 0, 1e6, 0),
+    dernierPassage: date(source.dernierPassage),
+    dernierEchec: date(source.dernierEchec),
+  };
+}
+
 function nouvelleCarte(id) {
   return {
     id,
@@ -67,17 +84,18 @@ const Etat = {
   /** Classe choisie dans le filtre, partagée par tous les écrans. */
   filtreClasse: null,
 
-  async charger() {
-    const [eleves, cartes, reglages, suivi] = await Promise.all([
-      Base.lireTout('eleves'),
-      Base.lireTout('cartes'),
-      Base.lireMeta('reglages'),
-      Base.lireMeta('suivi'),
-    ]);
-    this.eleves = new Map(eleves.map((e) => [e.id, e]));
-    this.cartes = new Map(cartes.map((c) => [c.id, c]));
+  /** Réglages et suivi : lisibles avant le déverrouillage (aucune donnée personnelle). */
+  async chargerMeta() {
+    const [reglages, suivi] = await Promise.all([Base.lireMeta('reglages'), Base.lireMeta('suivi')]);
     this.reglages = { ...REGLAGES_DEFAUT, ...reglages };
     this.suivi = { ...SUIVI_DEFAUT, ...suivi };
+  },
+
+  /** Élèves et cartes : nécessitent la clé de déchiffrement. */
+  async chargerDonnees() {
+    const [eleves, cartes] = await Promise.all([Base.lireTout('eleves'), Base.lireTout('cartes')]);
+    this.eleves = new Map(eleves.map((e) => [e.id, e]));
+    this.cartes = new Map(cartes.map((c) => [c.id, c]));
 
     const manquantes = eleves.filter((e) => !this.cartes.has(e.id)).map((e) => nouvelleCarte(e.id));
     if (manquantes.length) {
@@ -120,6 +138,47 @@ const Etat = {
     await Base.modifier({ suppressions: { eleves: [id], cartes: [id] } });
     this.eleves.delete(id);
     this.cartes.delete(id);
+  },
+
+  /** Oublie les données déchiffrées (verrouillage). */
+  viderDonnees() {
+    this.eleves = new Map();
+    this.cartes = new Map();
+    this.filtreClasse = null;
+  },
+
+  /**
+   * Restaure une sauvegarde. mode 'remplacer' : efface d'abord toutes les données ;
+   * mode 'ajouter' : fusionne (un même identifiant est remplacé).
+   */
+  async restaurer(contenu, mode) {
+    const eleves = contenu.eleves.map(nettoyerEleve);
+    const ids = new Set(eleves.map((e) => e.id));
+    const cartesSauvees = new Map(contenu.cartes
+      .filter((c) => c && ids.has(String(c.id)))
+      .map((c) => [String(c.id), nettoyerCarte(c)]));
+    const cartes = eleves.map((e) => cartesSauvees.get(e.id) || nouvelleCarte(e.id));
+
+    const suppressions = mode === 'remplacer'
+      ? { eleves: [...this.eleves.keys()], cartes: [...this.cartes.keys()] }
+      : {};
+    const dates = [this.suivi.premierImport, contenu.suivi && contenu.suivi.premierImport]
+      .filter((d) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+    const suivi = { ...this.suivi, premierImport: dates[0] || Dates.aujourdhui() };
+    const metas = [{ cle: 'suivi', valeur: suivi }];
+    let reglages = this.reglages;
+    if (mode === 'remplacer' && contenu.reglages) {
+      reglages = { ...REGLAGES_DEFAUT, ...contenu.reglages, decalageJours: this.reglages.decalageJours };
+      metas.push({ cle: 'reglages', valeur: reglages });
+    }
+
+    await Base.modifier({ ecritures: { eleves, cartes }, suppressions, metas });
+    if (mode === 'remplacer') this.viderDonnees();
+    for (const e of eleves) this.eleves.set(e.id, e);
+    for (const c of cartes) this.cartes.set(c.id, c);
+    this.suivi = suivi;
+    this.reglages = reglages;
+    return eleves.length;
   },
 
   async enregistrerCarte(carte) {

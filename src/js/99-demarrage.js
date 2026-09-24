@@ -1,7 +1,8 @@
 async function demarrer() {
   try {
     await Base.ouvrir();
-    await Etat.charger();
+    Base.codec = CODEC_VERROUILLE;
+    await Etat.chargerMeta();
     Dates.decalage = Etat.reglages.decalageJours || 0;
 
     if (!Etat.suivi.persistanceDemandee) {
@@ -10,7 +11,7 @@ async function demarrer() {
     }
 
     window.addEventListener('hashchange', afficher);
-    await afficher();
+    afficherVerrou((await Base.lireMeta('chiffrement')) ? 'deverrouiller' : 'creer');
   } catch (erreur) {
     console.error(erreur);
     $('#ecran').replaceChildren(el('div', { class: 'alerte danger pile' },

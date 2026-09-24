@@ -3,10 +3,11 @@
  * Magasins :
  *   eleves  { id, donnees }  — donnees = élève encodé par le codec
  *   cartes  { id, donnees }  — état Leitner, id = id de l'élève
- *   meta    { cle, valeur }  — réglages et suivi, jamais de donnée personnelle
+ *   meta    { cle, valeur }  — réglages, suivi et paramètres de chiffrement,
+ *                              jamais de donnée personnelle
  *
- * Le codec transforme chaque objet avant écriture et après lecture.
- * Il est neutre tant que le chiffrement n'est pas activé.
+ * Le codec transforme chaque objet avant écriture et après lecture :
+ * neutre avant la création du mot de passe, AES-GCM ensuite (voir 85-securite.js).
  */
 
 function attendreRequete(requete) {
@@ -66,12 +67,13 @@ const Base = {
   },
 
   /**
-   * Écritures et suppressions groupées dans une seule transaction.
-   * L'encodage (asynchrone) est fait avant d'ouvrir la transaction,
-   * sinon IndexedDB la validerait prématurément.
+   * Suppressions, écritures et métadonnées groupées dans une seule transaction
+   * (les suppressions passent en premier). L'encodage, asynchrone, est fait
+   * avant d'ouvrir la transaction, sinon IndexedDB la validerait prématurément.
    */
-  async modifier({ ecritures = {}, suppressions = {} }) {
+  async modifier({ ecritures = {}, suppressions = {}, metas = [] }) {
     const magasins = [...new Set([...Object.keys(ecritures), ...Object.keys(suppressions)])];
+    if (metas.length) magasins.push('meta');
     if (!magasins.length) return;
 
     const prets = {};
@@ -82,14 +84,15 @@ const Base = {
 
     const tx = this.cnx.transaction(magasins, 'readwrite');
     const fin = attendreTransaction(tx);
-    for (const [magasin, enregistrements] of Object.entries(prets)) {
-      const store = tx.objectStore(magasin);
-      for (const e of enregistrements) store.put(e);
-    }
     for (const [magasin, ids] of Object.entries(suppressions)) {
       const store = tx.objectStore(magasin);
       for (const id of ids) store.delete(id);
     }
+    for (const [magasin, enregistrements] of Object.entries(prets)) {
+      const store = tx.objectStore(magasin);
+      for (const e of enregistrements) store.put(e);
+    }
+    for (const { cle, valeur } of metas) tx.objectStore('meta').put({ cle, valeur });
     await fin;
   },
 

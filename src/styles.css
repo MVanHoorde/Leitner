@@ -238,6 +238,22 @@ input:focus, select:focus { border-color: var(--cyan); }
 .cellule-eleve { display: flex; align-items: center; gap: 10px; min-width: 200px; }
 .mini { flex: none; width: 48px; height: 48px; object-fit: cover; border-radius: 6px; background: #E6ECF4; font-size: 0; }
 
+/* Sécurité */
+.verrou { max-width: 560px; margin: 0 auto; }
+.erreur { margin: 0; font-weight: 600; color: var(--rouge); }
+.erreur:empty { display: none; }
+details > summary {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+details[open] > summary { margin-bottom: 12px; }
+.case { display: flex; align-items: center; gap: 12px; min-height: 48px; cursor: pointer; }
+.case input { flex: none; width: 28px; height: 28px; margin: 0; accent-color: var(--marine); }
+
 /* Import */
 .visuellement-cache {
   position: absolute;

@@ -35,7 +35,7 @@ document.addEventListener('keydown', (evenement) => {
 });
 
 async function afficher() {
-  if (typeof Verrou !== 'undefined' && Verrou.verrouille) return;
+  if (Verrou.verrouille) return;
   const { nom, param } = lireRoute();
   const ecran = Ecrans[nom] || Ecrans.accueil;
   const zone = $('#ecran');
