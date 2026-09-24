@@ -3308,6 +3308,8 @@ Ecrans.reglages = {
 /* Verrouillage par mot de passe, chiffrement AES-GCM, sauvegarde JSON. */
 
 const ITERATIONS_PBKDF2 = 600000;
+/** Plafond accepté à la relecture d'une sauvegarde venant d'une autre version. */
+const ITERATIONS_MAX_PBKDF2 = 5000000;
 const LONGUEUR_MIN_MOT_DE_PASSE = 6;
 const DELAI_INACTIVITE_MS = 5 * 60 * 1000;
 const TEMOIN = 'reconnaitre-mes-eleves';
@@ -3668,13 +3670,27 @@ async function lireSauvegarde(texte, demanderMotDePasse) {
   if (!fichier || fichier.format !== FORMAT_SAUVEGARDE) throw new Error('Ce fichier ne provient pas de cette application.');
   let contenu = fichier;
   if (fichier.chiffre) {
-    const parametres = { sel: depuisBase64(fichier.kdf.sel), iterations: fichier.kdf.iterations };
+    // Décodé une seule fois, avant la boucle : un fichier abîmé doit se distinguer
+    // d'un mot de passe erroné, sinon la saisie serait redemandée indéfiniment.
+    let sel; let iv; let ct;
+    try {
+      sel = depuisBase64(fichier.kdf.sel);
+      iv = depuisBase64(fichier.iv);
+      ct = depuisBase64(fichier.donnees);
+    } catch {
+      throw new Error('Cette sauvegarde chiffrée est incomplète ou abîmée.');
+    }
+    const iterations = fichier.kdf.iterations;
+    // Borné : un nombre d'itérations aberrant fige l'appareil pendant la dérivation.
+    if (!Number.isInteger(iterations) || iterations < 1 || iterations > ITERATIONS_MAX_PBKDF2) {
+      throw new Error('Cette sauvegarde chiffrée est incomplète ou abîmée.');
+    }
     for (;;) {
       const motDePasse = await demanderMotDePasse();
       if (motDePasse === null) return null;
-      const cle = await Chiffrement.deriverCle(motDePasse, parametres.sel, parametres.iterations);
+      const cle = await Chiffrement.deriverCle(motDePasse, sel, iterations);
       try {
-        contenu = await Chiffrement.dechiffrer(cle, { iv: depuisBase64(fichier.iv), ct: depuisBase64(fichier.donnees) });
+        contenu = await Chiffrement.dechiffrer(cle, { iv, ct });
         break;
       } catch {
         demanderMotDePasse.erreur('Mot de passe incorrect pour cette sauvegarde.');
