@@ -1,6 +1,10 @@
-/* Moteur Leitner calibré pour trois semaines, et files de révision. */
+/* Moteur Leitner et files de révision.
+ *
+ * La mécanique (compartiments, échéances, tri par fragilité) ne sait rien de ce
+ * qu'il y a sur les cartes : elle sert aussi bien aux visages du trombinoscope
+ * qu'aux paquets de contenu, qui apportent seulement leur propre rythme. */
 
-/** Jours d'attente avant la prochaine révision, pour les compartiments 1 à 5. */
+/** Trombinoscope : calibré pour reconnaître une classe en trois semaines. */
 const INTERVALLES = [1, 2, 3, 5, 8];
 const SECONDES_PAR_CARTE = 8;
 const MAX_REPRISES = 2;
@@ -17,14 +21,14 @@ function estimerDuree(nombreCartes) {
 }
 
 const Leitner = {
-  /** Résultat d'une réponse de la session algorithmique. Fonction pure. */
-  appliquer(carte, reussi, jour) {
+  /** Résultat d'une réponse notée. Fonction pure. */
+  appliquer(carte, reussi, jour, intervalles = INTERVALLES) {
     const compartiment = reussi ? Math.min(5, carte.compartiment + 1) : 1;
     return {
       ...carte,
       compartiment,
       introduite: carte.introduite ?? jour,
-      echeance: Dates.ajouter(jour, INTERVALLES[compartiment - 1]),
+      echeance: Dates.ajouter(jour, intervalles[compartiment - 1]),
       passages: carte.passages + 1,
       reussites: carte.reussites + (reussi ? 1 : 0),
       dernierPassage: jour,
@@ -60,20 +64,25 @@ const Leitner = {
     return Etat.listeEleves(classe).map((e) => Etat.cartes.get(e.id)).filter(Boolean);
   },
 
-  /** Situation du jour pour une classe (ou toutes). */
-  bilan(classe, jour = Dates.aujourdhui()) {
-    const cartes = this.cartesDeClasse(classe);
+  /** Situation du jour pour n'importe quelle liste de cartes. Fonction pure. */
+  bilanListe(cartes, jour, quotaNouvelles) {
     const dues = cartes
       .filter((c) => c.introduite !== null && c.echeance <= jour)
       .sort((a, b) => (a.echeance < b.echeance ? -1 : a.echeance > b.echeance ? 1 : a.compartiment - b.compartiment));
     const nouvelles = cartes.filter((c) => c.introduite === null);
-    const quota = this.quotaNouvelles(jour);
     return {
       cartes,
       dues,
       enRetard: dues.filter((c) => c.echeance < jour).length,
       nouvelles,
-      nouvellesDuJour: Math.min(quota, nouvelles.length),
+      nouvellesDuJour: Math.min(quotaNouvelles, nouvelles.length),
+    };
+  },
+
+  /** Situation du jour pour une classe (ou toutes). */
+  bilan(classe, jour = Dates.aujourdhui()) {
+    return {
+      ...this.bilanListe(this.cartesDeClasse(classe), jour, this.quotaNouvelles(jour)),
       sessionAlgoFaite: this.sessionAlgoFaite(jour),
     };
   },

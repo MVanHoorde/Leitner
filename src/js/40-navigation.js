@@ -1,4 +1,7 @@
-/* Navigation par ancre (#/ecran/parametre) et composants partagés. */
+/* Navigation par ancre (#/ecran/parametre) et composants partagés.
+ *
+ * Chaque écran déclare la porte à laquelle il appartient : 'prof' (par défaut),
+ * 'eleve' ou 'tous'. Le contrôle se fait ici, en un seul endroit. */
 
 const Ecrans = {};
 
@@ -15,7 +18,7 @@ function aller(nom, param = null) {
 
 function definirTitre(texte) {
   $('#titre').textContent = texte;
-  document.title = texte === 'Reconnaître mes élèves' ? texte : `${texte} · Reconnaître mes élèves`;
+  document.title = texte === NOM_APP ? texte : `${texte} · ${NOM_APP}`;
 }
 
 function majBandeauDate() {
@@ -35,9 +38,20 @@ document.addEventListener('keydown', (evenement) => {
 });
 
 async function afficher() {
-  if (Verrou.verrouille) return;
+  if (!Porte.courante) {
+    afficherChoixPorte();
+    return;
+  }
+  // La porte prof ne s'ouvre qu'avec le mot de passe ; la porte élève n'a rien
+  // de personnel à protéger et n'obtient jamais la clé de déchiffrement.
+  if (Porte.courante === 'prof' && Verrou.verrouille) return;
+
   const { nom, param } = lireRoute();
-  const ecran = Ecrans[nom] || Ecrans.accueil;
+  const demande = Ecrans[nom];
+  const ecran = demande && Porte.autorise(demande) ? demande : Ecrans[Porte.accueil()];
+  // Une adresse refusée ne doit pas rester dans la barre : le retour arrière
+  // y ramènerait sans fin.
+  if (ecran !== demande) history.replaceState(null, '', `#/${Porte.accueil()}`);
   const zone = $('#ecran');
   toucheEcran = null;
   zone.replaceChildren();
@@ -45,11 +59,13 @@ async function afficher() {
   definirTitre(ecran.titre);
   majBandeauDate();
 
+  // Un écran partagé par les deux portes désigne son parent par une fonction.
+  const parent = typeof ecran.parent === 'function' ? ecran.parent() : ecran.parent;
   const retour = $('#retour');
-  retour.hidden = !ecran.parent;
-  if (ecran.parent) {
-    retour.textContent = `‹ ${ecran.libelleRetour || Ecrans[ecran.parent].titreCourt}`;
-    retour.onclick = () => (ecran.surRetour ? ecran.surRetour() : aller(ecran.parent));
+  retour.hidden = !parent;
+  if (parent) {
+    retour.textContent = `‹ ${ecran.libelleRetour || Ecrans[parent].titreCourt}`;
+    retour.onclick = () => (ecran.surRetour ? ecran.surRetour() : aller(parent));
   }
 
   window.scrollTo(0, 0);

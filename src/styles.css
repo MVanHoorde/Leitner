@@ -456,3 +456,69 @@ body.plein .confidentialite { display: none; }
   background: var(--marine);
   border-radius: var(--rayon);
 }
+
+
+/* ---------- Paquets de contenu ---------- */
+
+.pile.serree > * + * { margin-top: 8px; }
+
+.portes .bouton.menu { min-height: 88px; }
+
+/* Répartition des cartes dans les cinq compartiments, du plus fragile au plus sûr. */
+.barre-compartiments {
+  display: flex;
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--bord);
+}
+.barre-compartiments .part { display: block; height: 100%; }
+.barre-compartiments .c1 { background: var(--orange); }
+.barre-compartiments .c2 { background: #F2B77E; }
+.barre-compartiments .c3 { background: #9BD0F5; }
+.barre-compartiments .c4 { background: var(--cyan); }
+.barre-compartiments .c5 { background: var(--marine); }
+
+.scene-texte {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 12px;
+  text-align: center;
+}
+.enonce {
+  font-size: clamp(24px, 5.5vw, 40px);
+  font-weight: 650;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.formule sub { font-size: 0.7em; vertical-align: -0.2em; }
+.formule sup { font-size: 0.7em; vertical-align: 0.45em; }
+
+.chrono {
+  font-variant-numeric: tabular-nums;
+  font-size: 16px;
+  color: var(--gris);
+}
+
+.reponse {
+  padding: 12px;
+  background: var(--cyan-pale);
+  border: 1px solid var(--cyan);
+  border-radius: var(--rayon);
+  text-align: center;
+}
+.reponse-texte { font-size: 22px; font-weight: 650; overflow-wrap: anywhere; }
+.aide { margin: 0; text-align: center; }
+
+.rangee.saisie { flex-wrap: nowrap; align-items: center; gap: 8px; }
+.rangee.saisie input { flex: 1; min-width: 0; font-size: 20px; text-align: center; }
+.rangee.saisie input.juste { border-color: var(--cyan); background: var(--cyan-pale); }
+.rangee.saisie input.faux { border-color: var(--orange); background: var(--orange-pale); }
+.unite { flex: none; color: var(--gris); font-size: 17px; white-space: nowrap; }
+
+.rappel-cartes { margin: 0; }
+.rappel-cartes dt { font-weight: 650; overflow-wrap: anywhere; }
+.rappel-cartes dd { margin: 0 0 10px; color: var(--gris); overflow-wrap: anywhere; }

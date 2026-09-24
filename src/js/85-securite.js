@@ -55,6 +55,15 @@ const CODEC_VERROUILLE = {
   decoder: async () => { throw new Error('Application verrouillée.'); },
 };
 
+/** Seuls ces magasins contiennent des données personnelles. La progression des
+ *  paquets de contenu reste en clair : elle doit être lisible par la porte
+ *  élève, qui n'a pas de mot de passe et n'a rien à protéger. */
+const MAGASINS_PERSONNELS = ['eleves', 'cartes'];
+
+function appliquerCodecPersonnel(codec) {
+  for (const magasin of MAGASINS_PERSONNELS) Base.codecs[magasin] = codec;
+}
+
 /* ---------- Verrou ---------- */
 
 const Verrou = {
@@ -71,10 +80,10 @@ const Verrou = {
   activer(cle, parametres) {
     this.cle = cle;
     this.parametres = parametres;
-    Base.codec = {
+    appliquerCodecPersonnel({
       encoder: (objet) => Chiffrement.chiffrer(cle, objet),
       decoder: (donnees) => Chiffrement.dechiffrer(cle, donnees),
-    };
+    });
   },
 
   async nouveauxParametres(motDePasse) {
@@ -86,7 +95,7 @@ const Verrou = {
 
   /** Premier lancement : crée le mot de passe et chiffre les données déjà présentes. */
   async creer(motDePasse) {
-    Base.codec = { encoder: async (o) => o, decoder: async (d) => d };
+    appliquerCodecPersonnel(Base.CODEC_NEUTRE);
     const [eleves, cartes] = await Promise.all([Base.lireTout('eleves'), Base.lireTout('cartes')]);
     const { cle, parametres } = await this.nouveauxParametres(motDePasse);
     this.activer(cle, parametres);
@@ -129,13 +138,15 @@ const Verrou = {
     if (this.verrouille) return;
     this.verrouille = true;
     this.cle = null;
-    Base.codec = CODEC_VERROUILLE;
+    appliquerCodecPersonnel(CODEC_VERROUILLE);
     Session.arreter();
     Import.reinitialiser();
     Etat.viderDonnees();
     const { nom } = lireRoute();
     if (['session', 'import', 'eleve'].includes(nom)) history.replaceState(null, '', '#/accueil');
-    afficherVerrou('deverrouiller');
+    // Quand on quitte volontairement l'espace enseignant, c'est l'écran de choix
+    // qui prend la suite, pas la demande de mot de passe.
+    if (Porte.courante === 'prof') afficherVerrou('deverrouiller');
   },
 
   signalerActivite() {
@@ -173,7 +184,7 @@ function afficherVerrou(mode) {
   window.scrollTo(0, 0);
 
   if (!Verrou.disponible()) {
-    definirTitre('Reconnaître mes élèves');
+    definirTitre(NOM_APP);
     zone.append(el('div', { class: 'alerte danger pile' },
       el('h2', { text: 'Chiffrement indisponible' }),
       el('p', { text: 'Le navigateur n’autorise le chiffrement que pour une page ouverte en local (fichier), '

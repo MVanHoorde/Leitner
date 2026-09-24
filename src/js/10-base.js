@@ -1,13 +1,17 @@
 /* Couche IndexedDB.
  *
  * Magasins :
- *   eleves  { id, donnees }  — donnees = élève encodé par le codec
- *   cartes  { id, donnees }  — état Leitner, id = id de l'élève
- *   meta    { cle, valeur }  — réglages, suivi et paramètres de chiffrement,
- *                              jamais de donnée personnelle
+ *   eleves       { id, donnees }  — donnees = élève encodé par le codec
+ *   cartes       { id, donnees }  — état Leitner du trombinoscope, id = id de l'élève
+ *   progression  { id, donnees }  — état Leitner des paquets de contenu
+ *   meta         { cle, valeur }  — réglages, profil, suivi et paramètres de
+ *                                   chiffrement
  *
- * Le codec transforme chaque objet avant écriture et après lecture :
- * neutre avant la création du mot de passe, AES-GCM ensuite (voir 85-securite.js).
+ * Chaque magasin a son codec, appliqué avant écriture et après lecture.
+ * Les magasins personnels (élèves, photos, progression associée) sont chiffrés
+ * dès qu'un mot de passe existe (voir 85-securite.js) ; « progression » ne
+ * contient que des compteurs de révision liés à des cartes publiques et reste
+ * lisible par la porte élève, sans mot de passe.
  */
 
 function attendreRequete(requete) {
@@ -27,12 +31,19 @@ function attendreTransaction(tx) {
 
 const Base = {
   NOM: 'reconnaitre-mes-eleves',
-  VERSION: 1,
+  VERSION: 2,
   cnx: null,
 
-  codec: {
+  CODEC_NEUTRE: {
     encoder: async (objet) => objet,
     decoder: async (donnees) => donnees,
+  },
+
+  /** Codec par magasin ; absent = neutre. */
+  codecs: {},
+
+  codecDe(magasin) {
+    return this.codecs[magasin] || this.CODEC_NEUTRE;
   },
 
   ouvrir() {
@@ -46,6 +57,7 @@ const Base = {
         const db = requete.result;
         if (!db.objectStoreNames.contains('eleves')) db.createObjectStore('eleves', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('cartes')) db.createObjectStore('cartes', { keyPath: 'id' });
+        if (!db.objectStoreNames.contains('progression')) db.createObjectStore('progression', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'cle' });
       };
       requete.onsuccess = () => {
@@ -63,7 +75,8 @@ const Base = {
   async lireTout(magasin) {
     const tx = this.cnx.transaction(magasin, 'readonly');
     const enregistrements = await attendreRequete(tx.objectStore(magasin).getAll());
-    return Promise.all(enregistrements.map((e) => this.codec.decoder(e.donnees)));
+    const codec = this.codecDe(magasin);
+    return Promise.all(enregistrements.map((e) => codec.decoder(e.donnees)));
   },
 
   /**
@@ -78,8 +91,9 @@ const Base = {
 
     const prets = {};
     for (const [magasin, objets] of Object.entries(ecritures)) {
+      const codec = this.codecDe(magasin);
       prets[magasin] = await Promise.all(
-        objets.map(async (objet) => ({ id: objet.id, donnees: await this.codec.encoder(objet) })));
+        objets.map(async (objet) => ({ id: objet.id, donnees: await codec.encoder(objet) })));
     }
 
     const tx = this.cnx.transaction(magasins, 'readwrite');

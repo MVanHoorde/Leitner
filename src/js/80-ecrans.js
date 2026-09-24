@@ -48,8 +48,10 @@ Ecrans.accueil = {
             + 'Chaque fichier correspond à une classe.' })),
         boutonMenu('Importer un trombinoscope PDF', 'Une classe par fichier', () => aller('import'), 'principal'),
         boutonMenu('Essayer avec des élèves fictifs', '36 élèves répartis en 3 classes', (e) => chargerDemo(e.currentTarget)),
+        boutonMenu('Paquets de révision', 'Essayer les cartes proposées aux élèves', () => aller('paquets')),
         boutonMenu('Réglages et sauvegarde', 'Réimporter une sauvegarde, effacement', () => aller('reglages')),
-        boutonVerrouiller());
+        boutonVerrouiller(),
+        boutonChangerPorte());
       return;
     }
 
@@ -67,6 +69,7 @@ Ecrans.accueil = {
       boutonMenu('Tableau de bord', 'Progression, objectif, suivi par élève', () => aller('tableau')),
       boutonMenu('Élèves', `${pluriel(Etat.eleves.size, 'élève')} · ${pluriel(classes.length, 'classe')}`, () => aller('eleves')),
       boutonMenu('Importer un trombinoscope PDF', 'Ajouter une classe', () => aller('import')),
+      boutonMenu('Paquets de révision', `${pluriel(Paquets.liste.length, 'paquet')} de contenu · côté élève`, () => aller('paquets')),
       boutonMenu('Réglages et sauvegarde', 'Charge de travail, export, effacement', () => aller('reglages')));
 
     if (premierImport) {
@@ -74,7 +77,7 @@ Ecrans.accueil = {
       pile.append(el('p', { class: 'discret' },
         `Premier import le ${Dates.formater(premierImport)} (${Dates.depuis(jours)}).`));
     }
-    pile.append(boutonVerrouiller());
+    pile.append(boutonVerrouiller(), boutonChangerPorte());
   },
 };
 

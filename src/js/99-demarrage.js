@@ -1,9 +1,15 @@
 async function demarrer() {
   try {
     await Base.ouvrir();
-    Base.codec = CODEC_VERROUILLE;
+    appliquerCodecPersonnel(CODEC_VERROUILLE);
     await Etat.chargerMeta();
     Dates.decalage = Etat.reglages.decalageJours || 0;
+
+    // Profil, progression et quotas ne sont pas chiffrés : ils se chargent
+    // avant tout choix de porte.
+    await Promise.all([Profil.charger(), Progression.charger(), SuiviContenu.charger()]);
+    const porte = await Base.lireMeta('porte');
+    Porte.courante = porte === 'prof' || porte === 'eleve' ? porte : null;
 
     if (!Etat.suivi.persistanceDemandee) {
       await demanderPersistance();
@@ -11,7 +17,11 @@ async function demarrer() {
     }
 
     window.addEventListener('hashchange', afficher);
-    afficherVerrou((await Base.lireMeta('chiffrement')) ? 'deverrouiller' : 'creer');
+    if (Porte.courante === 'prof') {
+      afficherVerrou((await Base.lireMeta('chiffrement')) ? 'deverrouiller' : 'creer');
+    } else {
+      afficher();
+    }
   } catch (erreur) {
     console.error(erreur);
     $('#ecran').replaceChildren(el('div', { class: 'alerte danger pile' },

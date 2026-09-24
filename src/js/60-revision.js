@@ -201,10 +201,16 @@ function rendreCarte(zone, element) {
   else modeRetournement(eleve, s.mode, scene, panneau);
 }
 
-function boutonsAutoEvaluation() {
+/** surReponse reçoit le verdict et se charge de noter puis de réafficher ;
+ *  par défaut, la session du trombinoscope. */
+function boutonsAutoEvaluation(surReponse = null) {
   const repondre = async (reussi) => {
     for (const b of rangee.querySelectorAll('button')) b.disabled = true;
     toucheEcran = null;
+    if (surReponse) {
+      await surReponse(reussi);
+      return;
+    }
     await Session.repondre(reussi);
     afficher();
   };

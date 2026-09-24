@@ -1,5 +1,8 @@
 'use strict';
 
+/** Nom de l'ensemble : le trombinoscope n'en est plus que la moitié. */
+const NOM_APP = 'Boîte à cartes';
+
 const $ = (selecteur, racine = document) => racine.querySelector(selecteur);
 
 const comparerFr = new Intl.Collator('fr', { sensitivity: 'base', numeric: true }).compare;
