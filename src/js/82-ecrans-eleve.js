@@ -21,6 +21,16 @@ function selecteurNiveau(valeurInitiale, auChangement) {
   return selecteur(NIVEAUX, valeurInitiale, auChangement, 'Niveau');
 }
 
+/** Ligne d'accroche de l'accueil : ce qui donne envie de ne pas casser la série. */
+function serieDuJour() {
+  const serie = Journal.serie();
+  const total = Journal.total();
+  if (!total.vues) return 'Régularité, avancement, points faibles';
+  const fait = Journal.du(Dates.aujourdhui()).vues;
+  if (!serie) return `${pluriel(total.vues, 'carte vue', 'cartes vues')} en tout · série interrompue`;
+  return `${pluriel(serie, 'jour')} d’affilée${fait ? '' : ' · à confirmer aujourd’hui'}`;
+}
+
 /* ---------- Première ouverture : création du profil ---------- */
 
 function formulaireProfil(surValidation) {
@@ -78,12 +88,13 @@ Ecrans['accueil-eleve'] = {
     definirTitre(pseudo ? `Bonjour ${pseudo}` : NOM_APP);
 
     const detail = total
-      ? `${pluriel(dues, 'carte due', 'cartes dues')} · ${pluriel(nouvelles, 'nouvelle')} · ${estimerDuree(total)}`
+      ? `${pluriel(dues, 'carte due', 'cartes dues')} · ${pluriel(nouvelles, 'nouvelle')} · ${estimerDuree(total, Journal.secondesParCarte())}`
       : 'Tout est à jour pour aujourd’hui';
 
     pile.append(
       el('p', { class: 'discret', text: `${nomNiveau(Profil.niveau)} · ${pluriel(Paquets.pourNiveau(Profil.niveau).length, 'paquet')} à ton niveau` }),
       boutonMenu('Réviser', detail, () => aller('paquets'), total ? 'principal' : ''),
+      boutonMenu('Ma progression', serieDuJour(), () => aller('statistiques')),
       boutonMenu('Mon profil', 'Classe, rythme de travail, remise à zéro', () => aller('profil-eleve')));
 
     if (!total) {

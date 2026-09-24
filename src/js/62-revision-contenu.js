@@ -45,7 +45,7 @@ function tuilePaquet(paquet) {
   const repartition = Progression.repartition(paquet.cartes);
   const aFaire = bilan.dues.length + bilan.nouvellesDuJour;
   const detail = aFaire
-    ? `${pluriel(bilan.dues.length, 'carte due', 'cartes dues')} · ${pluriel(bilan.nouvellesDuJour, 'nouvelle')} · ${estimerDuree(aFaire)}`
+    ? `${pluriel(bilan.dues.length, 'carte due', 'cartes dues')} · ${pluriel(bilan.nouvellesDuJour, 'nouvelle')} · ${estimerDuree(aFaire, Journal.secondesParCarte())}`
     : `Rien à revoir aujourd’hui · ${repartition.acquises} / ${repartition.total} acquises`;
 
   return el('div', { class: 'pile serree' },
@@ -61,6 +61,12 @@ Ecrans.paquets = {
   rendre(zone) {
     const pile = el('div', { class: 'pile' });
     zone.append(pile);
+
+    pile.append(boutonMenu('Progression et statistiques',
+      Journal.total().vues
+        ? `${pluriel(Journal.serie(), 'jour')} d’affilée · ${pluriel(Journal.total().vues, 'carte vue', 'cartes vues')} en tout`
+        : 'Régularité, avancement, points faibles',
+      () => aller('statistiques')));
 
     const niveau = Porte.courante === 'eleve' ? Profil.niveau : null;
     const monNiveau = Paquets.pourNiveau(niveau);
@@ -125,7 +131,7 @@ Ecrans.paquet = {
 
       if (aFaire) {
         infos.append(
-          el('p', { class: 'discret', text: `${estimerDuree(aFaire)} pour la séance du jour, `
+          el('p', { class: 'discret', text: `${estimerDuree(aFaire, Journal.secondesParCarte())} pour la séance du jour, `
             + `par séries de ${Profil.donnees.tailleSession} cartes.` }),
           el('button', {
             type: 'button',
@@ -416,10 +422,17 @@ function rendreFinDeSerieContenu(zone) {
   const restant = SessionContenu.restant();
   const taille = Math.min(restant, Profil.donnees.tailleSession);
 
+  const serie = Journal.serie(s.jour);
+  const moyenne = s.resultats.length ? Math.round(s.secondes / s.resultats.length) : 0;
+
   const pile = el('div', { class: 'pile' },
     el('div', { class: 'chiffres' },
       chiffre(`${reussies} / ${s.resultats.length}`, 'justes du premier coup'),
-      chiffre(ratees.length, 'à retravailler')));
+      chiffre(ratees.length, 'à retravailler'),
+      chiffre(moyenne >= 1 ? `${moyenne} s` : '—', 'par carte en moyenne')),
+    el('p', { class: 'discret', text: serie > 1
+      ? `${serie} jours d’affilée. ${formaterDuree(s.secondes)} sur cette série.`
+      : `Première journée de la série. ${formaterDuree(s.secondes)} sur cette série.` }));
 
   if (ratees.length) {
     pile.append(el('section', { class: 'panneau pile' },
@@ -441,15 +454,24 @@ function rendreFinDeSerieContenu(zone) {
       },
     }, `Continuer (${pluriel(taille, 'carte')})`));
   }
-  actions.append(el('button', {
-    type: 'button',
-    class: 'bouton grand',
-    onclick: () => {
-      const cle = s.paquet.cle;
-      SessionContenu.arreter();
-      aller('paquet', cle);
-    },
-  }, 'Terminer'));
+  actions.append(
+    el('button', {
+      type: 'button',
+      class: 'bouton grand',
+      onclick: () => {
+        const cle = s.paquet.cle;
+        SessionContenu.arreter();
+        aller('paquet', cle);
+      },
+    }, 'Terminer'),
+    el('button', {
+      type: 'button',
+      class: 'bouton grand',
+      onclick: () => {
+        SessionContenu.arreter();
+        aller('statistiques');
+      },
+    }, 'Voir ma progression'));
   pile.append(actions);
   zone.append(pile);
 }

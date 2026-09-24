@@ -148,7 +148,12 @@ const Progression = {
       if (etat.introduite === null) jamaisVues += 1;
       else compte[etat.compartiment - 1] += 1;
     }
-    return { compte, jamaisVues, total: cartes.length, acquises: compte[4] };
+    // Part du chemin parcouru : une carte au compartiment 3 compte pour 3/5.
+    // Le seul décompte des cartes acquises resterait à zéro pendant des semaines.
+    const avancement = cartes.length
+      ? compte.reduce((somme, n, i) => somme + n * (i + 1), 0) / (cartes.length * 5)
+      : 0;
+    return { compte, jamaisVues, total: cartes.length, acquises: compte[4], avancement };
   },
 };
 
@@ -200,6 +205,7 @@ const SessionContenu = {
       format,
       type,
       jour: Dates.aujourdhui(),
+      secondes: 0,
       vues: new Set(),
       lot: 0,
       file: [],
@@ -287,6 +293,9 @@ const SessionContenu = {
       const carte = Paquets.index.get(element.id);
       const enonce = element.tirage || carte;
       s.resultats.push({ id: element.id, reussi, question: enonce.question, reponse: enonce.reponse });
+      const secondes = element.debut ? (Date.now() - element.debut) / 1000 : 0;
+      s.secondes += Math.min(SECONDES_MAX_PAR_CARTE, secondes);
+      await Journal.noter(s.jour, reussi, secondes);
       if (element.compte) {
         const etat = Progression.obtenir(element.id);
         const nouvelle = etat.introduite === null;

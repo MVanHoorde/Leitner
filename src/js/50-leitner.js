@@ -15,8 +15,9 @@ const MODES = {
   qcm: 'QCM',
 };
 
-function estimerDuree(nombreCartes) {
-  const minutes = Math.ceil((nombreCartes * SECONDES_PAR_CARTE) / 60);
+/** secondesParCarte : rythme mesuré quand on en a un, valeur par défaut sinon. */
+function estimerDuree(nombreCartes, secondesParCarte = null) {
+  const minutes = Math.ceil((nombreCartes * (secondesParCarte || SECONDES_PAR_CARTE)) / 60);
   return nombreCartes === 0 ? '0 min' : `≈ ${minutes} min`;
 }
 

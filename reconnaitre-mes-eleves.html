@@ -534,6 +534,65 @@ body.plein .confidentialite { display: none; }
 .rappel-cartes { margin: 0; }
 .rappel-cartes dt { font-weight: 650; overflow-wrap: anywhere; }
 .rappel-cartes dd { margin: 0 0 10px; color: var(--gris); overflow-wrap: anywhere; }
+
+
+/* ---------- Statistiques des paquets ---------- */
+
+.rangee.avancement { align-items: center; gap: 18px; flex-wrap: wrap; }
+.anneau { width: 132px; height: 132px; flex: none; }
+.avancement-detail { flex: 1; min-width: 200px; }
+.avancement-detail p { margin: 0; }
+
+/* Une case par jour, en colonnes du lundi au dimanche. */
+.calendrier {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(7, 1fr);
+  gap: 3px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.calendrier .case { width: 100%; aspect-ratio: 1; min-width: 12px; border-radius: 3px; }
+.case.n0 { background: #E4EAF3; }
+.case.n1 { background: #BFE0FA; }
+.case.n2 { background: #7FC3F7; }
+.case.n3 { background: #3FA9F5; }
+.case.n4 { background: #1B2A4A; }
+.case.futur { background: #F1F4F9; }
+.case.aujourdhui { outline: 2px solid var(--orange); outline-offset: 1px; }
+
+.legende-calendrier { display: flex; align-items: center; gap: 4px; }
+.legende-calendrier .case { width: 12px; height: 12px; border-radius: 3px; }
+.legende-calendrier .discret { font-size: 14px; }
+
+.histogramme { display: flex; align-items: flex-end; gap: 4px; height: 150px; }
+.histogramme .colonne {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+  gap: 3px;
+}
+.histogramme .valeur { font-size: 12px; color: var(--gris); font-variant-numeric: tabular-nums; }
+.histogramme .barre { width: 100%; min-height: 2px; background: var(--cyan); border-radius: 3px 3px 0 0; }
+.histogramme .colonne.aujourdhui .barre { background: var(--orange); }
+.histogramme .jour { font-size: 12px; color: var(--gris); }
+
+.ligne-reussite + .ligne-reussite { margin-top: 12px; }
+.ligne-entete { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.ligne-titre { font-weight: 600; }
+.ligne-taux { font-variant-numeric: tabular-nums; font-weight: 700; }
+.ligne-taux.bon { color: #1B2A4A; }
+.ligne-taux.moyen { color: #A05A16; }
+.ligne-taux.faible { color: var(--rouge); }
+.jauge { display: block; height: 8px; margin: 4px 0; border-radius: 999px; background: var(--bord); overflow: hidden; }
+.jauge .remplissage { display: block; height: 100%; border-radius: 999px; }
+.remplissage.bon { background: var(--cyan); }
+.remplissage.moyen { background: var(--orange); }
+.remplissage.faible { background: var(--rouge); }
 </style>
 </head>
 <body>
@@ -1291,6 +1350,109 @@ const Profil = {
   },
 };
 
+// ---- 24-journal.js ----
+/* Journal des révisions de contenu, jour par jour.
+ *
+ * Trois compteurs par date : cartes vues, cartes justes, secondes passées.
+ * C'est ce qui permet la régularité (séries de jours), le calendrier et une
+ * estimation de durée fondée sur le rythme réel plutôt que sur une moyenne
+ * inventée. Aucune donnée personnelle : des nombres et des dates.
+ */
+
+const JOURS_CONSERVES = 400;
+/** Une carte laissée à l'écran ne doit pas gonfler le temps passé. */
+const SECONDES_MAX_PAR_CARTE = 120;
+
+const Journal = {
+  jours: {},
+
+  async charger() {
+    this.jours = (await Base.lireMeta('journal')) || {};
+  },
+
+  du(date) {
+    return this.jours[date] || { vues: 0, justes: 0, secondes: 0 };
+  },
+
+  async noter(jour, reussi, secondes) {
+    const courant = this.du(jour);
+    this.jours[jour] = {
+      vues: courant.vues + 1,
+      justes: courant.justes + (reussi ? 1 : 0),
+      secondes: courant.secondes + Math.min(SECONDES_MAX_PAR_CARTE, Math.max(0, Math.round(secondes || 0))),
+    };
+    const dates = Object.keys(this.jours).sort();
+    for (const date of dates.slice(0, Math.max(0, dates.length - JOURS_CONSERVES))) delete this.jours[date];
+    await Base.ecrireMeta('journal', this.jours);
+  },
+
+  /** Jours consécutifs travaillés. La journée en cours ne casse la série
+   *  qu'une fois passée : tant qu'elle est vide, on compte jusqu'à hier. */
+  serie(jour = Dates.aujourdhui()) {
+    let date = this.du(jour).vues ? jour : Dates.ajouter(jour, -1);
+    let n = 0;
+    while (this.du(date).vues) {
+      n += 1;
+      date = Dates.ajouter(date, -1);
+    }
+    return n;
+  },
+
+  meilleureSerie() {
+    const dates = Object.keys(this.jours).filter((d) => this.jours[d].vues).sort();
+    let record = 0;
+    let courante = 0;
+    let precedente = null;
+    for (const date of dates) {
+      courante = precedente && Dates.ecart(precedente, date) === 1 ? courante + 1 : 1;
+      precedente = date;
+      record = Math.max(record, courante);
+    }
+    return record;
+  },
+
+  /** Les `nombre` derniers jours, du plus ancien au plus récent. */
+  derniers(nombre, jour = Dates.aujourdhui()) {
+    const liste = [];
+    for (let i = nombre - 1; i >= 0; i -= 1) {
+      const date = Dates.ajouter(jour, -i);
+      liste.push({ date, ...this.du(date) });
+    }
+    return liste;
+  },
+
+  total() {
+    let vues = 0;
+    let justes = 0;
+    let secondes = 0;
+    let jours = 0;
+    for (const j of Object.values(this.jours)) {
+      vues += j.vues;
+      justes += j.justes;
+      secondes += j.secondes;
+      if (j.vues) jours += 1;
+    }
+    return { vues, justes, secondes, jours };
+  },
+
+  /** Durée moyenne observée, pour estimer une séance. null tant que l'échantillon
+   *  est trop maigre pour valoir mieux que la valeur par défaut. */
+  secondesParCarte() {
+    const { vues, secondes } = this.total();
+    if (vues < 20 || !secondes) return null;
+    return Math.min(30, Math.max(3, secondes / vues));
+  },
+};
+
+/** « 4 min », « 1 h 20 ». */
+function formaterDuree(secondes) {
+  const minutes = Math.round(secondes / 60);
+  if (minutes < 60) return `${minutes} min`;
+  const heures = Math.floor(minutes / 60);
+  const reste = minutes % 60;
+  return reste ? `${heures} h ${String(reste).padStart(2, '0')}` : `${heures} h`;
+}
+
 // ---- 30-demo.js ----
 /* Jeu de données fictif : noms inventés et visages dessinés, aucune vraie photo. */
 
@@ -1635,7 +1797,12 @@ const Progression = {
       if (etat.introduite === null) jamaisVues += 1;
       else compte[etat.compartiment - 1] += 1;
     }
-    return { compte, jamaisVues, total: cartes.length, acquises: compte[4] };
+    // Part du chemin parcouru : une carte au compartiment 3 compte pour 3/5.
+    // Le seul décompte des cartes acquises resterait à zéro pendant des semaines.
+    const avancement = cartes.length
+      ? compte.reduce((somme, n, i) => somme + n * (i + 1), 0) / (cartes.length * 5)
+      : 0;
+    return { compte, jamaisVues, total: cartes.length, acquises: compte[4], avancement };
   },
 };
 
@@ -1687,6 +1854,7 @@ const SessionContenu = {
       format,
       type,
       jour: Dates.aujourdhui(),
+      secondes: 0,
       vues: new Set(),
       lot: 0,
       file: [],
@@ -1774,6 +1942,9 @@ const SessionContenu = {
       const carte = Paquets.index.get(element.id);
       const enonce = element.tirage || carte;
       s.resultats.push({ id: element.id, reussi, question: enonce.question, reponse: enonce.reponse });
+      const secondes = element.debut ? (Date.now() - element.debut) / 1000 : 0;
+      s.secondes += Math.min(SECONDES_MAX_PAR_CARTE, secondes);
+      await Journal.noter(s.jour, reussi, secondes);
       if (element.compte) {
         const etat = Progression.obtenir(element.id);
         const nouvelle = etat.introduite === null;
@@ -2597,8 +2768,9 @@ const MODES = {
   qcm: 'QCM',
 };
 
-function estimerDuree(nombreCartes) {
-  const minutes = Math.ceil((nombreCartes * SECONDES_PAR_CARTE) / 60);
+/** secondesParCarte : rythme mesuré quand on en a un, valeur par défaut sinon. */
+function estimerDuree(nombreCartes, secondesParCarte = null) {
+  const minutes = Math.ceil((nombreCartes * (secondesParCarte || SECONDES_PAR_CARTE)) / 60);
   return nombreCartes === 0 ? '0 min' : `≈ ${minutes} min`;
 }
 
@@ -3196,7 +3368,7 @@ function tuilePaquet(paquet) {
   const repartition = Progression.repartition(paquet.cartes);
   const aFaire = bilan.dues.length + bilan.nouvellesDuJour;
   const detail = aFaire
-    ? `${pluriel(bilan.dues.length, 'carte due', 'cartes dues')} · ${pluriel(bilan.nouvellesDuJour, 'nouvelle')} · ${estimerDuree(aFaire)}`
+    ? `${pluriel(bilan.dues.length, 'carte due', 'cartes dues')} · ${pluriel(bilan.nouvellesDuJour, 'nouvelle')} · ${estimerDuree(aFaire, Journal.secondesParCarte())}`
     : `Rien à revoir aujourd’hui · ${repartition.acquises} / ${repartition.total} acquises`;
 
   return el('div', { class: 'pile serree' },
@@ -3212,6 +3384,12 @@ Ecrans.paquets = {
   rendre(zone) {
     const pile = el('div', { class: 'pile' });
     zone.append(pile);
+
+    pile.append(boutonMenu('Progression et statistiques',
+      Journal.total().vues
+        ? `${pluriel(Journal.serie(), 'jour')} d’affilée · ${pluriel(Journal.total().vues, 'carte vue', 'cartes vues')} en tout`
+        : 'Régularité, avancement, points faibles',
+      () => aller('statistiques')));
 
     const niveau = Porte.courante === 'eleve' ? Profil.niveau : null;
     const monNiveau = Paquets.pourNiveau(niveau);
@@ -3276,7 +3454,7 @@ Ecrans.paquet = {
 
       if (aFaire) {
         infos.append(
-          el('p', { class: 'discret', text: `${estimerDuree(aFaire)} pour la séance du jour, `
+          el('p', { class: 'discret', text: `${estimerDuree(aFaire, Journal.secondesParCarte())} pour la séance du jour, `
             + `par séries de ${Profil.donnees.tailleSession} cartes.` }),
           el('button', {
             type: 'button',
@@ -3567,10 +3745,17 @@ function rendreFinDeSerieContenu(zone) {
   const restant = SessionContenu.restant();
   const taille = Math.min(restant, Profil.donnees.tailleSession);
 
+  const serie = Journal.serie(s.jour);
+  const moyenne = s.resultats.length ? Math.round(s.secondes / s.resultats.length) : 0;
+
   const pile = el('div', { class: 'pile' },
     el('div', { class: 'chiffres' },
       chiffre(`${reussies} / ${s.resultats.length}`, 'justes du premier coup'),
-      chiffre(ratees.length, 'à retravailler')));
+      chiffre(ratees.length, 'à retravailler'),
+      chiffre(moyenne >= 1 ? `${moyenne} s` : '—', 'par carte en moyenne')),
+    el('p', { class: 'discret', text: serie > 1
+      ? `${serie} jours d’affilée. ${formaterDuree(s.secondes)} sur cette série.`
+      : `Première journée de la série. ${formaterDuree(s.secondes)} sur cette série.` }));
 
   if (ratees.length) {
     pile.append(el('section', { class: 'panneau pile' },
@@ -3592,18 +3777,271 @@ function rendreFinDeSerieContenu(zone) {
       },
     }, `Continuer (${pluriel(taille, 'carte')})`));
   }
-  actions.append(el('button', {
-    type: 'button',
-    class: 'bouton grand',
-    onclick: () => {
-      const cle = s.paquet.cle;
-      SessionContenu.arreter();
-      aller('paquet', cle);
-    },
-  }, 'Terminer'));
+  actions.append(
+    el('button', {
+      type: 'button',
+      class: 'bouton grand',
+      onclick: () => {
+        const cle = s.paquet.cle;
+        SessionContenu.arreter();
+        aller('paquet', cle);
+      },
+    }, 'Terminer'),
+    el('button', {
+      type: 'button',
+      class: 'bouton grand',
+      onclick: () => {
+        SessionContenu.arreter();
+        aller('statistiques');
+      },
+    }, 'Voir ma progression'));
   pile.append(actions);
   zone.append(pile);
 }
+
+// ---- 64-statistiques.js ----
+/* Statistiques des paquets de contenu : régularité, avancement, points faibles.
+ *
+ * Tout se déduit de ce qui est déjà stocké — la progression carte par carte et
+ * le journal jour par jour. Rien n'est calculé à l'avance ni dupliqué en base.
+ */
+
+/** Paquets du niveau de l'élève, plus tous ceux qu'il a déjà entamés. */
+function paquetsSuivis() {
+  const attendus = Porte.courante === 'eleve' ? Paquets.pourNiveau(Profil.niveau) : Paquets.liste;
+  const entames = Paquets.liste.filter((p) => p.cartes.some((c) => Progression.cartes.has(c.id)));
+  return Paquets.liste.filter((p) => attendus.includes(p) || entames.includes(p));
+}
+
+function anneauProgression(part, libelle, description) {
+  const rayon = 54;
+  const tour = 2 * Math.PI * rayon;
+  return svg('svg', {
+    viewBox: '0 0 140 140',
+    class: 'anneau',
+    role: 'img',
+    'aria-label': description,
+  },
+  svg('circle', { cx: 70, cy: 70, r: rayon, fill: 'none', stroke: '#E4EAF3', 'stroke-width': 13 }),
+  part > 0 && svg('circle', {
+    cx: 70, cy: 70, r: rayon, fill: 'none', stroke: '#1B2A4A', 'stroke-width': 13,
+    'stroke-linecap': 'round',
+    'stroke-dasharray': `${part * tour} ${tour}`,
+    transform: 'rotate(-90 70 70)',
+  }),
+  svg('text', { x: 70, y: 68, 'text-anchor': 'middle', 'font-size': 30, 'font-weight': 700, fill: '#1B2A4A', text: `${Math.round(part * 100)} %` }),
+  svg('text', { x: 70, y: 92, 'text-anchor': 'middle', 'font-size': 14, fill: '#56647D', text: libelle }));
+}
+
+/* ---------- Régularité ---------- */
+
+const NIVEAUX_INTENSITE = [1, 6, 16, 31];
+
+function intensite(vues) {
+  if (!vues) return 0;
+  return NIVEAUX_INTENSITE.filter((seuil) => vues >= seuil).length;
+}
+
+/**
+ * Une case par jour, en colonnes du lundi au dimanche. On termine la grille à
+ * la fin de la semaine en cours pour que la dernière colonne reste entière.
+ */
+function calendrierRevisions(semaines = 12, jour = Dates.aujourdhui()) {
+  const joursJusquAuDimanche = 6 - ((Dates.versDate(jour).getDay() + 6) % 7);
+  const fin = Dates.ajouter(jour, joursJusquAuDimanche);
+  const debut = Dates.ajouter(fin, -(semaines * 7 - 1));
+
+  const grille = el('div', { class: 'calendrier', role: 'img',
+    'aria-label': `Révisions des ${semaines} dernières semaines` });
+  for (let i = 0; i < semaines * 7; i += 1) {
+    const date = Dates.ajouter(debut, i);
+    const { vues, justes } = Journal.du(date);
+    const futur = date > jour;
+    grille.append(el('div', {
+      class: `case n${futur ? 0 : intensite(vues)}${futur ? ' futur' : ''}${date === jour ? ' aujourdhui' : ''}`,
+      title: futur ? Dates.formater(date)
+        : `${Dates.formater(date)} — ${vues ? `${vues} cartes, ${justes} justes` : 'rien'}`,
+    }));
+  }
+
+  const legende = el('div', { class: 'legende-calendrier' },
+    el('span', { class: 'discret', text: 'Moins' }),
+    ...[0, 1, 2, 3, 4].map((n) => el('span', { class: `case n${n}` })),
+    el('span', { class: 'discret', text: 'Plus' }));
+
+  return el('div', { class: 'pile serree' }, grille, legende);
+}
+
+/* ---------- Ce qui arrive ---------- */
+
+/** Cartes à revoir aujourd'hui puis pour chacun des jours suivants. */
+function previsionEcheances(cartes, nombreJours, jour) {
+  const colonnes = [];
+  for (let i = 0; i < nombreJours; i += 1) {
+    const date = Dates.ajouter(jour, i);
+    const compte = cartes.filter((c) => (i === 0 ? c.echeance !== null && c.echeance <= date : c.echeance === date)).length;
+    colonnes.push({ date, compte, jour: i });
+  }
+  return colonnes;
+}
+
+function histogrammePrevision(colonnes) {
+  const maximum = Math.max(1, ...colonnes.map((c) => c.compte));
+  const barres = el('div', { class: 'histogramme', role: 'img',
+    'aria-label': colonnes.map((c) => `${Dates.formater(c.date)} : ${c.compte}`).join(', ') });
+  for (const colonne of colonnes) {
+    const nomJour = Dates.versDate(colonne.date).toLocaleDateString('fr-FR', { weekday: 'narrow' });
+    barres.append(el('div', { class: `colonne${colonne.jour === 0 ? ' aujourdhui' : ''}`, title: `${Dates.formater(colonne.date)} : ${pluriel(colonne.compte, 'carte')}` },
+      el('span', { class: 'valeur', text: colonne.compte || '' }),
+      el('span', { class: 'barre', style: `height:${(colonne.compte / maximum) * 100}%` }),
+      el('span', { class: 'jour', text: nomJour })));
+  }
+  return barres;
+}
+
+/* ---------- Points faibles ---------- */
+
+/** Taux de réussite par section, sur les cartes déjà travaillées. */
+function reussiteParSection() {
+  const cumul = new Map();
+  for (const etat of Progression.cartes.values()) {
+    const carte = Paquets.index.get(etat.id);
+    if (!carte || !etat.passages) continue;
+    const paquet = Paquets.get(carte.paquet);
+    const section = Paquets.section(paquet, carte.section);
+    if (!section) continue;
+    const cle = `${carte.paquet}/${carte.section}`;
+    const ligne = cumul.get(cle) || { titre: section.titre, paquet: paquet.titre,
+      clePaquet: carte.paquet, cleSection: carte.section, passages: 0, reussites: 0, cartes: 0 };
+    ligne.passages += etat.passages;
+    ligne.reussites += etat.reussites;
+    ligne.cartes += 1;
+    cumul.set(cle, ligne);
+  }
+  return [...cumul.values()]
+    .filter((l) => l.passages >= 3)
+    .map((l) => ({ ...l, taux: l.reussites / l.passages }))
+    .sort((a, b) => a.taux - b.taux);
+}
+
+function ligneReussite(ligne) {
+  const pourcentage = Math.round(ligne.taux * 100);
+  const classe = pourcentage >= 80 ? 'bon' : pourcentage >= 55 ? 'moyen' : 'faible';
+  return el('div', { class: 'ligne-reussite' },
+    el('div', { class: 'ligne-entete' },
+      el('span', { class: 'ligne-titre', text: ligne.titre }),
+      el('span', { class: `ligne-taux ${classe}`, text: `${pourcentage} %` })),
+    el('div', { class: 'jauge' }, el('span', { class: `remplissage ${classe}`, style: `width:${pourcentage}%` })),
+    el('span', { class: 'discret', text: `${ligne.paquet} · ${pluriel(ligne.passages, 'passage')} sur ${pluriel(ligne.cartes, 'carte')}` }));
+}
+
+/* ---------- L'écran ---------- */
+
+Ecrans.statistiques = {
+  titre: 'Progression',
+  titreCourt: 'Progression',
+  parent: 'paquets',
+  porte: 'tous',
+  rendre(zone) {
+    const jour = Dates.aujourdhui();
+    const paquets = paquetsSuivis();
+    const cartes = paquets.flatMap((p) => p.cartes);
+    const etats = Progression.etats(cartes);
+    const repartition = Progression.repartition(cartes);
+    const total = Journal.total();
+    const aujourdhui = Journal.du(jour);
+    const serie = Journal.serie(jour);
+
+    const pile = el('div', { class: 'pile' });
+    zone.append(pile);
+
+    if (!total.vues) {
+      pile.append(
+        el('div', { class: 'panneau pile' },
+          el('h2', { text: 'Rien à montrer pour l’instant' }),
+          el('p', { text: 'Fais une première séance : la régularité, l’avancement et les points '
+            + 'faibles apparaîtront ici.' })),
+        el('button', { type: 'button', class: 'bouton principal bloc grand', onclick: () => aller('paquets') },
+          'Choisir un paquet'));
+      return;
+    }
+
+    /* Le jour même */
+    pile.append(el('div', { class: 'chiffres' },
+      chiffre(serie, serie > 1 ? 'jours d’affilée' : 'jour d’affilée'),
+      chiffre(aujourdhui.vues, 'cartes vues aujourd’hui'),
+      chiffre(aujourdhui.vues ? `${Math.round((aujourdhui.justes / aujourdhui.vues) * 100)} %` : '—', 'justes aujourd’hui')));
+
+    /* Avancement */
+    pile.append(el('section', { class: 'panneau pile' },
+      el('h2', { text: 'Avancement' }),
+      el('div', { class: 'rangee avancement' },
+        anneauProgression(repartition.avancement, 'du chemin',
+          `${Math.round(repartition.avancement * 100)} % du chemin parcouru sur ${repartition.total} cartes`),
+        el('div', { class: 'pile serree avancement-detail' },
+          el('p', { text: `${pluriel(repartition.acquises, 'carte acquise', 'cartes acquises')} `
+            + `(compartiment 5) sur ${repartition.total}.` }),
+          el('p', { class: 'discret', text: `${repartition.total - repartition.jamaisVues - repartition.acquises} en cours, `
+            + `${repartition.jamaisVues} jamais vues.` }),
+          barreCompartiments(repartition)))));
+
+    /* Régularité */
+    const record = Journal.meilleureSerie();
+    pile.append(el('section', { class: 'panneau pile' },
+      el('h2', { text: 'Régularité' }),
+      el('p', { class: 'discret', text: `${pluriel(total.jours, 'jour')} de révision, `
+        + `${pluriel(total.vues, 'carte vue', 'cartes vues')}, ${formaterDuree(total.secondes)} au total. `
+        + `Meilleure série : ${pluriel(record, 'jour')}.` }),
+      calendrierRevisions(12, jour)));
+
+    /* Charge à venir */
+    const prevision = previsionEcheances(etats, 14, jour);
+    const sommeSemaine = prevision.slice(0, 7).reduce((s, c) => s + c.compte, 0);
+    pile.append(el('section', { class: 'panneau pile' },
+      el('h2', { text: 'Les deux prochaines semaines' }),
+      histogrammePrevision(prevision),
+      el('p', { class: 'discret', text: sommeSemaine
+        ? `${pluriel(sommeSemaine, 'carte')} à revoir dans les sept prochains jours, soit `
+          + `${estimerDuree(Math.round(sommeSemaine / 7), Journal.secondesParCarte())} par jour.`
+        : 'Rien de prévu : toutes les cartes travaillées sont posées pour un moment.' })));
+
+    /* Points faibles */
+    const lignes = reussiteParSection();
+    if (lignes.length) {
+      const faibles = lignes.slice(0, 5);
+      const solides = lignes.slice(-3).reverse().filter((l) => !faibles.includes(l));
+      const pire = lignes[0];
+      pile.append(el('section', { class: 'panneau pile' },
+        el('h2', { text: 'Là où ça résiste' }),
+        el('p', { class: 'discret', text: 'Taux de réussite par section, du plus fragile au plus sûr.' }),
+        ...faibles.map(ligneReussite),
+        pire.taux < 0.8 && el('button', {
+          type: 'button',
+          class: 'bouton accent bloc',
+          onclick: () => lancerContenu({
+            paquet: Paquets.get(pire.clePaquet),
+            section: pire.cleSection,
+            format: Profil.donnees.format,
+            type: 'libre',
+          }),
+        }, `Retravailler « ${pire.titre} » maintenant`),
+        solides.length && el('h3', { text: 'Bien acquis' }),
+        ...solides.map(ligneReussite)));
+    }
+
+    /* Par paquet */
+    pile.append(el('section', { class: 'panneau pile' },
+      el('h2', { text: 'Par paquet' }),
+      ...paquets.map((paquet) => {
+        const r = Progression.repartition(paquet.cartes);
+        return el('div', { class: 'pile serree' },
+          el('div', { class: 'ligne-entete' },
+            el('span', { class: 'ligne-titre', text: paquet.titre }),
+            el('span', { class: 'discret', text: `${r.acquises} / ${r.total}` })),
+          barreCompartiments(r));
+      })));
+  },
+};
 
 // ---- 70-tableau.js ----
 /* Tableau de bord : répartition, charge du jour, objectif daté, suivi par élève. */
@@ -5018,6 +5456,16 @@ function selecteurNiveau(valeurInitiale, auChangement) {
   return selecteur(NIVEAUX, valeurInitiale, auChangement, 'Niveau');
 }
 
+/** Ligne d'accroche de l'accueil : ce qui donne envie de ne pas casser la série. */
+function serieDuJour() {
+  const serie = Journal.serie();
+  const total = Journal.total();
+  if (!total.vues) return 'Régularité, avancement, points faibles';
+  const fait = Journal.du(Dates.aujourdhui()).vues;
+  if (!serie) return `${pluriel(total.vues, 'carte vue', 'cartes vues')} en tout · série interrompue`;
+  return `${pluriel(serie, 'jour')} d’affilée${fait ? '' : ' · à confirmer aujourd’hui'}`;
+}
+
 /* ---------- Première ouverture : création du profil ---------- */
 
 function formulaireProfil(surValidation) {
@@ -5075,12 +5523,13 @@ Ecrans['accueil-eleve'] = {
     definirTitre(pseudo ? `Bonjour ${pseudo}` : NOM_APP);
 
     const detail = total
-      ? `${pluriel(dues, 'carte due', 'cartes dues')} · ${pluriel(nouvelles, 'nouvelle')} · ${estimerDuree(total)}`
+      ? `${pluriel(dues, 'carte due', 'cartes dues')} · ${pluriel(nouvelles, 'nouvelle')} · ${estimerDuree(total, Journal.secondesParCarte())}`
       : 'Tout est à jour pour aujourd’hui';
 
     pile.append(
       el('p', { class: 'discret', text: `${nomNiveau(Profil.niveau)} · ${pluriel(Paquets.pourNiveau(Profil.niveau).length, 'paquet')} à ton niveau` }),
       boutonMenu('Réviser', detail, () => aller('paquets'), total ? 'principal' : ''),
+      boutonMenu('Ma progression', serieDuJour(), () => aller('statistiques')),
       boutonMenu('Mon profil', 'Classe, rythme de travail, remise à zéro', () => aller('profil-eleve')));
 
     if (!total) {
@@ -5668,7 +6117,7 @@ async function demarrer() {
 
     // Profil, progression et quotas ne sont pas chiffrés : ils se chargent
     // avant tout choix de porte.
-    await Promise.all([Profil.charger(), Progression.charger(), SuiviContenu.charger()]);
+    await Promise.all([Profil.charger(), Progression.charger(), SuiviContenu.charger(), Journal.charger()]);
     const porte = await Base.lireMeta('porte');
     Porte.courante = porte === 'prof' || porte === 'eleve' ? porte : null;
 

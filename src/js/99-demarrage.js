@@ -7,7 +7,7 @@ async function demarrer() {
 
     // Profil, progression et quotas ne sont pas chiffrés : ils se chargent
     // avant tout choix de porte.
-    await Promise.all([Profil.charger(), Progression.charger(), SuiviContenu.charger()]);
+    await Promise.all([Profil.charger(), Progression.charger(), SuiviContenu.charger(), Journal.charger()]);
     const porte = await Base.lireMeta('porte');
     Porte.courante = porte === 'prof' || porte === 'eleve' ? porte : null;
 
