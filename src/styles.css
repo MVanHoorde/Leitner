@@ -897,3 +897,13 @@ textarea:focus, input[type=search]:focus { border-color: var(--cyan); outline: n
 .notes-sm2 .note-bien { background: var(--marine); border-color: var(--marine); }
 .notes-sm2 .note-facile { background: #2E9E6A; border-color: #2E9E6A; }
 @media (max-width: 420px) { .notes-sm2 .note-libelle { font-size: 15px; } }
+
+/* Explications des algorithmes */
+.explications { padding-top: 6px; border-top: 1px solid var(--bord); }
+.explication { padding: 10px 12px; border: 1px solid var(--bord); border-radius: 10px; background: #FAFBFD; }
+.explication + .explication { margin-top: 8px; }
+.explication > summary { font-size: 17px; }
+.exemple-algo { margin: 0; padding-left: 22px; }
+.exemple-algo li { margin: 4px 0; }
+.pastille-reponse { display: inline-block; padding: 0 8px; font-size: 14px; font-weight: 700; color: #fff; background: var(--marine); border-radius: 999px; }
+.pastille-reponse.ratee { background: var(--rouge); }

@@ -360,6 +360,24 @@ Ecrans.catalogue = {
 
 /* ---------- Réglages de révision d'un paquet ---------- */
 
+/** Fiche dépliable d'un algorithme : principe, pour qui, exemple chiffré, origine. */
+function explicationAlgorithme(cle, algo, paquet) {
+  const exemple = exempleAlgorithme(cle, paquet);
+  const delai = (j) => (j <= 1 ? 'le lendemain' : `${j} jours après`);
+  return el('details', { class: 'explication' },
+    el('summary', { text: algo.titre }),
+    el('div', { class: 'pile serree' },
+      el('p', {}, el('strong', { text: 'Le principe. ' }), algo.principe),
+      el('p', {}, el('strong', { text: 'Pour qui ? ' }), algo.pourQui),
+      el('p', {}, el('strong', { text: 'Exemple ' }),
+        `(une carte neuve, avec ${cle === 'sm2' ? 'des notes' : 'le rythme de ce paquet'}) :`),
+      el('ol', { class: 'exemple-algo' }, ...exemple.map((pas) => el('li', {},
+        el('span', { class: `pastille-reponse${/Ratée|revoir/.test(pas.reponse) ? ' ratee' : ''}`, text: pas.reponse }),
+        ` → revient ${delai(pas.jours)}`,
+        el('span', { class: 'discret', text: ` · boîte ${pas.boite}` })))),
+      el('p', { class: 'discret petit', text: algo.origine })));
+}
+
 function pastillesIntervalles(intervalles) {
   return el('span', { class: 'pastilles' }, ...intervalles.map((n) => el('span', { class: 'pastille', text: `${n} j` })));
 }
@@ -540,7 +558,10 @@ Ecrans['reglages-paquet'] = {
         el('section', { class: 'panneau pile' },
           el('h2', { text: 'Algorithme' }),
           algos,
-          el('p', { class: 'discret', text: 'Tu peux changer quand tu veux : compare les trois et garde celui qui te réussit.' })),
+          el('p', { class: 'discret', text: 'Tu peux changer quand tu veux : compare les trois et garde celui qui te réussit.' }),
+          el('div', { class: 'explications' },
+            el('h3', { text: 'Comment ça marche ?' }),
+            ...Object.entries(ALGORITHMES).map(([cle, a]) => explicationAlgorithme(cle, a, paquet)))),
         el('section', { class: 'panneau pile' },
           el('h2', { text: 'Le principe' }),
           el('p', { class: 'discret', text: principe }),

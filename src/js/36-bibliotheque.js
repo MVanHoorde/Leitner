@@ -120,15 +120,34 @@ const ALGORITHMES = {
   leitner: {
     titre: 'Leitner classique',
     resume: 'Réussie : la carte monte d’une boîte. Ratée : retour en boîte 1.',
+    principe: 'Les cartes sont rangées dans cinq boîtes. Chaque bonne réponse fait monter la carte '
+      + 'd’une boîte, et plus la boîte est haute, plus la carte revient tard. Une seule erreur la '
+      + 'renvoie en boîte 1 : elle revient dès le lendemain et doit refaire tout le chemin.',
+    pourQui: 'Pour ancrer solidement une notion. Exigeant : une carte n’arrive en boîte 5 que si '
+      + 'tu l’as réussie plusieurs fois de suite.',
+    origine: 'Inventé par Sebastian Leitner en 1972, avec de vraies boîtes en carton.',
   },
   progressif: {
     titre: 'Leitner progressif',
     resume: 'Ratée, la carte ne redescend que d’une boîte et revient le lendemain. Moins punitif.',
+    principe: 'Les mêmes cinq boîtes, mais une erreur ne fait descendre la carte que d’une seule '
+      + 'boîte. Elle revient le lendemain pour vérifier, puis reprend sa place si tu la réussis.',
+    pourQui: 'Quand tu connais déjà bien et qu’il s’agit d’un trou ponctuel : une étourderie ne '
+      + 'ruine pas des semaines de travail. Attention : une carte vraiment mal sue peut rester '
+      + 'trop haut et revenir trop rarement.',
+    origine: 'Une variante courante de la boîte de Leitner.',
   },
   sm2: {
     titre: 'SM-2 (comme Anki)',
     resume: 'Tu notes chaque réponse sur 4 niveaux. Chaque carte a sa propre facilité : '
       + 'les faciles s’espacent vite, les difficiles reviennent souvent.',
+    principe: 'Pas de boîtes fixes. Après chaque carte, tu dis si c’était à revoir, difficile, bien '
+      + 'ou facile. Chaque carte a une « facilité » (2,5 au départ) : le délai suivant vaut le délai '
+      + 'précédent multiplié par cette facilité. « Facile » la fait grimper, « Difficile » et « À revoir » '
+      + 'la font baisser, sans jamais descendre sous 1,3. Sous chaque bouton, tu vois quand la carte reviendra.',
+    pourQui: 'Pour réviser beaucoup de cartes en y passant le moins de temps : les cartes faciles '
+      + 's’éloignent très vite, et ton temps va aux cartes qui résistent. Il faut être honnête dans ses notes.',
+    origine: 'Conçu par Piotr Woźniak en 1987 pour le logiciel SuperMemo ; c’est la base d’Anki.',
   },
 };
 
@@ -217,6 +236,29 @@ function appliquerReglages(etat, reussi, jour, paquet, note = null) {
     };
   }
   return Leitner.appliquer(etat, reussi, jour, reglage.intervalles, evaluation);
+}
+
+/**
+ * Exemple chiffré d'un algorithme : la même suite de réponses (trois
+ * réussites, une erreur, une réussite) pour une carte neuve, avec le rythme
+ * du paquet. Renvoie [{ reponse, jours, boite }].
+ */
+function exempleAlgorithme(algorithme, paquet) {
+  const reglage = ReglagesPaquet.de(paquet);
+  const suite = algorithme === 'sm2'
+    ? [['bien', true], ['bien', true], ['bien', true], ['revoir', false], ['bien', true]]
+    : [[null, true], [null, true], [null, true], [null, false], [null, true]];
+  let etat = nouvelleCarte('exemple');
+  let jour = Dates.aujourdhui();
+  return suite.map(([note, reussi]) => {
+    if (algorithme === 'sm2') etat = appliquerSM2(etat, note, jour, null);
+    else if (algorithme === 'progressif' && !reussi) {
+      etat = { ...etat, compartiment: Math.max(1, etat.compartiment - 1), echeance: Dates.ajouter(jour, 1) };
+    } else etat = Leitner.appliquer(etat, reussi, jour, reglage.intervalles, null);
+    const jours = Dates.ecart(jour, etat.echeance);
+    jour = etat.echeance;
+    return { reponse: note ? NOTES_SM2[note].libelle : (reussi ? 'Réussie' : 'Ratée'), jours, boite: etat.compartiment };
+  });
 }
 
 /** Délai, en jours, qu'une note donnerait à cette carte : affiché sous les boutons de SM-2. */
