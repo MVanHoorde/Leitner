@@ -78,6 +78,7 @@ const ReglagesPaquet = {
     const dateEvaluation = typeof r.dateEvaluation === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.dateEvaluation)
       ? r.dateEvaluation : null;
     return {
+      algorithme: ALGORITHMES[r.algorithme] ? r.algorithme : 'leitner',
       rythme,
       intervalles,
       nouvellesParJour: Number.isInteger(r.nouvellesParJour) ? r.nouvellesParJour : Profil.donnees.nouvellesParJour,
@@ -113,23 +114,132 @@ const ReglagesPaquet = {
   },
 };
 
-/** Note une réponse selon le rythme et l'évaluation propres au paquet. */
-function appliquerReglages(etat, reussi, jour, paquet) {
+/* ---------- Trois algorithmes de répétition espacée ---------- */
+
+const ALGORITHMES = {
+  leitner: {
+    titre: 'Leitner classique',
+    resume: 'Réussie : la carte monte d’une boîte. Ratée : retour en boîte 1.',
+  },
+  progressif: {
+    titre: 'Leitner progressif',
+    resume: 'Ratée, la carte ne redescend que d’une boîte et revient le lendemain. Moins punitif.',
+  },
+  sm2: {
+    titre: 'SM-2 (comme Anki)',
+    resume: 'Tu notes chaque réponse sur 4 niveaux. Chaque carte a sa propre facilité : '
+      + 'les faciles s’espacent vite, les difficiles reviennent souvent.',
+  },
+};
+
+/** Notes de SM-2 : la qualité de la réponse, de 0 à 5 dans l'article d'origine. */
+const NOTES_SM2 = {
+  revoir: { libelle: 'À revoir', qualite: 1 },
+  difficile: { libelle: 'Difficile', qualite: 3 },
+  bien: { libelle: 'Bien', qualite: 4 },
+  facile: { libelle: 'Facile', qualite: 5 },
+};
+
+/** Avant une évaluation, aucune échéance au-delà de la veille. */
+function plafonnerEcheance(echeance, jour, dateEvaluation) {
+  if (!dateEvaluation || jour >= dateEvaluation) return echeance;
+  const veille = Dates.ajouter(dateEvaluation, -1);
+  const auPlusTard = veille > jour ? veille : Dates.ajouter(jour, 1);
+  return echeance > auPlusTard ? auPlusTard : echeance;
+}
+
+/** SM-2 n'a pas de boîtes : on en déduit une du délai, pour les barres et les statistiques. */
+function boiteDepuisDelai(jours) {
+  if (jours <= 1) return 1;
+  if (jours <= 3) return 2;
+  if (jours <= 8) return 3;
+  if (jours <= 21) return 4;
+  return 5;
+}
+
+/**
+ * SM-2 (Wozniak, 1987), avec des premiers délais adaptés au lycée : 1 jour,
+ * puis 3 (ou 6 si « Facile »), puis délai × facilité. La facilité de la carte
+ * baisse quand elle résiste et monte quand elle est facile, sans passer sous
+ * 1,3. « Difficile » réussit, mais allonge moins le délai.
+ */
+function appliquerSM2(etat, note, jour, dateEvaluation) {
+  const q = (NOTES_SM2[note] || NOTES_SM2.bien).qualite;
+  const reussi = q >= 3;
+  let ef = typeof etat.ef === 'number' ? etat.ef : 2.5;
+  let repetitions = etat.repetitions || 0;
+  let intervalle = etat.intervalle || 0;
+  if (!reussi) {
+    repetitions = 0;
+    intervalle = 1;
+  } else {
+    repetitions += 1;
+    if (repetitions === 1) intervalle = q === 5 ? 3 : 1;
+    else if (repetitions === 2) intervalle = q === 5 ? 6 : 3;
+    else intervalle = Math.max(intervalle + 1, Math.round(intervalle * ef * (q === 3 ? 0.8 : q === 5 ? 1.3 : 1)));
+  }
+  ef = Math.max(1.3, ef + 0.1 - (5 - q) * (0.08 + (5 - q) * 0.02));
+  return {
+    ...etat,
+    compartiment: reussi ? boiteDepuisDelai(intervalle) : 1,
+    introduite: etat.introduite ?? jour,
+    echeance: plafonnerEcheance(Dates.ajouter(jour, intervalle), jour, dateEvaluation),
+    passages: etat.passages + 1,
+    reussites: etat.reussites + (reussi ? 1 : 0),
+    dernierPassage: jour,
+    dernierEchec: reussi ? etat.dernierEchec : jour,
+    ef: Math.round(ef * 100) / 100,
+    intervalle,
+    repetitions,
+  };
+}
+
+/**
+ * Note une réponse selon l'algorithme, le rythme et l'évaluation propres au
+ * paquet. note : 'revoir' | 'difficile' | 'bien' | 'facile', pour SM-2 ; les
+ * QCM et réponses écrites, corrigés automatiquement, valent « bien » ou
+ * « à revoir ».
+ */
+function appliquerReglages(etat, reussi, jour, paquet, note = null) {
   const reglage = ReglagesPaquet.de(paquet);
-  return Leitner.appliquer(etat, reussi, jour, reglage.intervalles, ReglagesPaquet.evaluation(paquet, jour));
+  const evaluation = ReglagesPaquet.evaluation(paquet, jour);
+  if (reglage.algorithme === 'sm2') return appliquerSM2(etat, note || (reussi ? 'bien' : 'revoir'), jour, evaluation);
+  if (reglage.algorithme === 'progressif' && !reussi) {
+    return {
+      ...etat,
+      compartiment: Math.max(1, etat.compartiment - 1),
+      introduite: etat.introduite ?? jour,
+      echeance: plafonnerEcheance(Dates.ajouter(jour, 1), jour, evaluation),
+      passages: etat.passages + 1,
+      reussites: etat.reussites,
+      dernierPassage: jour,
+      dernierEchec: jour,
+    };
+  }
+  return Leitner.appliquer(etat, reussi, jour, reglage.intervalles, evaluation);
+}
+
+/** Délai, en jours, qu'une note donnerait à cette carte : affiché sous les boutons de SM-2. */
+function delaiPrevu(etat, note, jour, paquet) {
+  return Dates.ecart(jour, appliquerReglages(etat, note !== 'revoir', jour, paquet, note).echeance);
 }
 
 /**
  * Passages prévus d'une carte découverte aujourd'hui et toujours réussie,
  * jusqu'à l'évaluation (ou sur deux mois sans évaluation).
  */
-function calendrierCarte(intervalles, jour, dateEvaluation) {
+function calendrierCarte(paquet, jour, dateEvaluation) {
   const fin = dateEvaluation || Dates.ajouter(jour, 60);
   const passages = [jour];
   let etat = { ...nouvelleCarte('simulation') };
   let date = jour;
+  // Toujours réussie, notée « Bien » en SM-2. La date d'évaluation passée en
+  // paramètre l'emporte sur celle enregistrée : la frise suit la saisie.
+  const reglage = ReglagesPaquet.de(paquet);
   for (let i = 0; i < 40; i += 1) {
-    etat = Leitner.appliquer(etat, true, date, intervalles, dateEvaluation);
+    etat = reglage.algorithme === 'sm2'
+      ? appliquerSM2(etat, 'bien', date, dateEvaluation)
+      : Leitner.appliquer(etat, true, date, reglage.intervalles, dateEvaluation);
     if (etat.echeance >= fin) break;
     date = etat.echeance;
     passages.push(date);

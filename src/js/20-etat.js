@@ -50,6 +50,10 @@ function nettoyerCarte(source) {
     reussites: entier(source.reussites, 0, 1e6, 0),
     dernierPassage: date(source.dernierPassage),
     dernierEchec: date(source.dernierEchec),
+    // SM-2 (36-bibliotheque.js) : facilité, délai courant, réussites d'affilée.
+    ...(typeof source.ef === 'number' ? { ef: Math.min(3.5, Math.max(1.3, source.ef)) } : {}),
+    ...(Number.isInteger(source.intervalle) ? { intervalle: entier(source.intervalle, 0, 3650, 0) } : {}),
+    ...(Number.isInteger(source.repetitions) ? { repetitions: entier(source.repetitions, 0, 1e6, 0) } : {}),
   };
 }
 

@@ -886,3 +886,14 @@ textarea:focus, input[type=search]:focus { border-color: var(--cyan); outline: n
 .symbole-onglet[aria-pressed="true"] { background: var(--marine); border-color: var(--marine); color: #fff; }
 .symboles-onglets .symbole { font-weight: 700; background: var(--cyan-pale); border-color: var(--cyan); }
 .symboles-repliables > summary { font-size: 15px; }
+
+/* SM-2 : quatre notes */
+.notes-sm2 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.notes-sm2 .bouton { flex-direction: column; gap: 2px; min-height: 64px; padding: 8px 4px; color: #fff; }
+.notes-sm2 .note-libelle { font-size: 17px; }
+.notes-sm2 .note-delai { font-size: 13px; font-weight: 500; opacity: .9; }
+.notes-sm2 .note-revoir { background: var(--rouge); border-color: var(--rouge); }
+.notes-sm2 .note-difficile { background: var(--orange); border-color: var(--orange); }
+.notes-sm2 .note-bien { background: var(--marine); border-color: var(--marine); }
+.notes-sm2 .note-facile { background: #2E9E6A; border-color: #2E9E6A; }
+@media (max-width: 420px) { .notes-sm2 .note-libelle { font-size: 15px; } }

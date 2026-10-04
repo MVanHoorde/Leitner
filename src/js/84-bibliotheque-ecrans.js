@@ -104,7 +104,9 @@ Ecrans.paquets = {
 function resumeReglage(paquet) {
   const r = ReglagesPaquet.de(paquet);
   const nom = r.rythme === 'perso' ? 'Sur mesure' : r.rythme === 'paquet' ? 'Rythme du paquet' : RYTHMES[r.rythme].titre;
-  return `${nom} (${r.intervalles.join('-')} j) · ${pluriel(ReglagesPaquet.nouvellesParJour(paquet), 'nouvelle')} par jour`
+  const algo = r.algorithme === 'sm2' ? ALGORITHMES.sm2.titre
+    : `${ALGORITHMES[r.algorithme].titre}, ${nom.toLowerCase()} (${r.intervalles.join('-')} j)`;
+  return `${algo} · ${pluriel(ReglagesPaquet.nouvellesParJour(paquet), 'nouvelle')} par jour`
     + (r.dateEvaluation ? ` · évaluation le ${Dates.formater(r.dateEvaluation)}` : '');
 }
 
@@ -466,7 +468,9 @@ Ecrans['reglages-paquet'] = {
         ...reglage.intervalles.map((n, i) => el('div', { class: `boite c${i + 1}` },
           el('span', { class: 'boite-nom', text: `Boîte ${i + 1}` }),
           el('strong', { text: repartition.compte[i] }),
-          el('span', { text: i === 4 ? `acquises · revues ${decrireDelai(n)}` : `revues ${decrireDelai(n)}` }))));
+          el('span', { text: reglage.algorithme === 'sm2'
+            ? ['demain', '2 à 3 jours', '4 à 8 jours', '9 à 21 jours', 'acquises · au-delà'][i]
+            : i === 4 ? `acquises · revues ${decrireDelai(n)}` : `revues ${decrireDelai(n)}` }))));
 
       /* Nouvelles cartes par jour */
       const nouvelles = el('input', { type: 'number', inputmode: 'numeric', min: 1, max: 100,
@@ -491,7 +495,7 @@ Ecrans['reglages-paquet'] = {
         const restants = Dates.ecart(jour, evaluation);
         const parJour = ReglagesPaquet.nouvellesParJour(paquet, jour);
         const finDecouverte = repartition.jamaisVues ? Dates.ajouter(jour, Math.ceil(repartition.jamaisVues / parJour) - 1) : null;
-        const { passages, fin } = calendrierCarte(reglage.intervalles, jour, evaluation);
+        const { passages, fin } = calendrierCarte(paquet, jour, evaluation);
         analyse.append(
           el('p', {}, el('strong', { text: `Évaluation dans ${pluriel(restants, 'jour')}.` }),
             ` Jusqu’à la veille, aucune carte ne sera repoussée au-delà : la veille, tout ce qui n’est pas sûr revient.`),
@@ -504,19 +508,44 @@ Ecrans['reglages-paquet'] = {
             + 'complète par de l’entraînement libre chaque jour.' }));
         }
       } else {
-        const { passages, fin } = calendrierCarte(reglage.intervalles, jour, null);
+        const { passages, fin } = calendrierCarte(paquet, jour, null);
         analyse.append(
           el('p', { class: 'discret', text: 'Sans évaluation prévue, voici les passages d’une carte toujours réussie sur deux mois :' }),
           frise(passages, jour, fin));
       }
 
+      /* Algorithme */
+      const algos = el('div', { class: 'grille-rythmes' }, ...Object.entries(ALGORITHMES).map(([valeur, a]) => el('button', {
+        type: 'button',
+        class: 'tuile-rythme',
+        'aria-pressed': String(valeur === reglage.algorithme),
+        onclick: async () => {
+          await ReglagesPaquet.enregistrer(cle, { algorithme: valeur === 'leitner' ? null : valeur });
+          annoncer(`Algorithme « ${a.titre} » choisi. Les cartes déjà vues gardent leur échéance actuelle.`);
+          dessiner();
+        },
+      }, el('strong', { text: a.titre }), el('span', { class: 'discret', text: a.resume }))));
+      const sm2 = reglage.algorithme === 'sm2';
+      const principe = sm2
+        ? 'Après chaque carte, tu dis si c’était à revoir, difficile, bien ou facile. Le délai suivant '
+          + 'dépend de ta note et de la facilité propre à la carte. Les boîtes ci-dessous rangent les cartes '
+          + 'selon leur délai actuel (boîte 1 : demain, boîte 5 : plus de trois semaines).'
+        : reglage.algorithme === 'progressif'
+          ? 'Une carte réussie monte d’une boîte et revient plus tard. Ratée, elle ne redescend que d’une '
+            + 'boîte et revient dès le lendemain.'
+          : 'Une carte réussie monte d’une boîte et revient plus tard. Ratée, elle redescend dans la '
+            + 'boîte 1 et revient dès le lendemain.';
+
       pile.replaceChildren(
         el('section', { class: 'panneau pile' },
-          el('h2', { text: 'Le principe' }),
-          el('p', { class: 'discret', text: 'Une carte réussie monte d’une boîte et revient plus tard. Ratée, '
-            + 'elle redescend dans la boîte 1 et revient dès le lendemain.' }),
-          boites),
+          el('h2', { text: 'Algorithme' }),
+          algos,
+          el('p', { class: 'discret', text: 'Tu peux changer quand tu veux : compare les trois et garde celui qui te réussit.' })),
         el('section', { class: 'panneau pile' },
+          el('h2', { text: 'Le principe' }),
+          el('p', { class: 'discret', text: principe }),
+          boites),
+        sm2 ? null : el('section', { class: 'panneau pile' },
           el('h2', { text: 'Rythme' }),
           tuiles,
           surMesure),

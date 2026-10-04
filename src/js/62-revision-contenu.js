@@ -111,7 +111,7 @@ function rendreCarteContenu(zone, element) {
 
   if (element.format === 'qcm') formatQcm(carte, enonce, element, panneau);
   else if (element.format === 'saisie') formatSaisie(carte, enonce, element, panneau);
-  else formatRetournement(carte, enonce, panneau);
+  else formatRetournement(carte, enonce, panneau, element);
 }
 
 /** Compteur discret, pour les paquets où la vitesse fait partie de l'exercice. */
@@ -166,19 +166,47 @@ function figureMasque(masque, revele) {
   return cadre;
 }
 
-async function repondreContenu(reussi) {
+async function repondreContenu(reussi, note = null) {
   toucheEcran = null;
-  await SessionContenu.repondre(reussi);
+  await SessionContenu.repondre(reussi, note);
   afficher();
 }
 
+/** SM-2 : quatre notes, chacune avec le délai qu'elle donnerait à la carte. */
+function boutonsNotesSM2(element) {
+  const s = SessionContenu.active;
+  const etat = Progression.obtenir(element.id);
+  const delai = (note) => {
+    if (!element.compte) return '';
+    const jours = delaiPrevu(etat, note, s.jour, s.paquet);
+    return jours <= 1 ? 'demain' : `dans ${jours} j`;
+  };
+  const rangee = el('div', { class: 'notes-sm2' });
+  const noter = (note) => {
+    for (const b of rangee.querySelectorAll('button')) b.disabled = true;
+    repondreContenu(note !== 'revoir', note);
+  };
+  Object.entries(NOTES_SM2).forEach(([note, { libelle }], i) => {
+    rangee.append(el('button', { type: 'button', class: `bouton note-${note}`, onclick: () => noter(note) },
+      el('span', { class: 'note-libelle', text: libelle }),
+      el('span', { class: 'note-delai', text: delai(note) || `touche ${i + 1}` })));
+  });
+  toucheEcran = (e) => {
+    const rang = Number(e.key);
+    if (rang >= 1 && rang <= 4) noter(Object.keys(NOTES_SM2)[rang - 1]);
+  };
+  return rangee;
+}
+
 /* Format 1 : on se représente la réponse, on retourne, on s'auto-évalue. */
-function formatRetournement(carte, enonce, panneau) {
+function formatRetournement(carte, enonce, panneau, element) {
   const retourner = () => {
     // Photo à trous : la zone se dévoile sur place, sans dupliquer la photo.
     const cadre = carte.masque && document.querySelector('.scene .masque-cadre');
     if (cadre) cadre.replaceWith(figureMasque(carte.masque, true));
-    panneau.replaceChildren(blocReponse(carte, enonce), boutonsAutoEvaluation(repondreContenu));
+    const sm2 = ReglagesPaquet.de(SessionContenu.active.paquet).algorithme === 'sm2';
+    panneau.replaceChildren(blocReponse(carte, enonce),
+      sm2 ? boutonsNotesSM2(element) : boutonsAutoEvaluation((reussi) => repondreContenu(reussi)));
   };
   panneau.append(el('button', {
     type: 'button', class: 'bouton principal bloc grand', onclick: retourner,

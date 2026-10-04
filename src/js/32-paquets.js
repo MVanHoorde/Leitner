@@ -305,7 +305,7 @@ const SessionContenu = {
     return bilan.cartes.length;
   },
 
-  async repondre(reussi) {
+  async repondre(reussi, note = null) {
     const s = this.active;
     const element = this.elementCourant();
     if (!element) return;
@@ -324,7 +324,7 @@ const SessionContenu = {
         const nouvelle = etat.introduite === null;
         // Conservé pour permettre de rejouer la notation si l'élève conteste.
         element.etatAvant = etat;
-        await Progression.enregistrer(appliquerReglages(etat, reussi, s.jour, s.paquet));
+        await Progression.enregistrer(appliquerReglages(etat, reussi, s.jour, s.paquet, note));
         if (nouvelle) await SuiviContenu.noterNouvelles(s.paquet.cle, s.jour);
       }
     }

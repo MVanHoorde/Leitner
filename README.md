@@ -32,8 +32,9 @@ lit, sans pouvoir écrire, ce que font les élèves de ses classes.
 - `src/js/26-photos.js` — photos réduites à 1600 px et compressées en JPEG
   (≈ 150 à 300 Ko) avant envoi, gardées en cache sur l'appareil. 150 photos par
   compte, jauge dans « Mon compte ».
-- `src/js/36-bibliotheque.js` — rythmes (intensif, standard, long terme, sur
-  mesure), date d'évaluation, bibliothèque personnelle, conversion des paquets
+- `src/js/36-bibliotheque.js` — trois algorithmes au choix par paquet
+  (Leitner classique, Leitner progressif, SM-2 à quatre notes), rythmes
+  (intensif, standard, long terme, sur mesure), date d'évaluation, bibliothèque personnelle, conversion des paquets
   en ligne au format des paquets intégrés.
 
 Cinq modèles de cartes : question → réponse, dans les deux sens (deux cartes),
