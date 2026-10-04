@@ -128,7 +128,9 @@ function formulaireConnexion() {
         : 'Ton compte servira aussi sur le site du cours. N’utilise pas ton vrai nom : un surnom suffit.' }),
       champ('Identifiant', identifiant, mode === 'creation' ? 'Minuscules, chiffres et tirets, de 3 à 32 caractères.' : null),
       champ('Mot de passe', mdp.bloc, mode === 'creation' ? REGLE_MOT_DE_PASSE : null),
-      mode === 'creation' && champ('Code de classe', code, 'Ton professeur te le donne.'),
+      mode === 'creation'
+        ? champ('Code de classe', code, 'Ton professeur te le donne.')
+        : champ('Code du groupe (facultatif)', code, 'Seulement si ton professeur t’a donné un nouveau code, par exemple pour l’AP.'),
       erreur,
       valider);
 
@@ -141,8 +143,18 @@ function formulaireConnexion() {
         const compte = mode === 'connexion'
           ? await Nuage.seConnecter(identifiant.value, mdp.entree.value)
           : await Nuage.creerCompte(identifiant.value, mdp.entree.value, code.value);
+        // Connexion réussie : un code de groupe refusé ne doit pas l'annuler.
+        let avertissement = null;
+        if (mode === 'connexion' && code.value.trim() && !compte.prof) {
+          try {
+            const groupe = await Nuage.rejoindreGroupe(code.value);
+            avertissement = groupe ? `Groupe ajouté : ${groupe}` : null;
+          } catch (e) {
+            avertissement = `Connecté, mais le code n’a pas marché : ${messageNuage(e)}`;
+          }
+        }
         await ouvrirCompte(compte);
-        annoncer(compte.prof ? `Connecté : ${compte.libelle || compte.identifiant}` : `Bienvenue ${compte.pseudo} !`);
+        annoncer(avertissement || (compte.prof ? `Connecté : ${compte.libelle || compte.identifiant}` : `Bienvenue ${compte.pseudo} !`));
         location.hash = '';
         afficher();
       } catch (e) {
@@ -203,6 +215,31 @@ function jaugePhotos() {
   return zone;
 }
 
+/** Ajouter un groupe (AP…) à un compte déjà inscrit. */
+function formulaireGroupe() {
+  const code = el('input', { type: 'text', autocomplete: 'off', autocapitalize: 'characters', placeholder: 'code du groupe' });
+  const message = el('p', { class: 'discret', role: 'status' });
+  const bouton = el('button', { type: 'submit', class: 'bouton' }, 'Rejoindre');
+  const formulaire = el('form', { class: 'pile serree' },
+    el('span', { class: 'champ-libelle', text: 'Rejoindre un groupe' }),
+    el('div', { class: 'rangee saisie' }, code, bouton),
+    message);
+  formulaire.addEventListener('submit', async (evenement) => {
+    evenement.preventDefault();
+    if (!code.value.trim()) return;
+    bouton.disabled = true;
+    try {
+      const groupe = await Nuage.rejoindreGroupe(code.value);
+      message.textContent = `Groupe ajouté${groupe ? ` : ${groupe}` : ''}.`;
+      code.value = '';
+    } catch (e) {
+      message.textContent = messageNuage(e);
+    }
+    bouton.disabled = false;
+  });
+  return formulaire;
+}
+
 /** Panneau « Mon compte » de l'écran de profil. */
 function panneauCompte() {
   const compte = Nuage.compte();
@@ -226,6 +263,7 @@ function panneauCompte() {
       compte.classe ? ` · ${compte.classe}` : '', compte.prof ? ' · compte enseignant' : ''),
     el('p', { class: 'discret', text: `${STATUTS_DEPOT[Depot.statut]}.` }),
     jaugePhotos(),
+    !compte.prof && formulaireGroupe(),
     el('div', { class: 'rangee' },
       el('button', {
         type: 'button',

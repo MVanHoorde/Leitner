@@ -31,6 +31,8 @@ const MESSAGES_NUAGE = {
   IDENTIFIANTS_INCORRECTS: 'Identifiant ou mot de passe incorrect.',
   CODE_CLASSE_INCONNU: 'Code de classe inconnu, ou inscriptions fermées. Demande-le à ton professeur.',
   PSEUDO_DEJA_PRIS: 'Cet identifiant est déjà utilisé dans cette classe.',
+  DEJA_UNE_CLASSE_SNT: 'Tu es déjà dans un groupe de SNT : ce code est celui d’un autre groupe de SNT.',
+  PAS_ENCORE_INSCRIT: 'Ce compte n’est inscrit dans aucune classe : crée-le avec un code de classe.',
   TROP_DE_TENTATIVES: 'Trop de tentatives. Patiente une minute avant de réessayer.',
   PAS_DE_SESSION: 'Tu n’es plus connecté. Reconnecte-toi.',
   HORS_LIGNE: 'Pas de connexion internet pour le moment.',
@@ -290,8 +292,22 @@ const Nuage = {
         const code = /CODE_CLASSE_INCONNU|PSEUDO_DEJA_PRIS/.exec(`${e.code} ${e.message}`);
         throw code ? erreurNuage(code[0]) : e;
       }
+    } else if (String(codeClasse || '').trim()) {
+      // Compte déjà inscrit ailleurs (SNT, autre classe) : on ajoute le groupe
+      // plutôt que d'ignorer le code en silence.
+      await this.rejoindreGroupe(codeClasse);
     }
     return this.identifier(identifiant);
+  },
+
+  /** Ajoute une classe ou un groupe d'AP au compte déjà inscrit (bdd/schema/018). */
+  async rejoindreGroupe(codeBrut) {
+    try {
+      return await this.rpc('rejoindre_autre_classe', { p_code: String(codeBrut || '').trim().toUpperCase() });
+    } catch (e) {
+      const code = /CODE_CLASSE_INCONNU|DEJA_UNE_CLASSE_SNT|PAS_ENCORE_INSCRIT/.exec(`${e.code} ${e.message}`);
+      throw code ? erreurNuage(code[0]) : e;
+    }
   },
 
   seDeconnecter() {
