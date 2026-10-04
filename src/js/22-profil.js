@@ -66,7 +66,7 @@ const Profil = {
   donnees: { ...PROFIL_DEFAUT },
 
   async charger() {
-    this.donnees = { ...PROFIL_DEFAUT, ...(await Base.lireMeta('profil')) };
+    this.donnees = { ...PROFIL_DEFAUT, ...(await Depot.lire('profil')) };
   },
 
   /** Un profil est utilisable dès qu'un niveau est choisi ; le pseudo est facultatif. */
@@ -77,12 +77,12 @@ const Profil = {
   async enregistrer(changements) {
     Object.assign(this.donnees, changements);
     if (!this.donnees.cree) this.donnees.cree = Dates.aujourdhui();
-    await Base.ecrireMeta('profil', { ...this.donnees });
+    await Depot.ecrire('profil', { ...this.donnees });
   },
 
   async effacer() {
     this.donnees = { ...PROFIL_DEFAUT };
-    await Base.ecrireMeta('profil', null);
+    await Depot.ecrire('profil', null);
   },
 
   get niveau() {

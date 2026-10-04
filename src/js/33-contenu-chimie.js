@@ -71,6 +71,7 @@ const MASSES_MOLAIRES = [
 
 Paquets.inscrire({
   cle: 'chimie-bases',
+  theme: 'Chimie',
   titre: 'Les bases : grandeurs, unités, formules',
   resume: 'Ce qu’il faut savoir sans réfléchir avant tout calcul de chimie.',
   niveaux: ['seconde', 'premiere', 'terminale'],
@@ -190,6 +191,7 @@ function carteConversion(cle, depart, arrivee, facteur, tirage) {
 
 Paquets.inscrire({
   cle: 'reflexes',
+  theme: 'Calcul',
   titre: 'Réflexes : préfixes et conversions',
   resume: 'Les automatismes de calcul, à refaire souvent et vite.',
   niveaux: ['seconde', 'premiere', 'terminale'],

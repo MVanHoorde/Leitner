@@ -5,9 +5,6 @@
  * et l'écrire ne sollicitent pas la même mémoire.
  */
 
-/** Section choisie pour chaque paquet, le temps de la visite. */
-const SectionsChoisies = new Map();
-
 function texteCarte(texte, classe) {
   return formuleChimique(String(texte ?? ''), classe);
 }
@@ -22,6 +19,12 @@ function etiquetteSection(paquet, cleSection) {
 function consigneDe(paquet, element) {
   const carte = Paquets.index.get(element.id);
   const section = Paquets.section(paquet, carte.section);
+  if (carte.masque) return 'Que cache la zone orange ?';
+  if (paquet.origine !== 'integre') {
+    if (element.format === 'qcm') return 'Choisis la bonne réponse.';
+    if (element.format === 'saisie') return 'Écris la réponse.';
+    return 'Réponds de tête, puis retourne la carte.';
+  }
   if (!section) return 'Que répondez-vous ?';
   if (element.format === 'qcm' && section.consigneQcm) return section.consigneQcm;
   return section.consigne || 'Que répondez-vous ?';
@@ -39,132 +42,7 @@ function barreCompartiments(repartition) {
   return barre;
 }
 
-function tuilePaquet(paquet) {
-  const jour = Dates.aujourdhui();
-  const bilan = SessionContenu.bilan(paquet, null, jour);
-  const repartition = Progression.repartition(paquet.cartes);
-  const aFaire = bilan.dues.length + bilan.nouvellesDuJour;
-  const detail = aFaire
-    ? `${pluriel(bilan.dues.length, 'carte due', 'cartes dues')} · ${pluriel(bilan.nouvellesDuJour, 'nouvelle')} · ${estimerDuree(aFaire, Journal.secondesParCarte())}`
-    : `Rien à revoir aujourd’hui · ${repartition.acquises} / ${repartition.total} acquises`;
-
-  return el('div', { class: 'pile serree' },
-    boutonMenu(paquet.titre, detail, () => aller('paquet', paquet.cle), aFaire ? 'principal' : ''),
-    barreCompartiments(repartition));
-}
-
-Ecrans.paquets = {
-  titre: 'Paquets de révision',
-  titreCourt: 'Paquets',
-  parent: () => Porte.accueil(),
-  porte: 'tous',
-  rendre(zone) {
-    const pile = el('div', { class: 'pile' });
-    zone.append(pile);
-
-    pile.append(boutonMenu('Progression et statistiques',
-      Journal.total().vues
-        ? `${pluriel(Journal.serie(), 'jour')} d’affilée · ${pluriel(Journal.total().vues, 'carte vue', 'cartes vues')} en tout`
-        : 'Régularité, avancement, points faibles',
-      () => aller('statistiques')));
-
-    const niveau = Porte.courante === 'eleve' ? Profil.niveau : null;
-    const monNiveau = Paquets.pourNiveau(niveau);
-    const autres = Paquets.liste.filter((p) => !monNiveau.includes(p));
-
-    if (niveau) {
-      pile.append(el('h2', { text: `Pour la ${nomNiveau(niveau).toLowerCase()}` }));
-    }
-    pile.append(...monNiveau.map(tuilePaquet));
-
-    if (autres.length) {
-      pile.append(el('details', { class: 'panneau' },
-        el('summary', { text: `Autres paquets (${autres.length})` }),
-        el('div', { class: 'pile' },
-          el('p', { class: 'discret', text: 'Ces paquets visent un autre niveau. Rien n’empêche de les ouvrir.' }),
-          ...autres.map(tuilePaquet))));
-    }
-  },
-};
-
-/* ---------- Un paquet ---------- */
-
-Ecrans.paquet = {
-  titre: 'Paquet',
-  titreCourt: 'Paquet',
-  parent: 'paquets',
-  porte: 'tous',
-  rendre(zone, cle) {
-    const paquet = Paquets.get(cle);
-    if (!paquet) {
-      zone.append(el('p', { text: 'Paquet introuvable.' }));
-      return;
-    }
-    definirTitre(paquet.titre);
-
-    const pile = el('div', { class: 'pile' });
-    const infos = el('div', { class: 'pile' });
-    zone.append(pile);
-
-    const majInfos = () => {
-      const section = SectionsChoisies.get(cle) || null;
-      const cartes = Paquets.cartesDe(paquet, section);
-      const jour = Dates.aujourdhui();
-      const bilan = SessionContenu.bilan(paquet, section, jour);
-      const repartition = Progression.repartition(cartes);
-      const aFaire = bilan.dues.length + bilan.nouvellesDuJour;
-      const formats = Paquets.formatsCommuns(cartes);
-      if (!formats.includes(Profil.donnees.format)) {
-        Profil.enregistrer({ format: formats[0] });
-      }
-
-      infos.replaceChildren(
-        el('div', { class: 'chiffres' },
-          chiffre(bilan.dues.length, bilan.enRetard ? `dues, dont ${bilan.enRetard} en retard` : 'cartes dues'),
-          chiffre(bilan.nouvellesDuJour, bilan.nouvellesDuJour > 1 ? 'nouvelles' : 'nouvelle'),
-          chiffre(`${repartition.acquises} / ${repartition.total}`, 'acquises')),
-        barreCompartiments(repartition),
-        el('h2', { text: 'Format' }),
-        selecteur(formats.map((f) => [f, FORMATS[f]]), Profil.donnees.format, async (format) => {
-          await Profil.enregistrer({ format });
-        }, 'Format de révision'));
-
-      if (aFaire) {
-        infos.append(
-          el('p', { class: 'discret', text: `${estimerDuree(aFaire, Journal.secondesParCarte())} pour la séance du jour, `
-            + `par séries de ${Profil.donnees.tailleSession} cartes.` }),
-          el('button', {
-            type: 'button',
-            class: 'bouton principal bloc grand',
-            onclick: () => lancerContenu({ paquet, section, format: Profil.donnees.format, type: 'jour' }),
-          }, 'Commencer la séance du jour'));
-      } else {
-        infos.append(el('div', { class: 'panneau' },
-          el('p', { text: 'Rien à revoir aujourd’hui dans cette sélection. Les cartes reviendront '
-            + 'd’elles-mêmes à leur échéance.' })));
-      }
-      infos.append(
-        el('button', {
-          type: 'button',
-          class: `bouton bloc grand ${aFaire ? '' : 'principal'}`,
-          onclick: () => lancerContenu({ paquet, section, format: Profil.donnees.format, type: 'libre' }),
-        }, 'S’entraîner librement'),
-        el('p', { class: 'discret', text: 'En entraînement libre, seules les cartes réellement dues '
-          + 'font avancer les compartiments.' }));
-    };
-
-    const sections = [[null, 'Tout le paquet'], ...paquet.sections.map((s) => [s.cle, s.titre])];
-    pile.append(
-      el('p', { text: paquet.resume }),
-      el('h2', { text: 'Sélection' }),
-      selecteur(sections.map(([v, l]) => [v ?? '', l]), SectionsChoisies.get(cle) ?? '', (valeur) => {
-        SectionsChoisies.set(cle, valeur || null);
-        majInfos();
-      }, 'Partie du paquet à réviser'),
-      infos);
-    majInfos();
-  },
-};
+/* La bibliothèque et l'écran d'un paquet sont dans 84-bibliotheque-ecrans.js. */
 
 function lancerContenu(options) {
   const nombre = SessionContenu.demarrer(options);
@@ -225,9 +103,10 @@ function rendreCarteContenu(zone, element) {
     entete,
     el('div', { class: 'carte-revision' }, scene, panneau)));
 
-  scene.append(
-    el('p', { class: 'consigne', text: consigneDe(s.paquet, element) }),
-    texteCarte(enonce.question, 'enonce'));
+  scene.append(el('p', { class: 'consigne', text: consigneDe(s.paquet, element) }));
+  if (enonce.question) scene.append(texteCarte(enonce.question, String(enonce.question).length > 90 ? 'enonce long' : 'enonce'));
+  if (carte.masque) scene.append(figureMasque(carte.masque, false));
+  else if (carte.photoQuestion) scene.append(photoZoomable(carte.photoQuestion));
   if (s.paquet.chrono) scene.append(chronometre(element.debut));
 
   if (element.format === 'qcm') formatQcm(carte, enonce, element, panneau);
@@ -249,9 +128,42 @@ function chronometre(debut) {
 }
 
 function blocReponse(carte, enonce) {
-  return el('div', { class: 'pile serree' },
-    el('div', { class: 'reponse' }, texteCarte(enonce.reponse, 'reponse-texte')),
+  return el('div', { class: 'pile serree apparition' },
+    enonce.reponse && el('div', { class: 'reponse' }, texteCarte(enonce.reponse, 'reponse-texte')),
+    carte.photoReponse && photoZoomable(carte.photoReponse),
     carte.aide && el('p', { class: 'discret aide' }, texteCarte(carte.aide)));
+}
+
+/** Photo d'une carte ; un toucher l'agrandit en plein écran. */
+function photoZoomable(chemin) {
+  const image = Photos.image(chemin, 'photo-carte');
+  image.addEventListener('click', () => agrandirPhoto(image.src));
+  return image;
+}
+
+function agrandirPhoto(src) {
+  if (!src) return;
+  const fermer = () => voile.remove();
+  const voile = el('div', { class: 'voile-photo', role: 'dialog', 'aria-label': 'Photo agrandie', onclick: fermer },
+    el('img', { src, alt: 'Photo agrandie' }),
+    el('button', { type: 'button', class: 'bouton', onclick: fermer }, 'Fermer'));
+  document.body.append(voile);
+}
+
+/**
+ * Photo à trous. Toutes les zones restent cachées ; la zone interrogée est
+ * en orange, et révélée au retournement.
+ */
+function figureMasque(masque, revele) {
+  const cadre = el('div', { class: 'masque-cadre' }, Photos.image(masque.photo, 'masque-photo'));
+  masque.zones.forEach((zone, i) => {
+    const cible = i === masque.index;
+    cadre.append(el('span', {
+      class: `masque-zone ${cible ? (revele ? 'revelee' : 'cible') : 'autre'}`,
+      style: `left:${zone.x * 100}%;top:${zone.y * 100}%;width:${zone.l * 100}%;height:${zone.h * 100}%`,
+    }, cible && !revele ? '?' : ''));
+  });
+  return cadre;
 }
 
 async function repondreContenu(reussi) {
@@ -263,6 +175,9 @@ async function repondreContenu(reussi) {
 /* Format 1 : on se représente la réponse, on retourne, on s'auto-évalue. */
 function formatRetournement(carte, enonce, panneau) {
   const retourner = () => {
+    // Photo à trous : la zone se dévoile sur place, sans dupliquer la photo.
+    const cadre = carte.masque && document.querySelector('.scene .masque-cadre');
+    if (cadre) cadre.replaceWith(figureMasque(carte.masque, true));
     panneau.replaceChildren(blocReponse(carte, enonce), boutonsAutoEvaluation(repondreContenu));
   };
   panneau.append(el('button', {
@@ -402,7 +317,7 @@ async function corrigerDerniereReponse() {
   // On rejoue la notation depuis l'état d'avant la réponse, pas depuis l'état
   // déjà rétrogradé au compartiment 1.
   if (precedent.compte && precedent.etatAvant) {
-    await Progression.enregistrer(Leitner.appliquer(precedent.etatAvant, true, s.jour, s.paquet.intervalles));
+    await Progression.enregistrer(appliquerReglages(precedent.etatAvant, true, s.jour, s.paquet));
   }
   // La reprise ajoutée en fin de file n'a plus lieu d'être.
   const reprise = s.file.findIndex((e, i) => i >= s.position && e.id === precedent.id && e.reprise);

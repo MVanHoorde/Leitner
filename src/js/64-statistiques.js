@@ -6,7 +6,7 @@
 
 /** Paquets du niveau de l'élève, plus tous ceux qu'il a déjà entamés. */
 function paquetsSuivis() {
-  const attendus = Porte.courante === 'eleve' ? Paquets.pourNiveau(Profil.niveau) : Paquets.liste;
+  const attendus = Porte.courante === 'eleve' ? Bibliotheque.paquets() : Paquets.liste;
   const entames = Paquets.liste.filter((p) => p.cartes.some((c) => Progression.cartes.has(c.id)));
   return Paquets.liste.filter((p) => attendus.includes(p) || entames.includes(p));
 }

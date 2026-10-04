@@ -117,6 +117,7 @@ function carteRegle(cle, question, reponse, distracteurs, aide) {
 
 Paquets.inscrire({
   cle: 'nomenclature',
+  theme: 'Chimie organique',
   titre: 'Nomenclature des molécules organiques',
   resume: 'Lire une formule, écrire un nom, et l’inverse. Le socle du programme de terminale.',
   niveaux: ['terminale'],

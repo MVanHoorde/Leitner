@@ -14,7 +14,7 @@ const Journal = {
   jours: {},
 
   async charger() {
-    this.jours = (await Base.lireMeta('journal')) || {};
+    this.jours = (await Depot.lire('journal')) || {};
   },
 
   du(date) {
@@ -30,7 +30,7 @@ const Journal = {
     };
     const dates = Object.keys(this.jours).sort();
     for (const date of dates.slice(0, Math.max(0, dates.length - JOURS_CONSERVES))) delete this.jours[date];
-    await Base.ecrireMeta('journal', this.jours);
+    await Depot.ecrire('journal', { ...this.jours });
   },
 
   /** Jours consécutifs travaillés. La journée en cours ne casse la série

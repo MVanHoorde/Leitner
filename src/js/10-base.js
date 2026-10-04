@@ -5,7 +5,10 @@
  *   cartes       { id, donnees }  — état Leitner du trombinoscope, id = id de l'élève
  *   progression  { id, donnees }  — état Leitner des paquets de contenu
  *   meta         { cle, valeur }  — réglages, profil, suivi et paramètres de
- *                                   chiffrement
+ *                                   chiffrement ; copie locale du compte en
+ *                                   ligne (« nuage:<uid> », voir 14-depot.js)
+ *   photos       { id, donnees }  — photos des cartes déjà téléchargées,
+ *                                   id = chemin dans le stockage en ligne
  *
  * Chaque magasin a son codec, appliqué avant écriture et après lecture.
  * Les magasins personnels (élèves, photos, progression associée) sont chiffrés
@@ -31,7 +34,7 @@ function attendreTransaction(tx) {
 
 const Base = {
   NOM: 'reconnaitre-mes-eleves',
-  VERSION: 2,
+  VERSION: 3,
   cnx: null,
 
   CODEC_NEUTRE: {
@@ -59,6 +62,7 @@ const Base = {
         if (!db.objectStoreNames.contains('cartes')) db.createObjectStore('cartes', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('progression')) db.createObjectStore('progression', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'cle' });
+        if (!db.objectStoreNames.contains('photos')) db.createObjectStore('photos', { keyPath: 'id' });
       };
       requete.onsuccess = () => {
         this.cnx = requete.result;
@@ -108,6 +112,12 @@ const Base = {
     }
     for (const { cle, valeur } of metas) tx.objectStore('meta').put({ cle, valeur });
     await fin;
+  },
+
+  async lireUn(magasin, id) {
+    const tx = this.cnx.transaction(magasin, 'readonly');
+    const enregistrement = await attendreRequete(tx.objectStore(magasin).get(id));
+    return enregistrement ? this.codecDe(magasin).decoder(enregistrement.donnees) : undefined;
   },
 
   async lireMeta(cle) {

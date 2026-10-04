@@ -9,7 +9,7 @@ function bilanGlobalEleve() {
   const jour = Dates.aujourdhui();
   let dues = 0;
   let nouvelles = 0;
-  for (const paquet of Paquets.pourNiveau(Profil.niveau)) {
+  for (const paquet of Bibliotheque.paquets()) {
     const bilan = SessionContenu.bilan(paquet, null, jour);
     dues += bilan.dues.length;
     nouvelles += bilan.nouvellesDuJour;
@@ -41,9 +41,10 @@ function formulaireProfil(surValidation) {
   let niveau = Profil.niveau;
   const erreur = el('p', { class: 'erreur', role: 'alert' });
 
+  const connecte = Boolean(Nuage.compte());
   const formulaire = el('form', { class: 'panneau pile' },
-    el('h2', { text: Profil.defini() ? 'Mon profil' : 'Avant de commencer' }),
-    champ('Comment veux-tu être appelé ?', pseudo, 'Facultatif. Rien n’est envoyé nulle part.'),
+    el('h2', { text: Profil.defini() ? 'Ma classe' : 'Avant de commencer' }),
+    !connecte && champ('Comment veux-tu être appelé ?', pseudo, 'Facultatif. Rien n’est envoyé nulle part.'),
     el('div', { class: 'champ' },
       el('span', { class: 'champ-libelle', text: 'Ta classe' }),
       selecteurNiveau(niveau, (valeur) => { niveau = valeur; }),
@@ -58,7 +59,7 @@ function formulaireProfil(surValidation) {
       erreur.textContent = 'Choisis ta classe pour continuer.';
       return;
     }
-    await Profil.enregistrer({ pseudo: pseudo.value.trim().slice(0, 30), niveau });
+    await Profil.enregistrer({ pseudo: connecte ? Nuage.compte().pseudo : pseudo.value.trim().slice(0, 30), niveau });
     surValidation();
   });
   return formulaire;
@@ -72,10 +73,15 @@ Ecrans['accueil-eleve'] = {
   parent: null,
   porte: 'eleve',
   rendre(zone) {
+    if (!Depot.uid && !ModeLocal.actif) {
+      ecranConnexion(zone);
+      return;
+    }
     const pile = el('div', { class: 'pile' });
     zone.append(pile);
+    const compte = Nuage.compte();
 
-    if (!Profil.defini()) {
+    if (!Profil.defini() && !(compte && compte.prof)) {
       pile.append(
         el('p', { text: 'Ces cartes servent à retenir durablement : chaque notion revient juste '
           + 'avant que tu l’oublies, de plus en plus espacée.' }),
@@ -84,20 +90,36 @@ Ecrans['accueil-eleve'] = {
     }
 
     const { dues, nouvelles, total } = bilanGlobalEleve();
-    const pseudo = Profil.donnees.pseudo;
-    definirTitre(pseudo ? `Bonjour ${pseudo}` : NOM_APP);
+    const nom = compte ? (compte.prof ? (compte.libelle || compte.identifiant) : compte.pseudo) : Profil.donnees.pseudo;
+    definirTitre(nom ? `Bonjour ${nom}` : NOM_APP);
 
+    const paquets = Bibliotheque.paquets();
+    const miens = paquets.filter((p) => p.proprietaire).length;
     const detail = total
       ? `${pluriel(dues, 'carte due', 'cartes dues')} · ${pluriel(nouvelles, 'nouvelle')} · ${estimerDuree(total, Journal.secondesParCarte())}`
       : 'Tout est à jour pour aujourd’hui';
+    const evaluations = paquets
+      .map((p) => ({ p, date: ReglagesPaquet.evaluation(p) }))
+      .filter((e) => e.date)
+      .sort((a, b) => a.date.localeCompare(b.date));
 
     pile.append(
-      el('p', { class: 'discret', text: `${nomNiveau(Profil.niveau)} · ${pluriel(Paquets.pourNiveau(Profil.niveau).length, 'paquet')} à ton niveau` }),
+      el('p', { class: 'discret', text: [compte && compte.prof ? 'Compte enseignant' : ((compte && compte.classe) || nomNiveau(Profil.niveau)),
+        `${pluriel(paquets.length, 'paquet')} dans ta bibliothèque`].filter(Boolean).join(' · ') }),
+      evaluations.length ? el('div', { class: 'alerte pile serree' }, ...evaluations.slice(0, 3).map(({ p, date }) => {
+        const jours = Dates.ecart(Dates.aujourdhui(), date);
+        return el('p', {}, el('strong', { text: jours === 1 ? 'Demain' : `Dans ${jours} jours` }), ` : évaluation sur « ${p.titre} ».`);
+      })) : null,
       boutonMenu('Réviser', detail, () => aller('paquets'), total ? 'principal' : ''),
+      Depot.uid ? boutonMenu('Créer un paquet de cartes', miens
+        ? `${pluriel(miens, 'paquet créé', 'paquets créés')} · question/réponse, QCM, photo à trous…`
+        : 'Question/réponse, QCM, photo de ta fiche à trous…', () => aller('editer-paquet', 'nouveau'), 'accent') : null,
+      boutonMenu('Bibliothèque du prof', 'Les paquets prêts à l’emploi, à ajouter chez toi', () => aller('catalogue')),
       boutonMenu('Ma progression', serieDuJour(), () => aller('statistiques')),
-      boutonMenu('Mon profil', 'Classe, rythme de travail, remise à zéro', () => aller('profil-eleve')));
+      boutonMenu(compte ? 'Mon compte et mes réglages' : 'Mon profil', compte ? STATUTS_DEPOT[Depot.statut] : 'Classe, rythme de travail, compte',
+        () => aller('profil-eleve')));
 
-    if (!total) {
+    if (!total && paquets.length) {
       pile.append(el('div', { class: 'panneau' },
         el('p', { text: 'Rien n’est dû aujourd’hui. Tu peux quand même t’entraîner librement '
           + 'depuis un paquet : cela ne dérègle pas le calendrier.' })));
@@ -131,6 +153,7 @@ Ecrans['profil-eleve'] = {
     zone.append(pile);
 
     pile.append(
+      panneauCompte(),
       formulaireProfil(() => {
         annoncer('Profil enregistré.');
         afficher();
@@ -139,7 +162,7 @@ Ecrans['profil-eleve'] = {
       el('section', { class: 'panneau pile' },
         el('h2', { text: 'Rythme de travail' }),
         champReglageProfil('Nouvelles cartes par jour et par paquet', 'nouvellesParJour', 1, 60,
-          'Au-delà de 15, les révisions des jours suivants s’alourdissent vite.'),
+          'Valeur par défaut ; chaque paquet peut avoir la sienne dans ses réglages de révision.'),
         champReglageProfil('Cartes par série', 'tailleSession', 5, 100,
           'Un bouton « continuer » permet d’enchaîner une nouvelle série.')),
 
@@ -147,7 +170,7 @@ Ecrans['profil-eleve'] = {
         el('h2', { text: 'Recommencer un paquet' }),
         el('p', { class: 'discret', text: 'Efface la progression d’un paquet : toutes ses cartes '
           + 'redeviennent nouvelles. Les autres paquets ne bougent pas.' }),
-        ...Paquets.liste.map((paquet) => {
+        ...Bibliotheque.paquets().map((paquet) => {
           const repartition = Progression.repartition(paquet.cartes);
           const entamees = repartition.total - repartition.jamaisVues;
           if (!entamees) return el('p', { class: 'discret', text: `${paquet.titre} : jamais commencé.` });
@@ -168,7 +191,8 @@ Ecrans['profil-eleve'] = {
       el('section', { class: 'panneau pile' },
         el('h2', { text: 'Effacement' }),
         el('p', { text: 'Supprime toute la base locale de cet appareil : profil, progression, '
-          + 'et, si l’application sert aussi à un enseignant, son trombinoscope.' }),
+          + 'et, si l’application sert aussi à un enseignant, son trombinoscope. Ce qui est '
+          + 'sauvegardé dans ton compte en ligne n’est pas touché.' }),
         effacementComplet()),
 
       boutonChangerPorte());

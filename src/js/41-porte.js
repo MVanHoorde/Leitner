@@ -24,26 +24,23 @@ function afficherChoixPorte() {
     afficher();
   };
 
-  const paquets = Paquets.liste.length;
-  const cartes = Paquets.liste.reduce((somme, p) => somme + p.cartes.length, 0);
-
   zone.append(el('div', { class: 'pile portes' },
     el('p', { class: 'discret', text: 'Cette application sert à deux usages. Choisissez votre entrée ; '
       + 'elle sera retenue pour les prochaines ouvertures.' }),
 
-    boutonMenu('Espace enseignant',
-      'Trombinoscope, import de PDF, tableau de bord · protégé par mot de passe',
-      () => entrer('prof'), 'principal'),
+    boutonMenu('Mes flashcards',
+      'Élèves et enseignants · créer ses cartes, la bibliothèque du prof, la boîte de Leitner',
+      () => entrer('eleve'), 'principal'),
 
-    boutonMenu('Espace élève',
-      `${pluriel(paquets, 'paquet')} de révision · ${pluriel(cartes, 'carte')} · sans mot de passe`,
-      () => entrer('eleve')),
+    boutonMenu('Trombinoscope (enseignant)',
+      'Reconnaître ses élèves · import de PDF · protégé par mot de passe, reste sur cet appareil',
+      () => entrer('prof')),
 
     el('section', { class: 'panneau pile' },
       el('h2', { text: 'Pourquoi deux entrées ?' }),
-      el('p', { text: 'L’espace enseignant contient des photos d’élèves : elles sont chiffrées et '
-        + 'ne s’ouvrent qu’avec le mot de passe. L’espace élève ne contient que des cartes de cours '
-        + 'et la progression de celui qui révise, sans aucune donnée personnelle.' }),
+      el('p', { text: 'Le trombinoscope contient des photos d’élèves : elles sont chiffrées, '
+        + 'ne s’ouvrent qu’avec le mot de passe et ne quittent jamais cet appareil. Les flashcards '
+        + 'se sauvegardent dans le compte du site du cours, sous un simple identifiant.' }),
       el('p', { class: 'discret', text: 'Passer par l’espace élève ne donne donc aucun accès au '
         + 'trombinoscope, même sur la tablette de l’enseignant.' }))));
 }

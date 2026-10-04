@@ -65,9 +65,10 @@ async function afficher() {
   retour.hidden = !parent;
   if (parent) {
     retour.textContent = `‹ ${ecran.libelleRetour || Ecrans[parent].titreCourt}`;
-    retour.onclick = () => (ecran.surRetour ? ecran.surRetour() : aller(parent));
+    retour.onclick = () => (ecran.surRetour ? ecran.surRetour(param) : aller(parent));
   }
 
+  majPied();
   window.scrollTo(0, 0);
   try {
     await ecran.rendre(zone, param);

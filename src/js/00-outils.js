@@ -25,6 +25,15 @@ function el(balise, attributs, ...enfants) {
   return noeud;
 }
 
+/* append et replaceChildren ignorent null, undefined et false, comme el() :
+ * un écran peut ainsi écrire « condition && el(…) » sans afficher « null ». */
+for (const methode of ['append', 'replaceChildren']) {
+  const origine = Element.prototype[methode];
+  Element.prototype[methode] = function (...enfants) {
+    return origine.apply(this, enfants.filter((e) => e !== null && e !== undefined && e !== false));
+  };
+}
+
 function nouvelId() {
   if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
   const octets = crypto.getRandomValues(new Uint8Array(16));

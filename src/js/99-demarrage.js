@@ -5,9 +5,15 @@ async function demarrer() {
     await Etat.chargerMeta();
     Dates.decalage = Etat.reglages.decalageJours || 0;
 
+    // Compte en ligne : la copie locale s'affiche tout de suite, la
+    // synchronisation suit en arrière-plan.
+    const compte = Nuage.chargerSession();
+    if (compte) await Depot.ouvrir(compte.uid);
+    await ModeLocal.charger();
+
     // Profil, progression et quotas ne sont pas chiffrés : ils se chargent
     // avant tout choix de porte.
-    await Promise.all([Profil.charger(), Progression.charger(), SuiviContenu.charger(), Journal.charger()]);
+    await rechargerDonnees();
     const porte = await Base.lireMeta('porte');
     Porte.courante = porte === 'prof' || porte === 'eleve' ? porte : null;
 
@@ -17,6 +23,7 @@ async function demarrer() {
     }
 
     window.addEventListener('hashchange', afficher);
+    if (compte) synchroniserTout();
     if (Porte.courante === 'prof') {
       afficherVerrou((await Base.lireMeta('chiffrement')) ? 'deverrouiller' : 'creer');
     } else {

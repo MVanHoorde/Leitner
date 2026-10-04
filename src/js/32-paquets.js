@@ -20,6 +20,12 @@
  *   distracteurs  [] fausses réponses du QCM ; sinon, prises dans la section
  *   qcm: false    interdit le QCM pour cette carte
  *   generer()     carte générative : renvoie { question, reponse, nombre|saisie }
+ *
+ * Les cartes créées dans l'application (36-bibliotheque.js) ajoutent :
+ *   formats       [] formats permis, à la place de la déduction ci-dessous
+ *   photoQuestion, photoReponse   chemins de photos dans le stockage en ligne
+ *   masque        { photo, zones: [{x, y, l, h}], index } : photo à trous
+ *   source        identifiant de la ligne leitner_cartes d'origine
  */
 
 const FORMATS = {
@@ -39,7 +45,7 @@ const Paquets = {
 
   /** Enregistre un paquet et relie chaque carte à sa section. */
   inscrire(paquet) {
-    const complet = { intervalles: INTERVALLES_CONTENU, ...paquet, cartes: [] };
+    const complet = { intervalles: INTERVALLES_CONTENU, origine: 'integre', theme: 'Physique-chimie', ...paquet, cartes: [] };
     for (const section of complet.sections) {
       section.paquet = complet.cle;
       for (const carte of section.cartes) {
@@ -52,6 +58,14 @@ const Paquets = {
     }
     this.liste.push(complet);
     return complet;
+  },
+
+  /** Retire un paquet créé dans l'application, pour le réinscrire à jour. */
+  retirer(cle) {
+    const paquet = this.get(cle);
+    if (!paquet) return;
+    for (const carte of paquet.cartes) this.index.delete(carte.id);
+    this.liste = this.liste.filter((p) => p !== paquet);
   },
 
   get(cle) {
@@ -75,6 +89,7 @@ const Paquets = {
 
   /** Formats praticables pour une carte donnée. */
   formatsDe(carte) {
+    if (carte.formats) return [...carte.formats];
     const formats = ['retournement'];
     if (carte.qcm !== false && !carte.generer) formats.push('qcm');
     if (carte.generer || carte.nombre !== undefined || (carte.saisie && carte.saisie.length)) formats.push('saisie');
@@ -114,7 +129,7 @@ const Progression = {
   cartes: new Map(),
 
   async charger() {
-    const liste = await Base.lireTout('progression');
+    const liste = await Depot.lireEtats();
     this.cartes = new Map(liste.map((c) => [String(c.id), nettoyerCarte(c)]));
   },
 
@@ -128,15 +143,15 @@ const Progression = {
   },
 
   async enregistrer(carte) {
-    await Base.modifier({ ecritures: { progression: [carte] } });
     this.cartes.set(carte.id, carte);
+    await Depot.ecrireEtat(carte);
   },
 
   async remettreAZero(cartes) {
     const ids = cartes.map((c) => c.id).filter((id) => this.cartes.has(id));
     if (!ids.length) return 0;
-    await Base.modifier({ suppressions: { progression: ids } });
     for (const id of ids) this.cartes.delete(id);
+    await Depot.supprimerEtats(ids);
     return ids.length;
   },
 
@@ -163,7 +178,7 @@ const SuiviContenu = {
   donnees: {},
 
   async charger() {
-    this.donnees = (await Base.lireMeta('contenu')) || {};
+    this.donnees = (await Depot.lire('contenu')) || {};
   },
 
   pour(cle) {
@@ -174,13 +189,13 @@ const SuiviContenu = {
     const courant = this.pour(cle).nouvelles;
     const n = (courant && courant.date === jour ? courant.n : 0) + 1;
     this.donnees[cle] = { ...this.pour(cle), nouvelles: { date: jour, n } };
-    await Base.ecrireMeta('contenu', this.donnees);
+    await Depot.ecrire('contenu', { ...this.donnees });
   },
 
   quotaNouvelles(paquet, jour) {
     const courant = this.pour(paquet.cle).nouvelles;
     const deja = courant && courant.date === jour ? courant.n : 0;
-    return Math.max(0, Profil.donnees.nouvellesParJour - deja);
+    return Math.max(0, ReglagesPaquet.nouvellesParJour(paquet, jour) - deja);
   },
 };
 
@@ -292,7 +307,9 @@ const SessionContenu = {
     if (!element.reprise) {
       const carte = Paquets.index.get(element.id);
       const enonce = element.tirage || carte;
-      s.resultats.push({ id: element.id, reussi, question: enonce.question, reponse: enonce.reponse });
+      s.resultats.push({ id: element.id, reussi,
+        question: enonce.question || (carte.masque ? 'Photo à trous' : 'Carte photo'),
+        reponse: enonce.reponse || (carte.masque || carte.photoReponse ? 'voir la photo' : '') });
       const secondes = element.debut ? (Date.now() - element.debut) / 1000 : 0;
       s.secondes += Math.min(SECONDES_MAX_PAR_CARTE, secondes);
       await Journal.noter(s.jour, reussi, secondes);
@@ -301,7 +318,7 @@ const SessionContenu = {
         const nouvelle = etat.introduite === null;
         // Conservé pour permettre de rejouer la notation si l'élève conteste.
         element.etatAvant = etat;
-        await Progression.enregistrer(Leitner.appliquer(etat, reussi, s.jour, s.paquet.intervalles));
+        await Progression.enregistrer(appliquerReglages(etat, reussi, s.jour, s.paquet));
         if (nouvelle) await SuiviContenu.noterNouvelles(s.paquet.cle, s.jour);
       }
     }

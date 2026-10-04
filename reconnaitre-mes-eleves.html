@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' blob:; worker-src blob:; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' blob:; worker-src blob:; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src https://ztyvuiaohxekuyjeoaxz.supabase.co; form-action 'none'; base-uri 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="theme-color" content="#1B2A4A">
 <meta name="mobile-web-app-capable" content="yes">
@@ -593,6 +593,279 @@ body.plein .confidentialite { display: none; }
 .remplissage.bon { background: var(--cyan); }
 .remplissage.moyen { background: var(--orange); }
 .remplissage.faible { background: var(--rouge); }
+
+/* ---------- Flashcards : compte, bibliothèque, éditeur ---------- */
+
+textarea, input[type=search] {
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 12px;
+  font: inherit;
+  color: inherit;
+  background: #fff;
+  border: 2px solid var(--bord);
+  border-radius: 10px;
+  resize: vertical;
+}
+textarea:focus, input[type=search]:focus { border-color: var(--cyan); outline: none; }
+.marge-haut { margin-top: 28px; }
+.petit { font-size: 14px; }
+.confidentialite.alerte-pied { color: var(--rouge); font-weight: 600; }
+
+.accroche {
+  padding: 22px 20px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--marine), #2D4677 60%, var(--cyan));
+  border-radius: var(--rayon);
+}
+.accroche h2 { font-size: 24px; }
+.accroche p { opacity: .95; }
+
+.mot-de-passe .bouton { flex: none; min-width: 84px; }
+
+.badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.badge.accent { background: var(--cyan-pale); border-color: var(--cyan); }
+.badge.urgent { background: var(--orange); border-color: var(--orange); color: #fff; }
+
+.titre-theme { margin-top: 26px; padding-bottom: 4px; border-bottom: 2px solid var(--bord); }
+
+.tuile-paquet { position: relative; }
+.tuile-paquet .bouton.tuile {
+  gap: 4px;
+  border-left: 10px solid var(--couleur);
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.tuile-paquet .bouton.tuile:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(27, 42, 74, .12); }
+.tuile-paquet .bouton.tuile.a-faire { box-shadow: inset 0 0 0 2px var(--couleur); }
+.tuile-paquet .badges .badge { font-weight: 500; font-size: 13px; }
+.tuile-paquet .barre-compartiments { margin-top: 6px; }
+.vide { text-align: center; }
+
+.carte-catalogue { border-left: 8px solid var(--couleur); }
+
+/* Rythmes et boîtes */
+.grille-rythmes { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+.tuile-rythme {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 14px;
+  font: inherit;
+  color: var(--marine);
+  text-align: left;
+  background: #fff;
+  border: 2px solid var(--bord);
+  border-radius: var(--rayon);
+  cursor: pointer;
+}
+.tuile-rythme[aria-pressed="true"] { border-color: var(--marine); background: var(--cyan-pale); box-shadow: 0 0 0 2px var(--marine); }
+.pastilles { display: flex; flex-wrap: wrap; gap: 4px; }
+.pastille { padding: 1px 8px; font-size: 13px; font-weight: 600; background: #EEF2F8; border-radius: 999px; }
+.grille-delais { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.grille-delais input { text-align: center; padding: 8px 4px; }
+
+.boites { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.boite {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 4px;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.2;
+  border-radius: 10px;
+  border-top: 6px solid var(--bord);
+  background: #F1F4F9;
+}
+.boite strong { font-size: 24px; }
+.boite-nom { font-weight: 700; font-size: 13px; }
+.boite.c1 { border-top-color: var(--orange); }
+.boite.c2 { border-top-color: #F2B77E; }
+.boite.c3 { border-top-color: #9BD0F5; }
+.boite.c4 { border-top-color: var(--cyan); }
+.boite.c5 { border-top-color: var(--marine); background: var(--cyan-pale); }
+@media (max-width: 560px) {
+  .boites { grid-template-columns: repeat(3, 1fr); }
+  .grille-delais { grid-template-columns: repeat(3, 1fr); }
+}
+
+.frise { position: relative; height: 34px; margin: 6px 10px 0; }
+.frise-trait { position: absolute; left: 0; right: 0; top: 16px; height: 3px; background: var(--bord); border-radius: 2px; }
+.frise-point, .frise-fin {
+  position: absolute;
+  top: 9px;
+  width: 17px;
+  height: 17px;
+  margin-left: -8px;
+  border-radius: 50%;
+  background: var(--cyan);
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 1px var(--cyan);
+}
+.frise-point.premier { background: var(--orange); box-shadow: 0 0 0 1px var(--orange); }
+.frise-fin { border-radius: 4px; background: var(--marine); box-shadow: 0 0 0 1px var(--marine); }
+
+/* Fiche paquet */
+.nuancier { display: flex; flex-wrap: wrap; gap: 10px; }
+.pastille-couleur { width: 44px; height: 44px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 0 0 1px var(--bord); cursor: pointer; }
+.pastille-couleur[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--marine); }
+.case-a-cocher { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; }
+.case-a-cocher input { flex: none; width: 26px; height: 26px; margin: 2px 0 0; accent-color: var(--marine); }
+
+/* Liste des cartes */
+.liste-cartes { display: flex; flex-direction: column; gap: 8px; }
+.ligne-carte {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  font: inherit;
+  color: var(--marine);
+  text-align: left;
+  background: #fff;
+  border: 1px solid var(--bord);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.ligne-carte .textes { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ligne-carte .recto { font-weight: 600; overflow-wrap: anywhere; }
+.ligne-carte .verso { font-size: 15px; overflow-wrap: anywhere; }
+.ligne-carte .vignette { flex: none; width: 56px; height: 56px; object-fit: cover; border-radius: 8px; background: #E6ECF4; }
+.icone-modele {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+  height: 36px;
+  padding: 0 6px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: .02em;
+  color: #fff;
+  background: var(--marine);
+  border-radius: 8px;
+}
+
+/* Éditeur */
+.grille-modeles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.tuile-modele {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 12px;
+  font: inherit;
+  font-size: 16px;
+  color: var(--marine);
+  text-align: left;
+  background: #fff;
+  border: 2px solid var(--bord);
+  border-radius: var(--rayon);
+  cursor: pointer;
+}
+.tuile-modele .discret { font-size: 13px; line-height: 1.3; }
+.tuile-modele[aria-pressed="true"] { border-color: var(--orange); box-shadow: 0 0 0 2px var(--orange); background: var(--orange-pale); }
+.tuile-modele[aria-pressed="true"] .icone-modele { background: var(--orange); }
+.controle-photo { display: flex; flex-direction: column; gap: 8px; }
+.vignette-edition { max-width: 100%; max-height: 200px; object-fit: contain; align-self: flex-start; border-radius: 8px; border: 1px solid var(--bord); background: #E6ECF4; }
+.apercu-carte { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.apercu-carte > p { grid-column: 1 / -1; margin: 0; }
+.apercu-carte .face {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 120px;
+  padding: 12px;
+  text-align: center;
+  background: #fff;
+  border: 2px solid var(--bord);
+  border-radius: var(--rayon);
+  box-shadow: 0 3px 10px rgba(27, 42, 74, .07);
+}
+.apercu-carte .face + .face { background: var(--cyan-pale); }
+.apercu-carte .face-titre { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--gris); }
+.apercu-carte .enonce { font-size: 20px; }
+
+/* Photos dans les cartes */
+.enonce, .reponse-texte { white-space: pre-line; }
+.enonce.long { font-size: clamp(19px, 3.6vw, 24px); font-weight: 600; }
+.photo-carte {
+  display: block;
+  max-width: 100%;
+  max-height: 46vh;
+  margin: 0 auto;
+  object-fit: contain;
+  border-radius: 10px;
+  background: #E6ECF4;
+  cursor: zoom-in;
+}
+.photo-carte.chargement, .masque-photo.chargement { min-height: 160px; min-width: 200px; animation: palpiter 1.2s ease-in-out infinite; }
+.photo-carte.indisponible { min-height: 80px; }
+@keyframes palpiter { 50% { opacity: .5; } }
+.voile-photo {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px;
+  background: rgba(10, 18, 34, .92);
+}
+.voile-photo img { max-width: 100%; max-height: calc(100% - 70px); object-fit: contain; }
+
+.masque-cadre { position: relative; display: inline-block; max-width: 100%; align-self: center; line-height: 0; }
+.masque-cadre .masque-photo { display: block; max-width: 100%; max-height: 52vh; border-radius: 8px; user-select: none; -webkit-user-select: none; }
+.masque-cadre.edition { cursor: crosshair; touch-action: none; }
+.masque-cadre.edition .masque-photo { max-height: 70vh; }
+.masque-zone {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  font-weight: 800;
+  font-size: 22px;
+  color: #fff;
+  border-radius: 4px;
+}
+.masque-zone.autre { background: #8C97AB; border: 2px solid #6B778C; }
+.masque-zone.cible { background: var(--orange); border: 2px solid #B85A1C; box-shadow: 0 0 0 3px rgba(232, 121, 46, .35); }
+.masque-zone.revelee { background: transparent; border: 3px solid #2E9E6A; box-shadow: 0 0 0 3px rgba(46, 158, 106, .3); animation: reveler .35s ease-out; }
+.masque-zone.trace { background: rgba(232, 121, 46, .45); border: 2px dashed #B85A1C; }
+@keyframes reveler { from { background: var(--orange); } to { background: transparent; } }
+.zone-numero { font-size: 15px; }
+.zone-supprimer {
+  position: absolute;
+  top: -12px;
+  right: -12px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  font: inherit;
+  font-size: 20px;
+  line-height: 1;
+  color: #fff;
+  background: var(--rouge);
+  border: 2px solid #fff;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.apparition { animation: apparaitre .28s ease-out; }
+@keyframes apparaitre { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .apparition, .masque-zone.revelee, .photo-carte.chargement { animation: none; }
+  .tuile-paquet .bouton.tuile { transition: none; }
+}
 </style>
 </head>
 <body>
@@ -604,7 +877,7 @@ body.plein .confidentialite { display: none; }
   <main id="ecran" tabindex="-1"></main>
   <footer class="pied">
     <button id="retour" class="bouton" type="button" hidden>‹ Accueil</button>
-    <p class="confidentialite">Données enregistrées uniquement sur cet appareil. Aucune connexion réseau.</p>
+    <p class="confidentialite"></p>
   </footer>
 </div>
 <div id="annonce" class="annonce" role="status" aria-live="polite" hidden></div>
@@ -679,6 +952,15 @@ function el(balise, attributs, ...enfants) {
     noeud.append(enfant instanceof Node ? enfant : String(enfant));
   }
   return noeud;
+}
+
+/* append et replaceChildren ignorent null, undefined et false, comme el() :
+ * un écran peut ainsi écrire « condition && el(…) » sans afficher « null ». */
+for (const methode of ['append', 'replaceChildren']) {
+  const origine = Element.prototype[methode];
+  Element.prototype[methode] = function (...enfants) {
+    return origine.apply(this, enfants.filter((e) => e !== null && e !== undefined && e !== false));
+  };
 }
 
 function nouvelId() {
@@ -924,7 +1206,10 @@ function ecrireNombre(valeur) {
  *   cartes       { id, donnees }  — état Leitner du trombinoscope, id = id de l'élève
  *   progression  { id, donnees }  — état Leitner des paquets de contenu
  *   meta         { cle, valeur }  — réglages, profil, suivi et paramètres de
- *                                   chiffrement
+ *                                   chiffrement ; copie locale du compte en
+ *                                   ligne (« nuage:<uid> », voir 14-depot.js)
+ *   photos       { id, donnees }  — photos des cartes déjà téléchargées,
+ *                                   id = chemin dans le stockage en ligne
  *
  * Chaque magasin a son codec, appliqué avant écriture et après lecture.
  * Les magasins personnels (élèves, photos, progression associée) sont chiffrés
@@ -950,7 +1235,7 @@ function attendreTransaction(tx) {
 
 const Base = {
   NOM: 'reconnaitre-mes-eleves',
-  VERSION: 2,
+  VERSION: 3,
   cnx: null,
 
   CODEC_NEUTRE: {
@@ -978,6 +1263,7 @@ const Base = {
         if (!db.objectStoreNames.contains('cartes')) db.createObjectStore('cartes', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('progression')) db.createObjectStore('progression', { keyPath: 'id' });
         if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'cle' });
+        if (!db.objectStoreNames.contains('photos')) db.createObjectStore('photos', { keyPath: 'id' });
       };
       requete.onsuccess = () => {
         this.cnx = requete.result;
@@ -1029,6 +1315,12 @@ const Base = {
     await fin;
   },
 
+  async lireUn(magasin, id) {
+    const tx = this.cnx.transaction(magasin, 'readonly');
+    const enregistrement = await attendreRequete(tx.objectStore(magasin).get(id));
+    return enregistrement ? this.codecDe(magasin).decoder(enregistrement.donnees) : undefined;
+  },
+
   async lireMeta(cle) {
     const tx = this.cnx.transaction('meta', 'readonly');
     const enregistrement = await attendreRequete(tx.objectStore('meta').get(cle));
@@ -1056,6 +1348,659 @@ const Base = {
     });
   },
 };
+
+// ---- 12-nuage.js ----
+/* Client Supabase : comptes, tables leitner_*, photos.
+ *
+ * Mêmes comptes que le site du cours (dépôt Site-Web-Portfolio) : un élève se
+ * connecte avec son identifiant et son mot de passe habituels, l'adresse
+ * interne identifiant@snt.local n'est jamais montrée. Un enseignant se
+ * connecte avec son adresse réelle.
+ *
+ * HTTP nu, sans supabase-js : pas de bibliothèque chargée depuis un CDN.
+ * La clé anonyme n'est pas un secret ; ce sont les règles RLS de la base
+ * (bdd/schema/022-leitner.sql du portfolio) qui protègent les données.
+ *
+ * La session est propre à cette application (clé 'leitner.session') : la
+ * partager avec le site ferait renouveler le même jeton par deux pages, et
+ * Supabase révoque une session dont le jeton de renouvellement sert deux fois.
+ */
+
+const NUAGE_URL = 'https://ztyvuiaohxekuyjeoaxz.supabase.co';
+const NUAGE_CLE = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp0eXZ1aWFvaHhla3V5amVvYXh6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ1NDQzNTIsImV4cCI6MjEwMDEyMDM1Mn0.iBBZiAIec0hSxzAU8FKNe6AO-HeysuxBKXduURBP7Hc';
+const NUAGE_STOCKAGE = 'leitner.session';
+const NUAGE_BUCKET = 'leitner';
+
+const REGLE_MOT_DE_PASSE = 'Au moins 6 caractères, dont une majuscule, une minuscule et un chiffre.';
+
+/** Messages lisibles pour les codes d'erreur du client et de la base. */
+const MESSAGES_NUAGE = {
+  IDENTIFIANT_INVALIDE: 'Identifiant : de 3 à 32 caractères, minuscules, chiffres et tirets.',
+  MOT_DE_PASSE_TROP_COURT: `Mot de passe trop court. ${REGLE_MOT_DE_PASSE}`,
+  MOT_DE_PASSE_FAIBLE: `Mot de passe trop simple. ${REGLE_MOT_DE_PASSE}`,
+  IDENTIFIANT_DEJA_PRIS: 'Cet identifiant est déjà pris. Si c’est le tien, vérifie ton mot de passe.',
+  IDENTIFIANT_REFUSE: 'Cet identifiant est refusé. Essaie-en un autre.',
+  IDENTIFIANTS_INCORRECTS: 'Identifiant ou mot de passe incorrect.',
+  CODE_CLASSE_INCONNU: 'Code de classe inconnu, ou inscriptions fermées. Demande-le à ton professeur.',
+  PSEUDO_DEJA_PRIS: 'Cet identifiant est déjà utilisé dans cette classe.',
+  TROP_DE_TENTATIVES: 'Trop de tentatives. Patiente une minute avant de réessayer.',
+  PAS_DE_SESSION: 'Tu n’es plus connecté. Reconnecte-toi.',
+  HORS_LIGNE: 'Pas de connexion internet pour le moment.',
+  LEITNER_TROP_DE_PAQUETS: 'Limite de 300 paquets atteinte.',
+  LEITNER_TROP_DE_CARTES: 'Limite de 5 000 cartes atteinte.',
+};
+
+function messageNuage(erreur) {
+  const code = erreur && (erreur.code || erreur.message);
+  if (MESSAGES_NUAGE[code]) return MESSAGES_NUAGE[code];
+  if (erreur && /LEITNER_TROP_DE_(PAQUETS|CARTES)/.test(erreur.message)) {
+    return MESSAGES_NUAGE[erreur.message.match(/LEITNER_TROP_DE_(PAQUETS|CARTES)/)[0]];
+  }
+  if (erreur && erreur.statut === 413) return 'Photo trop lourde, même après compression.';
+  if (erreur && erreur.statut === 403 && erreur.photo) return 'Limite de photos atteinte : supprime d’anciennes photos pour en ajouter.';
+  if (estHorsLigne(erreur)) return MESSAGES_NUAGE.HORS_LIGNE;
+  return (erreur && erreur.message) || 'Erreur inconnue.';
+}
+
+/** Vraie coupure réseau, et non erreur de programmation (toutes deux TypeError). */
+function estHorsLigne(erreur) {
+  if (!erreur) return false;
+  if (erreur.code === 'HORS_LIGNE') return true;
+  return erreur instanceof TypeError && /fetch|network|load failed/i.test(erreur.message);
+}
+
+function erreurNuage(code) {
+  const e = new Error(code);
+  e.code = code;
+  return e;
+}
+
+const Nuage = {
+  /** { access_token, refresh_token, expires_at (ms), compte } */
+  jeton: null,
+  renouvellement: null,
+
+  /* ---------- Session ---------- */
+
+  chargerSession() {
+    try {
+      const brut = localStorage.getItem(NUAGE_STOCKAGE);
+      this.jeton = brut ? JSON.parse(brut) : null;
+    } catch {
+      this.jeton = null;
+    }
+    return this.compte();
+  },
+
+  ecrireSession() {
+    try {
+      if (this.jeton) localStorage.setItem(NUAGE_STOCKAGE, JSON.stringify(this.jeton));
+      else localStorage.removeItem(NUAGE_STOCKAGE);
+    } catch { /* stockage refusé : la session ne durera que l'onglet */ }
+  },
+
+  memoriser(reponse) {
+    this.jeton = {
+      access_token: reponse.access_token,
+      refresh_token: reponse.refresh_token,
+      expires_at: reponse.expires_at * 1000 - 60000,
+      compte: this.jeton ? this.jeton.compte : null,
+    };
+    this.ecrireSession();
+  },
+
+  /** Compte connecté : { uid, identifiant, pseudo, classe, prof, libelle } ou null. */
+  compte() {
+    return this.jeton && this.jeton.compte ? this.jeton.compte : null;
+  },
+
+  uid() {
+    const compte = this.compte();
+    return compte ? compte.uid : null;
+  },
+
+  sujetDuJeton() {
+    try {
+      const charge = this.jeton.access_token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      return JSON.parse(atob(charge)).sub || null;
+    } catch {
+      return null;
+    }
+  },
+
+  async assurerSession() {
+    if (!this.jeton) throw erreurNuage('PAS_DE_SESSION');
+    if (Date.now() < this.jeton.expires_at) return;
+    if (this.renouvellement) return this.renouvellement;
+    // Un autre onglet a peut-être déjà renouvelé : on repart du stockage.
+    try {
+      const stocke = JSON.parse(localStorage.getItem(NUAGE_STOCKAGE) || 'null');
+      if (stocke && stocke.refresh_token && stocke.expires_at > this.jeton.expires_at) {
+        this.jeton = stocke;
+        if (Date.now() < this.jeton.expires_at) return;
+      }
+    } catch { /* on garde le jeton en mémoire */ }
+    this.renouvellement = this.auth('token?grant_type=refresh_token', { refresh_token: this.jeton.refresh_token })
+      .then((r) => this.memoriser(r))
+      .catch((e) => {
+        // Hors ligne : on garde la session, on réessaiera plus tard.
+        if (estHorsLigne(e)) throw erreurNuage('HORS_LIGNE');
+        this.jeton = null;
+        this.ecrireSession();
+        throw erreurNuage('PAS_DE_SESSION');
+      })
+      .finally(() => { this.renouvellement = null; });
+    return this.renouvellement;
+  },
+
+  /* ---------- HTTP ---------- */
+
+  async lire(reponse) {
+    const texte = await reponse.text();
+    let donnees = null;
+    if (texte) {
+      try { donnees = JSON.parse(texte); } catch { donnees = texte; }
+    }
+    if (reponse.ok) return donnees;
+    const e = new Error((donnees && (donnees.hint || donnees.message || donnees.msg
+      || donnees.error_description || donnees.error)) || `HTTP ${reponse.status}`);
+    e.code = (donnees && donnees.message) || String(reponse.status);
+    e.motif = (donnees && (donnees.error_code || donnees.error)) || '';
+    e.statut = reponse.status;
+    throw e;
+  },
+
+  async auth(chemin, corps) {
+    const reponse = await fetch(`${NUAGE_URL}/auth/v1/${chemin}`, {
+      method: 'POST',
+      headers: { apikey: NUAGE_CLE, 'Content-Type': 'application/json' },
+      body: JSON.stringify(corps || {}),
+    });
+    return this.lire(reponse);
+  },
+
+  async entetes(supplement = {}) {
+    await this.assurerSession();
+    return { apikey: NUAGE_CLE, Authorization: `Bearer ${this.jeton.access_token}`, ...supplement };
+  },
+
+  /** Requête PostgREST. */
+  async api(chemin, { method = 'GET', corps, prefer } = {}) {
+    const entetes = await this.entetes({ 'Content-Type': 'application/json' });
+    if (prefer) entetes.Prefer = prefer;
+    const reponse = await fetch(`${NUAGE_URL}/rest/v1/${chemin}`, {
+      method,
+      headers: entetes,
+      body: corps === undefined ? undefined : JSON.stringify(corps),
+    });
+    return this.lire(reponse);
+  },
+
+  /** Toutes les lignes d'une requête, par pages de 1000 (plafond de PostgREST). */
+  async tout(chemin) {
+    const lignes = [];
+    const separateur = chemin.includes('?') ? '&' : '?';
+    for (let debut = 0; ; debut += 1000) {
+      const page = await this.api(`${chemin}${separateur}limit=1000&offset=${debut}`);
+      lignes.push(...page);
+      if (page.length < 1000) return lignes;
+    }
+  },
+
+  async rpc(nom, args = {}) {
+    return this.api(`rpc/${nom}`, { method: 'POST', corps: args });
+  },
+
+  /* ---------- Comptes ---------- */
+
+  normaliserIdentifiant(brut) {
+    const id = String(brut || '').trim().toLowerCase();
+    if (id.includes('@')) return id;
+    if (!/^[a-z0-9-]{3,32}$/.test(id)) throw erreurNuage('IDENTIFIANT_INVALIDE');
+    return id;
+  },
+
+  adresse(identifiant) {
+    return identifiant.includes('@') ? identifiant : `${identifiant}@snt.local`;
+  },
+
+  motDePasseInsuffisant(mdp) {
+    if (mdp.length < 6) return 'MOT_DE_PASSE_TROP_COURT';
+    if (!/[a-z]/.test(mdp) || !/[A-Z]/.test(mdp) || !/[0-9]/.test(mdp)) return 'MOT_DE_PASSE_FAIBLE';
+    return null;
+  },
+
+  /** Après connexion : qui est là, élève ou enseignant ? */
+  async identifier(identifiant) {
+    const uid = this.sujetDuJeton();
+    const [session, prof] = await Promise.all([
+      this.rpc('ma_session').catch(() => []),
+      this.rpc('est_enseignant').catch(() => false),
+    ]);
+    const fiche = Array.isArray(session) && session.length ? session[0] : null;
+    let libelle = null;
+    if (prof === true) {
+      const lignes = await this.api('enseignants?select=libelle&limit=1').catch(() => []);
+      libelle = lignes.length ? lignes[0].libelle : null;
+    }
+    this.jeton.compte = {
+      uid,
+      identifiant,
+      pseudo: fiche ? fiche.pseudo : (libelle || identifiant),
+      classe: fiche ? fiche.classe_libelle : null,
+      prof: prof === true,
+      libelle,
+    };
+    this.ecrireSession();
+    return this.jeton.compte;
+  },
+
+  async seConnecter(identifiantBrut, motDePasse) {
+    const identifiant = this.normaliserIdentifiant(identifiantBrut);
+    try {
+      this.memoriser(await this.auth('token?grant_type=password', {
+        email: this.adresse(identifiant), password: String(motDePasse || ''),
+      }));
+    } catch (e) {
+      if (e.statut === 429 || /rate_limit/.test(e.motif)) throw erreurNuage('TROP_DE_TENTATIVES');
+      if (e.statut === 400 || e.motif === 'invalid_credentials') throw erreurNuage('IDENTIFIANTS_INCORRECTS');
+      throw e;
+    }
+    return this.identifier(identifiant);
+  },
+
+  /** Même parcours que le site : le compte d'abord, l'inscription en classe ensuite. */
+  async creerCompte(identifiantBrut, motDePasse, codeClasse) {
+    const identifiant = this.normaliserIdentifiant(identifiantBrut);
+    if (identifiant.includes('@')) throw erreurNuage('IDENTIFIANT_INVALIDE');
+    const mdp = String(motDePasse || '');
+    const faible = this.motDePasseInsuffisant(mdp);
+    if (faible) throw erreurNuage(faible);
+    try {
+      this.memoriser(await this.auth('signup', { email: this.adresse(identifiant), password: mdp }));
+    } catch (e) {
+      if (e.motif === 'weak_password') throw erreurNuage('MOT_DE_PASSE_FAIBLE');
+      if (e.motif === 'email_address_invalid') throw erreurNuage('IDENTIFIANT_REFUSE');
+      if (e.statut === 429 || /rate_limit/.test(e.motif)) throw erreurNuage('TROP_DE_TENTATIVES');
+      if (e.motif === 'user_already_exists' || e.motif === 'email_exists') {
+        // Compte créé mais jamais rattaché à une classe : on le reprend si le
+        // mot de passe est le bon (voir progression.js du site).
+        try {
+          this.memoriser(await this.auth('token?grant_type=password', { email: this.adresse(identifiant), password: mdp }));
+        } catch {
+          throw erreurNuage('IDENTIFIANT_DEJA_PRIS');
+        }
+      } else {
+        throw e;
+      }
+    }
+    const deja = await this.rpc('ma_session').catch(() => []);
+    if (!deja || !deja.length) {
+      try {
+        await this.rpc('rejoindre_classe', { p_code: String(codeClasse || '').trim().toUpperCase(), p_pseudo: identifiant });
+      } catch (e) {
+        const code = /CODE_CLASSE_INCONNU|PSEUDO_DEJA_PRIS/.exec(`${e.code} ${e.message}`);
+        throw code ? erreurNuage(code[0]) : e;
+      }
+    }
+    return this.identifier(identifiant);
+  },
+
+  seDeconnecter() {
+    const jeton = this.jeton;
+    this.jeton = null;
+    this.ecrireSession();
+    if (jeton) {
+      fetch(`${NUAGE_URL}/auth/v1/logout`, {
+        method: 'POST',
+        headers: { apikey: NUAGE_CLE, Authorization: `Bearer ${jeton.access_token}` },
+      }).catch(() => {});
+    }
+  },
+
+  /* ---------- Photos ---------- */
+
+  cheminPhoto(chemin) {
+    return chemin.split('/').map(encodeURIComponent).join('/');
+  },
+
+  async deposerPhoto(chemin, blob) {
+    const entetes = await this.entetes({ 'Content-Type': blob.type || 'image/jpeg', 'x-upsert': 'false' });
+    const reponse = await fetch(`${NUAGE_URL}/storage/v1/object/${NUAGE_BUCKET}/${this.cheminPhoto(chemin)}`, {
+      method: 'POST', headers: entetes, body: blob,
+    });
+    try {
+      return await this.lire(reponse);
+    } catch (e) {
+      e.photo = true;
+      if (reponse.status === 400 && /row-level security|Unauthorized/i.test(e.message)) e.statut = 403;
+      throw e;
+    }
+  },
+
+  async telechargerPhoto(chemin) {
+    const entetes = await this.entetes();
+    const reponse = await fetch(`${NUAGE_URL}/storage/v1/object/authenticated/${NUAGE_BUCKET}/${this.cheminPhoto(chemin)}`, {
+      headers: entetes,
+    });
+    if (!reponse.ok) await this.lire(reponse);
+    return reponse.blob();
+  },
+
+  async supprimerPhotos(chemins) {
+    if (!chemins.length) return;
+    const entetes = await this.entetes({ 'Content-Type': 'application/json' });
+    const reponse = await fetch(`${NUAGE_URL}/storage/v1/object/${NUAGE_BUCKET}`, {
+      method: 'DELETE', headers: entetes, body: JSON.stringify({ prefixes: chemins }),
+    });
+    return this.lire(reponse);
+  },
+
+  /** Photos du compte : nombre et poids, pour la jauge. */
+  async mesPhotos() {
+    const entetes = await this.entetes({ 'Content-Type': 'application/json' });
+    const reponse = await fetch(`${NUAGE_URL}/storage/v1/object/list/${NUAGE_BUCKET}`, {
+      method: 'POST', headers: entetes,
+      body: JSON.stringify({ prefix: `${this.uid()}/`, limit: 1000, offset: 0 }),
+    });
+    const fichiers = (await this.lire(reponse)) || [];
+    const liste = fichiers.filter((f) => f.id);
+    return {
+      nombre: liste.length,
+      octets: liste.reduce((s, f) => s + ((f.metadata && f.metadata.size) || 0), 0),
+      chemins: liste.map((f) => `${this.uid()}/${f.name}`),
+    };
+  },
+};
+
+const QUOTA_PHOTOS = 150;
+
+// ---- 14-depot.js ----
+/* Dépôt des données de révision : sur l'appareil, ou dans le compte en ligne.
+ *
+ * Sans compte, tout reste en IndexedDB comme avant (magasin « progression »
+ * et métadonnées). Avec un compte, la vérité est en ligne (tables leitner_*)
+ * et l'appareil en garde une copie, rangée sous « nuage:<uid> » : les
+ * révisions marchent hors connexion, et ce qui n'a pas pu partir attend dans
+ * une file, envoyée dès que le réseau revient.
+ *
+ * Profil, journal, quotas, bibliothèque et réglages des paquets forment un
+ * seul objet en ligne (leitner_profils) ; l'état de chaque carte révisée est
+ * une ligne de leitner_etats. Deux appareils utilisés en même temps : la
+ * dernière écriture gagne, ce qui suffit pour un élève.
+ */
+
+const STATUTS_DEPOT = {
+  local: 'Enregistré sur cet appareil',
+  ajour: 'Sauvegardé en ligne',
+  envoi: 'Sauvegarde en cours…',
+  attente: 'Hors ligne : sera sauvegardé au retour du réseau',
+  erreur: 'Sauvegarde en ligne impossible pour l’instant',
+  session: 'Session expirée : reconnecte-toi pour sauvegarder',
+};
+
+const Depot = {
+  uid: null,
+  cache: null,
+  statut: 'local',
+  minuteurEnvoi: null,
+  minuteurPersistance: null,
+  attentesPersistance: [],
+  envoiEnCours: null,
+  /** Appelée quand le statut change (pied de page). */
+  surStatut: null,
+
+  cleCache() {
+    return `nuage:${this.uid}`;
+  },
+
+  cacheVide() {
+    return {
+      profil: {},
+      etats: {},
+      attente: { etats: {}, profil: false },
+      contenu: { paquets: [], cartes: [], publics: [], cartesPubliques: [] },
+      recu: null,
+    };
+  },
+
+  async ouvrir(uid) {
+    this.uid = uid;
+    const stocke = await Base.lireMeta(this.cleCache());
+    this.cache = { ...this.cacheVide(), ...(stocke || {}) };
+    this.relancerSiBesoin();
+  },
+
+  /** Quelque chose attend d'être envoyé : on le dit, et on l'envoie. */
+  relancerSiBesoin() {
+    if (this.enAttente()) {
+      this.changerStatut('envoi');
+      this.planifierEnvoi(500);
+    } else {
+      this.changerStatut('ajour');
+    }
+  },
+
+  fermer() {
+    clearTimeout(this.minuteurEnvoi);
+    this.uid = null;
+    this.cache = null;
+    this.changerStatut('local');
+  },
+
+  changerStatut(statut) {
+    this.statut = statut;
+    if (this.surStatut) this.surStatut(statut);
+  },
+
+  enAttente() {
+    if (!this.cache) return 0;
+    return Object.keys(this.cache.attente.etats).length + (this.cache.attente.profil ? 1 : 0);
+  },
+
+  /** Écriture différée de la copie locale : une révision rapide ne doit pas
+   *  réécrire tout le cache à chaque carte. */
+  persister() {
+    // Tous ceux qui attendent pendant le délai sont servis par la même écriture.
+    clearTimeout(this.minuteurPersistance);
+    const uid = this.uid;
+    const cache = this.cache;
+    return new Promise((resoudre) => {
+      this.attentesPersistance.push(resoudre);
+      this.minuteurPersistance = setTimeout(async () => {
+        const servis = this.attentesPersistance;
+        this.attentesPersistance = [];
+        if (uid && cache) await Base.ecrireMeta(`nuage:${uid}`, cache).catch(() => {});
+        for (const r of servis) r();
+      }, 250);
+    });
+  },
+
+  /* ---------- Clés de profil ---------- */
+
+  async lire(cle) {
+    if (!this.uid) return Base.lireMeta(cle);
+    return this.cache.profil[cle];
+  },
+
+  async ecrire(cle, valeur) {
+    if (!this.uid) return Base.ecrireMeta(cle, valeur);
+    this.cache.profil[cle] = valeur;
+    this.cache.attente.profil = true;
+    this.persister();
+    this.planifierEnvoi();
+  },
+
+  /* ---------- États des cartes ---------- */
+
+  async lireEtats() {
+    if (!this.uid) return Base.lireTout('progression');
+    return Object.values(this.cache.etats);
+  },
+
+  async ecrireEtat(etat) {
+    if (!this.uid) return Base.modifier({ ecritures: { progression: [etat] } });
+    this.cache.etats[etat.id] = etat;
+    this.cache.attente.etats[etat.id] = etat;
+    this.persister();
+    this.planifierEnvoi();
+  },
+
+  async supprimerEtats(ids) {
+    if (!this.uid) return Base.modifier({ suppressions: { progression: ids } });
+    for (const id of ids) {
+      delete this.cache.etats[id];
+      this.cache.attente.etats[id] = null;
+    }
+    this.persister();
+    this.planifierEnvoi();
+  },
+
+  /* ---------- Paquets et cartes en ligne (copie locale) ---------- */
+
+  get contenu() {
+    return this.cache ? this.cache.contenu : this.cacheVide().contenu;
+  },
+
+  async enregistrerContenu(contenu) {
+    if (!this.cache) return;
+    this.cache.contenu = contenu;
+    await this.persister();
+  },
+
+  /* ---------- Synchronisation ---------- */
+
+  planifierEnvoi(delai = 1500) {
+    clearTimeout(this.minuteurEnvoi);
+    this.minuteurEnvoi = setTimeout(() => this.envoyer(), delai);
+  },
+
+  async envoyer() {
+    if (!this.uid) return;
+    if (this.envoiEnCours) return this.envoiEnCours;
+    if (!this.enAttente()) {
+      this.changerStatut('ajour');
+      return;
+    }
+    this.envoiEnCours = this.envoyerMaintenant().finally(() => { this.envoiEnCours = null; });
+    return this.envoiEnCours;
+  },
+
+  async envoyerMaintenant() {
+    const uid = this.uid;
+    const cache = this.cache;
+    this.changerStatut('envoi');
+    let profilEnvoye = false;
+    try {
+      const envoyes = Object.entries(cache.attente.etats);
+      const ecritures = envoyes.filter(([, e]) => e).map(([carte, etat]) => ({ auteur: uid, carte, etat }));
+      const suppressions = envoyes.filter(([, e]) => !e).map(([carte]) => carte);
+      for (let i = 0; i < ecritures.length; i += 500) {
+        await Nuage.api('leitner_etats?on_conflict=auteur,carte', {
+          method: 'POST',
+          corps: ecritures.slice(i, i + 500),
+          prefer: 'resolution=merge-duplicates,return=minimal',
+        });
+      }
+      for (let i = 0; i < suppressions.length; i += 100) {
+        const liste = suppressions.slice(i, i + 100).map((id) => `"${id.replace(/"/g, '')}"`).join(',');
+        await Nuage.api(`leitner_etats?auteur=eq.${uid}&carte=in.(${encodeURIComponent(liste)})`, {
+          method: 'DELETE', prefer: 'return=minimal',
+        });
+      }
+      profilEnvoye = cache.attente.profil;
+      if (profilEnvoye) {
+        cache.attente.profil = false;
+        await Nuage.api('leitner_profils?on_conflict=auteur', {
+          method: 'POST',
+          corps: [{ auteur: uid, valeur: cache.profil }],
+          prefer: 'resolution=merge-duplicates,return=minimal',
+        });
+      }
+      // Ne retirer de la file que ce qui n'a pas changé pendant l'envoi.
+      for (const [carte, etat] of envoyes) {
+        if (cache.attente.etats[carte] === etat) delete cache.attente.etats[carte];
+      }
+      await this.persister();
+      if (this.uid === uid) this.changerStatut(this.enAttente() ? 'envoi' : 'ajour');
+      if (this.enAttente()) this.planifierEnvoi(300);
+    } catch (erreur) {
+      if (profilEnvoye) cache.attente.profil = true;
+      await this.persister();
+      if (this.uid !== uid) return;
+      if (erreur.code === 'PAS_DE_SESSION') this.changerStatut('session');
+      else if (estHorsLigne(erreur)) this.changerStatut('attente');
+      else {
+        console.error(erreur);
+        this.changerStatut('erreur');
+      }
+      // Nouvel essai dans 30 s ; le retour du réseau relance aussi l'envoi.
+      this.planifierEnvoi(30000);
+    }
+  },
+
+  /**
+   * Récupère l'état en ligne et le fusionne avec la copie locale. Ce qui
+   * attend encore d'être envoyé l'emporte sur ce qui vient du serveur.
+   * Renvoie vrai si quelque chose a changé.
+   */
+  async recevoir() {
+    const uid = this.uid;
+    const [profils, etats] = await Promise.all([
+      Nuage.api(`leitner_profils?select=valeur&auteur=eq.${uid}`),
+      Nuage.tout(`leitner_etats?select=carte,etat&auteur=eq.${uid}&order=carte`),
+    ]);
+    if (this.uid !== uid) return false;
+    const cache = this.cache;
+    const avant = JSON.stringify([cache.profil, cache.etats]);
+
+    if (!profils.length && !cache.recu) {
+      await this.reprendreDonneesLocales();
+    } else if (profils.length && !cache.attente.profil) {
+      cache.profil = profils[0].valeur || {};
+    }
+
+    const fusion = {};
+    for (const ligne of etats) fusion[ligne.carte] = { ...ligne.etat, id: ligne.carte };
+    for (const [id, etat] of Object.entries(cache.attente.etats)) {
+      if (etat) fusion[id] = etat;
+      else delete fusion[id];
+    }
+    cache.etats = fusion;
+    cache.recu = Date.now();
+    await this.persister();
+    return avant !== JSON.stringify([cache.profil, cache.etats]);
+  },
+
+  /** Première connexion d'un compte vierge : la progression faite sans compte
+   *  sur cet appareil y est transférée, plutôt que perdue. */
+  async reprendreDonneesLocales() {
+    const [profil, journal, contenu, etats] = await Promise.all([
+      Base.lireMeta('profil'), Base.lireMeta('journal'), Base.lireMeta('contenu'), Base.lireTout('progression'),
+    ]);
+    const cache = this.cache;
+    if (profil) cache.profil.profil = { ...profil, pseudo: '' };
+    if (journal) cache.profil.journal = journal;
+    if (contenu) cache.profil.contenu = contenu;
+    cache.attente.profil = true;
+    for (const etat of etats) {
+      cache.etats[etat.id] = etat;
+      cache.attente.etats[etat.id] = etat;
+    }
+    if (etats.length || journal) {
+      await Base.modifier({ suppressions: { progression: etats.map((e) => e.id) } });
+      await Base.ecrireMeta('journal', null);
+      await Base.ecrireMeta('contenu', null);
+    }
+  },
+};
+
+window.addEventListener('online', () => {
+  if (Depot.uid) Depot.envoyer();
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && Depot.uid && Depot.enAttente()) Depot.envoyer();
+});
 
 // ---- 20-etat.js ----
 /* État de l'application en mémoire, synchronisé avec IndexedDB. */
@@ -1326,7 +2271,7 @@ const Profil = {
   donnees: { ...PROFIL_DEFAUT },
 
   async charger() {
-    this.donnees = { ...PROFIL_DEFAUT, ...(await Base.lireMeta('profil')) };
+    this.donnees = { ...PROFIL_DEFAUT, ...(await Depot.lire('profil')) };
   },
 
   /** Un profil est utilisable dès qu'un niveau est choisi ; le pseudo est facultatif. */
@@ -1337,12 +2282,12 @@ const Profil = {
   async enregistrer(changements) {
     Object.assign(this.donnees, changements);
     if (!this.donnees.cree) this.donnees.cree = Dates.aujourdhui();
-    await Base.ecrireMeta('profil', { ...this.donnees });
+    await Depot.ecrire('profil', { ...this.donnees });
   },
 
   async effacer() {
     this.donnees = { ...PROFIL_DEFAUT };
-    await Base.ecrireMeta('profil', null);
+    await Depot.ecrire('profil', null);
   },
 
   get niveau() {
@@ -1367,7 +2312,7 @@ const Journal = {
   jours: {},
 
   async charger() {
-    this.jours = (await Base.lireMeta('journal')) || {};
+    this.jours = (await Depot.lire('journal')) || {};
   },
 
   du(date) {
@@ -1383,7 +2328,7 @@ const Journal = {
     };
     const dates = Object.keys(this.jours).sort();
     for (const date of dates.slice(0, Math.max(0, dates.length - JOURS_CONSERVES))) delete this.jours[date];
-    await Base.ecrireMeta('journal', this.jours);
+    await Depot.ecrire('journal', { ...this.jours });
   },
 
   /** Jours consécutifs travaillés. La journée en cours ne casse la série
@@ -1452,6 +2397,138 @@ function formaterDuree(secondes) {
   const reste = minutes % 60;
   return reste ? `${heures} h ${String(reste).padStart(2, '0')}` : `${heures} h`;
 }
+
+// ---- 26-photos.js ----
+/* Photos des cartes : compression, envoi, cache local, affichage.
+ *
+ * Une photo de téléphone pèse 3 à 5 Mo ; elle part réduite à 1600 px de côté
+ * et compressée en JPEG (150 à 300 Ko), ce qui reste net pour une écriture
+ * manuscrite. Une fois téléchargée, elle est gardée sur l'appareil (magasin
+ * « photos ») : la révision marche hors connexion et ne retélécharge rien.
+ */
+
+const PHOTO_COTE_MAX = 1600;
+const PHOTO_POIDS_VISE = 450 * 1024;
+
+const Photos = {
+  /** chemin → URL blob déjà prête */
+  urls: new Map(),
+  enCours: new Map(),
+
+  async decoder(fichier) {
+    if (window.createImageBitmap) {
+      try {
+        return await createImageBitmap(fichier, { imageOrientation: 'from-image' });
+      } catch { /* format que createImageBitmap ne lit pas : on passe par <img> */ }
+    }
+    const url = URL.createObjectURL(fichier);
+    try {
+      const image = new Image();
+      image.src = url;
+      await image.decode();
+      return image;
+    } finally {
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+  },
+
+  /** Réduit et compresse une photo ; renvoie un Blob JPEG. */
+  async compresser(fichier) {
+    const source = await this.decoder(fichier);
+    const largeur = source.width || source.naturalWidth;
+    const hauteur = source.height || source.naturalHeight;
+    if (!largeur || !hauteur) throw new Error('Image illisible.');
+    let cote = PHOTO_COTE_MAX;
+    for (let essai = 0; essai < 6; essai += 1) {
+      const echelle = Math.min(1, cote / Math.max(largeur, hauteur));
+      const canevas = document.createElement('canvas');
+      canevas.width = Math.round(largeur * echelle);
+      canevas.height = Math.round(hauteur * echelle);
+      const ctx = canevas.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, canevas.width, canevas.height);
+      ctx.drawImage(source, 0, 0, canevas.width, canevas.height);
+      for (const qualite of [0.82, 0.72, 0.62]) {
+        const blob = await new Promise((r) => canevas.toBlob(r, 'image/jpeg', qualite));
+        if (blob && blob.size <= PHOTO_POIDS_VISE) return blob;
+      }
+      cote = Math.round(cote * 0.8);
+    }
+    throw new Error('Photo impossible à alléger suffisamment.');
+  },
+
+  /** Compresse, envoie et garde en cache. Renvoie le chemin en ligne. */
+  async deposer(fichier) {
+    const blob = await this.compresser(fichier);
+    const chemin = `${Nuage.uid()}/${nouvelId()}.jpg`;
+    await Nuage.deposerPhoto(chemin, blob);
+    await Base.modifier({ ecritures: { photos: [{ id: chemin, blob }] } }).catch(() => {});
+    this.urls.set(chemin, URL.createObjectURL(blob));
+    return chemin;
+  },
+
+  /** URL affichable d'une photo : mémoire, puis appareil, puis réseau. */
+  async url(chemin) {
+    if (this.urls.has(chemin)) return this.urls.get(chemin);
+    if (this.enCours.has(chemin)) return this.enCours.get(chemin);
+    const promesse = (async () => {
+      let enregistrement = await Base.lireUn('photos', chemin).catch(() => null);
+      if (!enregistrement) {
+        const blob = await Nuage.telechargerPhoto(chemin);
+        enregistrement = { id: chemin, blob };
+        await Base.modifier({ ecritures: { photos: [enregistrement] } }).catch(() => {});
+      }
+      const url = URL.createObjectURL(enregistrement.blob);
+      this.urls.set(chemin, url);
+      return url;
+    })().finally(() => this.enCours.delete(chemin));
+    this.enCours.set(chemin, promesse);
+    return promesse;
+  },
+
+  /** Élément <img> qui se remplit dès que la photo est disponible. */
+  image(chemin, classe = 'photo-carte', alt = 'Photo de la carte') {
+    const image = el('img', { class: `${classe} chargement`, alt, draggable: 'false' });
+    if (!chemin) return image;
+    this.url(chemin)
+      .then((url) => {
+        image.src = url;
+        image.classList.remove('chargement');
+      })
+      .catch(() => {
+        image.classList.remove('chargement');
+        image.classList.add('indisponible');
+        image.alt = 'Photo indisponible hors connexion';
+      });
+    return image;
+  },
+
+  async supprimer(chemins) {
+    const miens = chemins.filter((c) => c && Nuage.uid() && c.startsWith(`${Nuage.uid()}/`));
+    if (!miens.length) return;
+    await Nuage.supprimerPhotos(miens).catch(() => {});
+    await Base.modifier({ suppressions: { photos: miens } }).catch(() => {});
+    for (const c of miens) {
+      const url = this.urls.get(c);
+      if (url) URL.revokeObjectURL(url);
+      this.urls.delete(c);
+    }
+  },
+
+  /** Télécharge à l'avance les photos de la bibliothèque, pour réviser hors ligne. */
+  async precharger(paquets) {
+    const chemins = new Set();
+    for (const paquet of paquets) {
+      for (const carte of paquet.cartes) {
+        for (const c of [carte.photoQuestion, carte.photoReponse, carte.masque && carte.masque.photo]) if (c) chemins.add(c);
+      }
+    }
+    for (const chemin of chemins) {
+      if (!navigator.onLine) return;
+      await this.url(chemin).catch(() => {});
+    }
+  },
+};
 
 // ---- 30-demo.js ----
 /* Jeu de données fictif : noms inventés et visages dessinés, aucune vraie photo. */
@@ -1669,6 +2746,12 @@ function demoDejaChargee() {
  *   distracteurs  [] fausses réponses du QCM ; sinon, prises dans la section
  *   qcm: false    interdit le QCM pour cette carte
  *   generer()     carte générative : renvoie { question, reponse, nombre|saisie }
+ *
+ * Les cartes créées dans l'application (36-bibliotheque.js) ajoutent :
+ *   formats       [] formats permis, à la place de la déduction ci-dessous
+ *   photoQuestion, photoReponse   chemins de photos dans le stockage en ligne
+ *   masque        { photo, zones: [{x, y, l, h}], index } : photo à trous
+ *   source        identifiant de la ligne leitner_cartes d'origine
  */
 
 const FORMATS = {
@@ -1688,7 +2771,7 @@ const Paquets = {
 
   /** Enregistre un paquet et relie chaque carte à sa section. */
   inscrire(paquet) {
-    const complet = { intervalles: INTERVALLES_CONTENU, ...paquet, cartes: [] };
+    const complet = { intervalles: INTERVALLES_CONTENU, origine: 'integre', theme: 'Physique-chimie', ...paquet, cartes: [] };
     for (const section of complet.sections) {
       section.paquet = complet.cle;
       for (const carte of section.cartes) {
@@ -1701,6 +2784,14 @@ const Paquets = {
     }
     this.liste.push(complet);
     return complet;
+  },
+
+  /** Retire un paquet créé dans l'application, pour le réinscrire à jour. */
+  retirer(cle) {
+    const paquet = this.get(cle);
+    if (!paquet) return;
+    for (const carte of paquet.cartes) this.index.delete(carte.id);
+    this.liste = this.liste.filter((p) => p !== paquet);
   },
 
   get(cle) {
@@ -1724,6 +2815,7 @@ const Paquets = {
 
   /** Formats praticables pour une carte donnée. */
   formatsDe(carte) {
+    if (carte.formats) return [...carte.formats];
     const formats = ['retournement'];
     if (carte.qcm !== false && !carte.generer) formats.push('qcm');
     if (carte.generer || carte.nombre !== undefined || (carte.saisie && carte.saisie.length)) formats.push('saisie');
@@ -1763,7 +2855,7 @@ const Progression = {
   cartes: new Map(),
 
   async charger() {
-    const liste = await Base.lireTout('progression');
+    const liste = await Depot.lireEtats();
     this.cartes = new Map(liste.map((c) => [String(c.id), nettoyerCarte(c)]));
   },
 
@@ -1777,15 +2869,15 @@ const Progression = {
   },
 
   async enregistrer(carte) {
-    await Base.modifier({ ecritures: { progression: [carte] } });
     this.cartes.set(carte.id, carte);
+    await Depot.ecrireEtat(carte);
   },
 
   async remettreAZero(cartes) {
     const ids = cartes.map((c) => c.id).filter((id) => this.cartes.has(id));
     if (!ids.length) return 0;
-    await Base.modifier({ suppressions: { progression: ids } });
     for (const id of ids) this.cartes.delete(id);
+    await Depot.supprimerEtats(ids);
     return ids.length;
   },
 
@@ -1812,7 +2904,7 @@ const SuiviContenu = {
   donnees: {},
 
   async charger() {
-    this.donnees = (await Base.lireMeta('contenu')) || {};
+    this.donnees = (await Depot.lire('contenu')) || {};
   },
 
   pour(cle) {
@@ -1823,13 +2915,13 @@ const SuiviContenu = {
     const courant = this.pour(cle).nouvelles;
     const n = (courant && courant.date === jour ? courant.n : 0) + 1;
     this.donnees[cle] = { ...this.pour(cle), nouvelles: { date: jour, n } };
-    await Base.ecrireMeta('contenu', this.donnees);
+    await Depot.ecrire('contenu', { ...this.donnees });
   },
 
   quotaNouvelles(paquet, jour) {
     const courant = this.pour(paquet.cle).nouvelles;
     const deja = courant && courant.date === jour ? courant.n : 0;
-    return Math.max(0, Profil.donnees.nouvellesParJour - deja);
+    return Math.max(0, ReglagesPaquet.nouvellesParJour(paquet, jour) - deja);
   },
 };
 
@@ -1941,7 +3033,9 @@ const SessionContenu = {
     if (!element.reprise) {
       const carte = Paquets.index.get(element.id);
       const enonce = element.tirage || carte;
-      s.resultats.push({ id: element.id, reussi, question: enonce.question, reponse: enonce.reponse });
+      s.resultats.push({ id: element.id, reussi,
+        question: enonce.question || (carte.masque ? 'Photo à trous' : 'Carte photo'),
+        reponse: enonce.reponse || (carte.masque || carte.photoReponse ? 'voir la photo' : '') });
       const secondes = element.debut ? (Date.now() - element.debut) / 1000 : 0;
       s.secondes += Math.min(SECONDES_MAX_PAR_CARTE, secondes);
       await Journal.noter(s.jour, reussi, secondes);
@@ -1950,7 +3044,7 @@ const SessionContenu = {
         const nouvelle = etat.introduite === null;
         // Conservé pour permettre de rejouer la notation si l'élève conteste.
         element.etatAvant = etat;
-        await Progression.enregistrer(Leitner.appliquer(etat, reussi, s.jour, s.paquet.intervalles));
+        await Progression.enregistrer(appliquerReglages(etat, reussi, s.jour, s.paquet));
         if (nouvelle) await SuiviContenu.noterNouvelles(s.paquet.cle, s.jour);
       }
     }
@@ -2040,6 +3134,7 @@ const MASSES_MOLAIRES = [
 
 Paquets.inscrire({
   cle: 'chimie-bases',
+  theme: 'Chimie',
   titre: 'Les bases : grandeurs, unités, formules',
   resume: 'Ce qu’il faut savoir sans réfléchir avant tout calcul de chimie.',
   niveaux: ['seconde', 'premiere', 'terminale'],
@@ -2159,6 +3254,7 @@ function carteConversion(cle, depart, arrivee, facteur, tirage) {
 
 Paquets.inscrire({
   cle: 'reflexes',
+  theme: 'Calcul',
   titre: 'Réflexes : préfixes et conversions',
   resume: 'Les automatismes de calcul, à refaire souvent et vite.',
   niveaux: ['seconde', 'premiere', 'terminale'],
@@ -2374,6 +3470,7 @@ function carteRegle(cle, question, reponse, distracteurs, aide) {
 
 Paquets.inscrire({
   cle: 'nomenclature',
+  theme: 'Chimie organique',
   titre: 'Nomenclature des molécules organiques',
   resume: 'Lire une formule, écrire un nom, et l’inverse. Le socle du programme de terminale.',
   niveaux: ['terminale'],
@@ -2518,6 +3615,494 @@ Paquets.inscrire({
   ],
 });
 
+// ---- 36-bibliotheque.js ----
+/* Bibliothèque personnelle, paquets créés dans l'application, réglages Leitner.
+ *
+ * Trois sortes de paquets se côtoient dans la bibliothèque d'un élève :
+ *   « integre » — écrits dans le code (33-…, 34-…), livrés avec l'application ;
+ *   « prof »    — publiés par un enseignant dans la bibliothèque commune
+ *                 (leitner_paquets.public), que l'élève ajoute chez lui ;
+ *   « perso »   — créés par l'élève lui-même, visibles de lui seul (et de ses
+ *                 enseignants, qui peuvent vérifier ce qui s'y trouve).
+ *
+ * Les paquets en ligne sont convertis au format des paquets intégrés et
+ * inscrits dans Paquets : la révision, les statistiques et le moteur Leitner
+ * les traitent tous de la même façon.
+ */
+
+/* ---------- Rythmes Leitner ---------- */
+
+const RYTHMES = {
+  intensif: {
+    titre: 'Intensif',
+    resume: 'Évaluation dans les jours qui viennent',
+    intervalles: [1, 2, 3, 5, 8],
+  },
+  standard: {
+    titre: 'Standard',
+    resume: 'Retenir pour le trimestre',
+    intervalles: [1, 3, 7, 14, 30],
+  },
+  long: {
+    titre: 'Long terme',
+    resume: 'Garder jusqu’au bac',
+    intervalles: [2, 5, 12, 30, 60],
+  },
+};
+
+const BORNES_INTERVALLE = [1, 365];
+
+function intervallesValides(liste) {
+  if (!Array.isArray(liste) || liste.length !== 5) return null;
+  const propres = liste.map((n) => Math.round(Number(n)));
+  if (propres.some((n) => !Number.isFinite(n) || n < BORNES_INTERVALLE[0] || n > BORNES_INTERVALLE[1])) return null;
+  return propres;
+}
+
+/** « demain », « dans 3 jours », « dans 2 semaines »… */
+function decrireDelai(jours) {
+  if (jours === 1) return 'le lendemain';
+  if (jours < 14) return `${jours} jours après`;
+  if (jours < 60 && jours % 7 === 0) return `${jours / 7} semaines après`;
+  if (jours < 60) return `${jours} jours après`;
+  return `${Math.round(jours / 30)} mois après`;
+}
+
+/* ---------- Réglages par paquet (propres à chaque élève) ---------- */
+
+const ReglagesPaquet = {
+  donnees: {},
+
+  async charger() {
+    this.donnees = (await Depot.lire('reglagesPaquets')) || {};
+  },
+
+  brut(cle) {
+    return this.donnees[cle] || {};
+  },
+
+  /** { rythme, intervalles, nouvellesParJour, dateEvaluation } effectifs. */
+  de(paquet) {
+    const r = this.brut(paquet.cle);
+    let intervalles = paquet.intervalles || INTERVALLES_CONTENU;
+    let rythme = 'paquet';
+    if (r.rythme && RYTHMES[r.rythme]) {
+      rythme = r.rythme;
+      intervalles = RYTHMES[r.rythme].intervalles;
+    } else if (r.rythme === 'perso' && intervallesValides(r.intervalles)) {
+      rythme = 'perso';
+      intervalles = intervallesValides(r.intervalles);
+    }
+    const dateEvaluation = typeof r.dateEvaluation === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.dateEvaluation)
+      ? r.dateEvaluation : null;
+    return {
+      rythme,
+      intervalles,
+      nouvellesParJour: Number.isInteger(r.nouvellesParJour) ? r.nouvellesParJour : Profil.donnees.nouvellesParJour,
+      dateEvaluation,
+    };
+  },
+
+  /** Évaluation encore à venir, ou null. */
+  evaluation(paquet, jour = Dates.aujourdhui()) {
+    const { dateEvaluation } = this.de(paquet);
+    return dateEvaluation && dateEvaluation > jour ? dateEvaluation : null;
+  },
+
+  /**
+   * Nouvelles cartes du jour. Avec une évaluation à venir, le quota grimpe si
+   * besoin pour que toutes les cartes aient été vues trois jours avant :
+   * une carte découverte la veille n'a aucune chance d'être retenue.
+   */
+  nouvellesParJour(paquet, jour = Dates.aujourdhui()) {
+    const reglage = this.de(paquet);
+    const evaluation = this.evaluation(paquet, jour);
+    if (!evaluation) return reglage.nouvellesParJour;
+    const restantes = Progression.repartition(paquet.cartes).jamaisVues;
+    const jours = Math.max(1, Dates.ecart(jour, evaluation) - 3);
+    return Math.max(reglage.nouvellesParJour, Math.ceil(restantes / jours));
+  },
+
+  async enregistrer(cle, changements) {
+    const suivant = { ...this.brut(cle), ...changements };
+    for (const [k, v] of Object.entries(suivant)) if (v === null || v === undefined) delete suivant[k];
+    this.donnees = { ...this.donnees, [cle]: suivant };
+    await Depot.ecrire('reglagesPaquets', this.donnees);
+  },
+};
+
+/** Note une réponse selon le rythme et l'évaluation propres au paquet. */
+function appliquerReglages(etat, reussi, jour, paquet) {
+  const reglage = ReglagesPaquet.de(paquet);
+  return Leitner.appliquer(etat, reussi, jour, reglage.intervalles, ReglagesPaquet.evaluation(paquet, jour));
+}
+
+/**
+ * Passages prévus d'une carte découverte aujourd'hui et toujours réussie,
+ * jusqu'à l'évaluation (ou sur deux mois sans évaluation).
+ */
+function calendrierCarte(intervalles, jour, dateEvaluation) {
+  const fin = dateEvaluation || Dates.ajouter(jour, 60);
+  const passages = [jour];
+  let etat = { ...nouvelleCarte('simulation') };
+  let date = jour;
+  for (let i = 0; i < 40; i += 1) {
+    etat = Leitner.appliquer(etat, true, date, intervalles, dateEvaluation);
+    if (etat.echeance >= fin) break;
+    date = etat.echeance;
+    passages.push(date);
+  }
+  return { passages, fin };
+}
+
+/* ---------- Bibliothèque personnelle ---------- */
+
+const Bibliotheque = {
+  /** Clés des paquets ajoutés (intégrés ou publiés par un enseignant). */
+  adoptes: null,
+
+  async charger() {
+    const stocke = await Depot.lire('bibliotheque');
+    this.adoptes = stocke && Array.isArray(stocke.paquets) ? stocke.paquets : null;
+  },
+
+  /** Tant que l'élève n'a rien choisi : les paquets intégrés de son niveau. */
+  cles() {
+    if (this.adoptes) return this.adoptes;
+    return Paquets.liste.filter((p) => p.origine === 'integre'
+      && (!Profil.niveau || p.niveaux.includes(Profil.niveau))).map((p) => p.cle);
+  },
+
+  contient(cle) {
+    const paquet = Paquets.get(cle);
+    if (paquet && paquet.proprietaire) return true;
+    return this.cles().includes(cle);
+  },
+
+  /** Paquets de la bibliothèque, ses propres paquets en tête. */
+  paquets() {
+    const miens = Paquets.liste.filter((p) => p.proprietaire);
+    const adoptes = this.cles().map((cle) => Paquets.get(cle)).filter((p) => p && !p.proprietaire);
+    return [...miens, ...adoptes];
+  },
+
+  async enregistrer(cles) {
+    this.adoptes = [...new Set(cles)];
+    await Depot.ecrire('bibliotheque', { paquets: this.adoptes });
+  },
+
+  async ajouter(cle) {
+    await this.enregistrer([...this.cles(), cle]);
+  },
+
+  async retirer(cle) {
+    await this.enregistrer(this.cles().filter((c) => c !== cle));
+  },
+};
+
+/* ---------- Modèles de cartes ---------- */
+
+const MODELES = {
+  simple: {
+    titre: 'Question → réponse',
+    resume: 'La carte classique : on se pose la question, on retourne.',
+    icone: 'Q→R',
+  },
+  double: {
+    titre: 'Dans les deux sens',
+    resume: 'Deux cartes en une : mot ↔ définition, nom ↔ formule.',
+    icone: 'A⇄B',
+  },
+  qcm: {
+    titre: 'QCM',
+    resume: 'Une bonne réponse et trois pièges que tu choisis.',
+    icone: 'ABCD',
+  },
+  saisie: {
+    titre: 'Réponse à écrire',
+    resume: 'Il faudra taper la réponse exacte : un mot, un nombre.',
+    icone: 'Aa_',
+  },
+  masques: {
+    titre: 'Photo à trous',
+    resume: 'Photographie ta fiche, cache des zones : une carte par zone.',
+    icone: '▦?',
+  },
+};
+
+const COULEURS_PAQUET = ['#1B2A4A', '#E8792E', '#3FA9F5', '#2E9E6A', '#8A4FD8', '#D64570', '#C9A227', '#56647D'];
+
+function texteCourt(valeur, max) {
+  return String(valeur ?? '').replace(/\r\n/g, '\n').trim().slice(0, max);
+}
+
+/** Nettoie le contenu d'une carte avant envoi : rien d'autre que les champs prévus. */
+function nettoyerContenu(modele, source) {
+  const contenu = {
+    recto: texteCourt(source.recto, 1000),
+    verso: texteCourt(source.verso, 1500),
+    aide: texteCourt(source.aide, 600),
+  };
+  for (const cle of ['photoRecto', 'photoVerso', 'photo']) {
+    if (typeof source[cle] === 'string' && source[cle]) contenu[cle] = source[cle].slice(0, 200);
+  }
+  if (modele === 'qcm') {
+    contenu.faux = (source.faux || []).map((f) => texteCourt(f, 200)).filter(Boolean).slice(0, 5);
+  }
+  if (modele === 'saisie') {
+    contenu.acceptees = (source.acceptees || []).map((f) => texteCourt(f, 200)).filter(Boolean).slice(0, 10);
+  }
+  if (modele === 'masques') {
+    const borne = (v) => Math.min(1, Math.max(0, Math.round(Number(v) * 10000) / 10000));
+    contenu.zones = (source.zones || []).slice(0, 40).map((z) => ({ x: borne(z.x), y: borne(z.y), l: borne(z.l), h: borne(z.h) }))
+      .filter((z) => z.l > 0.005 && z.h > 0.005);
+  }
+  return contenu;
+}
+
+/** Photos référencées par une ligne de carte. */
+function photosDeLigne(ligne) {
+  const c = ligne.contenu || {};
+  return [c.photoRecto, c.photoVerso, c.photo].filter(Boolean);
+}
+
+/** Une ligne leitner_cartes → une ou plusieurs cartes de révision. */
+function cartesDeLigne(ligne) {
+  const c = ligne.contenu || {};
+  const commun = { source: ligne.id, aide: c.aide || null };
+  const courte = (texte) => Boolean(texte) && texte.length <= 90 && !texte.includes('\n');
+  const formatsTexte = (reponse, photo) => (courte(reponse) && !photo ? ['retournement', 'qcm'] : ['retournement']);
+
+  switch (ligne.modele) {
+    case 'double':
+      return [
+        { ...commun, id: ligne.id, question: c.recto, reponse: c.verso, photoQuestion: c.photoRecto,
+          photoReponse: c.photoVerso, formats: formatsTexte(c.verso, c.photoVerso) },
+        { ...commun, id: `${ligne.id}~inverse`, question: c.verso, reponse: c.recto, photoQuestion: c.photoVerso,
+          photoReponse: c.photoRecto, formats: formatsTexte(c.recto, c.photoRecto), inverse: true },
+      ];
+    case 'qcm':
+      return [{ ...commun, id: ligne.id, question: c.recto, reponse: c.verso, photoQuestion: c.photoRecto,
+        distracteurs: c.faux || [], formats: ['qcm', 'retournement'] }];
+    case 'saisie': {
+      const nombre = nombreSaisi(c.verso);
+      const carte = { ...commun, id: ligne.id, question: c.recto, reponse: c.verso, photoQuestion: c.photoRecto,
+        saisie: c.acceptees || [], formats: ['saisie', 'retournement'] };
+      if (nombre !== null && !(c.acceptees || []).length) carte.nombre = nombre;
+      return [carte];
+    }
+    case 'masques':
+      return (c.zones || []).map((zone, index) => ({
+        ...commun,
+        id: `${ligne.id}#${index}`,
+        question: c.recto || '',
+        reponse: '',
+        masque: { photo: c.photo, zones: c.zones, index },
+        formats: ['retournement'],
+      }));
+    default:
+      return [{ ...commun, id: ligne.id, question: c.recto, reponse: c.verso, photoQuestion: c.photoRecto,
+        photoReponse: c.photoVerso, formats: formatsTexte(c.verso, c.photoVerso) }];
+  }
+}
+
+/** Le QCM a besoin d'au moins trois pièges : ceux de la carte, sinon le paquet. */
+function convertirPaquet(ligne, lignesCartes, { origine, proprietaire }) {
+  const cartes = lignesCartes
+    .filter((c) => c.paquet_id === ligne.id)
+    .sort((a, b) => a.ordre - b.ordre || a.cree_le.localeCompare(b.cree_le))
+    .flatMap(cartesDeLigne)
+    .map((carte) => ({ ...carte, qcm: carte.formats.includes('qcm') }));
+  const reglages = ligne.reglages || {};
+  return {
+    cle: `p:${ligne.id}`,
+    id: ligne.id,
+    titre: ligne.titre,
+    resume: ligne.description || '',
+    theme: ligne.theme || '',
+    couleur: ligne.couleur || '',
+    niveaux: ligne.niveaux || [],
+    public: ligne.public,
+    auteur: ligne.auteur,
+    origine,
+    proprietaire,
+    intervalles: intervallesValides(reglages.intervalles) || INTERVALLES_CONTENU,
+    maj: ligne.maj_le,
+    sections: [{ cle: 'cartes', titre: 'Toutes les cartes', consigne: null, cartes }],
+  };
+}
+
+/* ---------- Paquets en ligne ---------- */
+
+const COLONNES_PAQUET = 'id,auteur,titre,theme,description,couleur,public,niveaux,reglages,cree_le,maj_le';
+const COLONNES_CARTE = 'id,paquet_id,auteur,modele,contenu,ordre,cree_le,maj_le';
+
+const Perso = {
+  /** Réinscrit dans Paquets les paquets en ligne de la copie locale. */
+  inscrire() {
+    for (const paquet of [...Paquets.liste]) if (paquet.origine !== 'integre') Paquets.retirer(paquet.cle);
+    const { paquets, cartes, publics, cartesPubliques } = Depot.contenu;
+    const uid = Depot.uid;
+    for (const ligne of paquets) {
+      Paquets.inscrire(convertirPaquet(ligne, cartes, { origine: ligne.public ? 'prof' : 'perso', proprietaire: true }));
+    }
+    for (const ligne of publics) {
+      if (ligne.auteur === uid) continue;
+      Paquets.inscrire(convertirPaquet(ligne, cartesPubliques, { origine: 'prof', proprietaire: false }));
+    }
+  },
+
+  /** Récupère ses paquets et ceux de la bibliothèque commune qu'on a ajoutés. */
+  async synchroniser() {
+    if (!Depot.uid) return;
+    const uid = Depot.uid;
+    const adoptes = Bibliotheque.cles().filter((c) => c.startsWith('p:')).map((c) => c.slice(2))
+      .filter((id) => /^[0-9a-f-]{36}$/.test(id));
+    const [paquets, cartes] = await Promise.all([
+      Nuage.tout(`leitner_paquets?select=${COLONNES_PAQUET}&auteur=eq.${uid}&order=cree_le`),
+      Nuage.tout(`leitner_cartes?select=${COLONNES_CARTE}&auteur=eq.${uid}&order=ordre,cree_le`),
+    ]);
+    let publics = [];
+    let cartesPubliques = [];
+    if (adoptes.length) {
+      const liste = adoptes.join(',');
+      [publics, cartesPubliques] = await Promise.all([
+        Nuage.tout(`leitner_paquets?select=${COLONNES_PAQUET}&public=eq.true&id=in.(${liste})`),
+        Nuage.tout(`leitner_cartes?select=${COLONNES_CARTE}&paquet_id=in.(${liste})&order=ordre,cree_le`),
+      ]);
+    }
+    if (Depot.uid !== uid) return;
+    await Depot.enregistrerContenu({ paquets, cartes, publics, cartesPubliques });
+    this.inscrire();
+  },
+
+  /** Paquets publiés par les enseignants, avec leur nombre de cartes. */
+  async catalogue() {
+    return Nuage.tout(`leitner_paquets?select=${COLONNES_PAQUET},leitner_cartes(count)&public=eq.true&order=theme,titre`);
+  },
+
+  /** Aperçu des cartes d'un paquet public, avant de l'ajouter. */
+  async cartesPubliques(id) {
+    return Nuage.tout(`leitner_cartes?select=${COLONNES_CARTE}&paquet_id=eq.${id}&order=ordre,cree_le`);
+  },
+
+  ligne(id) {
+    return Depot.contenu.paquets.find((p) => p.id === id) || null;
+  },
+
+  lignesCartes(paquetId) {
+    return Depot.contenu.cartes
+      .filter((c) => c.paquet_id === paquetId)
+      .sort((a, b) => a.ordre - b.ordre || a.cree_le.localeCompare(b.cree_le));
+  },
+
+  themes() {
+    const themes = new Set(Paquets.liste.map((p) => p.theme).filter(Boolean));
+    return [...themes].sort(comparerFr);
+  },
+
+  /* Chaque écriture met à jour la copie locale à partir de la réponse du
+   * serveur : on n'affiche que ce qui a vraiment été enregistré. */
+
+  async enregistrerPaquet(id, donnees) {
+    const corps = {
+      titre: texteCourt(donnees.titre, 80) || 'Sans titre',
+      theme: texteCourt(donnees.theme, 60),
+      description: texteCourt(donnees.description, 400),
+      couleur: COULEURS_PAQUET.includes(donnees.couleur) ? donnees.couleur : '',
+      public: Boolean(donnees.public && Nuage.compte() && Nuage.compte().prof),
+      niveaux: (donnees.niveaux || []).filter((n) => NIVEAUX.some(([v]) => v === n)),
+    };
+    if (donnees.intervalles !== undefined) {
+      corps.reglages = donnees.intervalles ? { intervalles: intervallesValides(donnees.intervalles) } : {};
+    }
+    const contenu = Depot.contenu;
+    let ligne;
+    if (id) {
+      [ligne] = await Nuage.api(`leitner_paquets?id=eq.${id}&select=${COLONNES_PAQUET}`, {
+        method: 'PATCH', corps, prefer: 'return=representation',
+      });
+      contenu.paquets = contenu.paquets.map((p) => (p.id === id ? ligne : p));
+    } else {
+      [ligne] = await Nuage.api(`leitner_paquets?select=${COLONNES_PAQUET}`, {
+        method: 'POST', corps: { ...corps, auteur: Depot.uid }, prefer: 'return=representation',
+      });
+      contenu.paquets = [...contenu.paquets, ligne];
+    }
+    await Depot.enregistrerContenu(contenu);
+    this.inscrire();
+    return ligne;
+  },
+
+  async supprimerPaquet(id) {
+    const photos = this.lignesCartes(id).flatMap(photosDeLigne);
+    await Nuage.api(`leitner_paquets?id=eq.${id}`, { method: 'DELETE', prefer: 'return=minimal' });
+    const contenu = Depot.contenu;
+    contenu.paquets = contenu.paquets.filter((p) => p.id !== id);
+    contenu.cartes = contenu.cartes.filter((c) => c.paquet_id !== id);
+    await Depot.enregistrerContenu(contenu);
+    await Photos.supprimer(photos);
+    this.inscrire();
+  },
+
+  async enregistrerCarte(paquetId, id, modele, source) {
+    const contenu = nettoyerContenu(modele, source);
+    const store = Depot.contenu;
+    let ligne;
+    if (id) {
+      const avant = store.cartes.find((c) => c.id === id);
+      [ligne] = await Nuage.api(`leitner_cartes?id=eq.${id}&select=${COLONNES_CARTE}`, {
+        method: 'PATCH', corps: { modele, contenu }, prefer: 'return=representation',
+      });
+      store.cartes = store.cartes.map((c) => (c.id === id ? ligne : c));
+      // Photos remplacées ou retirées : on libère la place.
+      if (avant) {
+        const gardees = new Set(photosDeLigne(ligne));
+        await Photos.supprimer(photosDeLigne(avant).filter((p) => !gardees.has(p)));
+      }
+    } else {
+      const ordre = this.lignesCartes(paquetId).reduce((m, c) => Math.max(m, c.ordre), 0) + 1;
+      [ligne] = await Nuage.api(`leitner_cartes?select=${COLONNES_CARTE}`, {
+        method: 'POST', corps: { paquet_id: paquetId, auteur: Depot.uid, modele, contenu, ordre }, prefer: 'return=representation',
+      });
+      store.cartes = [...store.cartes, ligne];
+    }
+    await Depot.enregistrerContenu(store);
+    this.inscrire();
+    return ligne;
+  },
+
+  /** Création en lot (import de texte). */
+  async creerCartes(paquetId, liste) {
+    const store = Depot.contenu;
+    let ordre = this.lignesCartes(paquetId).reduce((m, c) => Math.max(m, c.ordre), 0);
+    const corps = liste.map(({ modele, contenu }) => {
+      ordre += 1;
+      return { paquet_id: paquetId, auteur: Depot.uid, modele, contenu: nettoyerContenu(modele, contenu), ordre };
+    });
+    const lignes = [];
+    for (let i = 0; i < corps.length; i += 200) {
+      lignes.push(...await Nuage.api(`leitner_cartes?select=${COLONNES_CARTE}`, {
+        method: 'POST', corps: corps.slice(i, i + 200), prefer: 'return=representation',
+      }));
+    }
+    store.cartes = [...store.cartes, ...lignes];
+    await Depot.enregistrerContenu(store);
+    this.inscrire();
+    return lignes.length;
+  },
+
+  async supprimerCarte(id) {
+    const store = Depot.contenu;
+    const ligne = store.cartes.find((c) => c.id === id);
+    await Nuage.api(`leitner_cartes?id=eq.${id}`, { method: 'DELETE', prefer: 'return=minimal' });
+    store.cartes = store.cartes.filter((c) => c.id !== id);
+    await Depot.enregistrerContenu(store);
+    if (ligne) await Photos.supprimer(photosDeLigne(ligne));
+    this.inscrire();
+  },
+};
+
 // ---- 40-navigation.js ----
 /* Navigation par ancre (#/ecran/parametre) et composants partagés.
  *
@@ -2586,9 +4171,10 @@ async function afficher() {
   retour.hidden = !parent;
   if (parent) {
     retour.textContent = `‹ ${ecran.libelleRetour || Ecrans[parent].titreCourt}`;
-    retour.onclick = () => (ecran.surRetour ? ecran.surRetour() : aller(parent));
+    retour.onclick = () => (ecran.surRetour ? ecran.surRetour(param) : aller(parent));
   }
 
+  majPied();
   window.scrollTo(0, 0);
   try {
     await ecran.rendre(zone, param);
@@ -2717,26 +4303,23 @@ function afficherChoixPorte() {
     afficher();
   };
 
-  const paquets = Paquets.liste.length;
-  const cartes = Paquets.liste.reduce((somme, p) => somme + p.cartes.length, 0);
-
   zone.append(el('div', { class: 'pile portes' },
     el('p', { class: 'discret', text: 'Cette application sert à deux usages. Choisissez votre entrée ; '
       + 'elle sera retenue pour les prochaines ouvertures.' }),
 
-    boutonMenu('Espace enseignant',
-      'Trombinoscope, import de PDF, tableau de bord · protégé par mot de passe',
-      () => entrer('prof'), 'principal'),
+    boutonMenu('Mes flashcards',
+      'Élèves et enseignants · créer ses cartes, la bibliothèque du prof, la boîte de Leitner',
+      () => entrer('eleve'), 'principal'),
 
-    boutonMenu('Espace élève',
-      `${pluriel(paquets, 'paquet')} de révision · ${pluriel(cartes, 'carte')} · sans mot de passe`,
-      () => entrer('eleve')),
+    boutonMenu('Trombinoscope (enseignant)',
+      'Reconnaître ses élèves · import de PDF · protégé par mot de passe, reste sur cet appareil',
+      () => entrer('prof')),
 
     el('section', { class: 'panneau pile' },
       el('h2', { text: 'Pourquoi deux entrées ?' }),
-      el('p', { text: 'L’espace enseignant contient des photos d’élèves : elles sont chiffrées et '
-        + 'ne s’ouvrent qu’avec le mot de passe. L’espace élève ne contient que des cartes de cours '
-        + 'et la progression de celui qui révise, sans aucune donnée personnelle.' }),
+      el('p', { text: 'Le trombinoscope contient des photos d’élèves : elles sont chiffrées, '
+        + 'ne s’ouvrent qu’avec le mot de passe et ne quittent jamais cet appareil. Les flashcards '
+        + 'se sauvegardent dans le compte du site du cours, sous un simple identifiant.' }),
       el('p', { class: 'discret', text: 'Passer par l’espace élève ne donne donc aucun accès au '
         + 'trombinoscope, même sur la tablette de l’enseignant.' }))));
 }
@@ -2775,14 +4358,25 @@ function estimerDuree(nombreCartes, secondesParCarte = null) {
 }
 
 const Leitner = {
-  /** Résultat d'une réponse notée. Fonction pure. */
-  appliquer(carte, reussi, jour, intervalles = INTERVALLES) {
+  /**
+   * Résultat d'une réponse notée. Fonction pure.
+   *
+   * dateEvaluation : tant qu'elle n'est pas passée, aucune carte n'est
+   * repoussée au-delà de la veille. Le rythme normal reprend ensuite.
+   */
+  appliquer(carte, reussi, jour, intervalles = INTERVALLES, dateEvaluation = null) {
     const compartiment = reussi ? Math.min(5, carte.compartiment + 1) : 1;
+    let echeance = Dates.ajouter(jour, intervalles[compartiment - 1]);
+    if (dateEvaluation && jour < dateEvaluation) {
+      const veille = Dates.ajouter(dateEvaluation, -1);
+      const auPlusTard = veille > jour ? veille : Dates.ajouter(jour, 1);
+      if (echeance > auPlusTard) echeance = auPlusTard;
+    }
     return {
       ...carte,
       compartiment,
       introduite: carte.introduite ?? jour,
-      echeance: Dates.ajouter(jour, intervalles[compartiment - 1]),
+      echeance,
       passages: carte.passages + 1,
       reussites: carte.reussites + (reussi ? 1 : 0),
       dernierPassage: jour,
@@ -3328,9 +4922,6 @@ function rendreFinDeSerie(zone) {
  * et l'écrire ne sollicitent pas la même mémoire.
  */
 
-/** Section choisie pour chaque paquet, le temps de la visite. */
-const SectionsChoisies = new Map();
-
 function texteCarte(texte, classe) {
   return formuleChimique(String(texte ?? ''), classe);
 }
@@ -3345,6 +4936,12 @@ function etiquetteSection(paquet, cleSection) {
 function consigneDe(paquet, element) {
   const carte = Paquets.index.get(element.id);
   const section = Paquets.section(paquet, carte.section);
+  if (carte.masque) return 'Que cache la zone orange ?';
+  if (paquet.origine !== 'integre') {
+    if (element.format === 'qcm') return 'Choisis la bonne réponse.';
+    if (element.format === 'saisie') return 'Écris la réponse.';
+    return 'Réponds de tête, puis retourne la carte.';
+  }
   if (!section) return 'Que répondez-vous ?';
   if (element.format === 'qcm' && section.consigneQcm) return section.consigneQcm;
   return section.consigne || 'Que répondez-vous ?';
@@ -3362,132 +4959,7 @@ function barreCompartiments(repartition) {
   return barre;
 }
 
-function tuilePaquet(paquet) {
-  const jour = Dates.aujourdhui();
-  const bilan = SessionContenu.bilan(paquet, null, jour);
-  const repartition = Progression.repartition(paquet.cartes);
-  const aFaire = bilan.dues.length + bilan.nouvellesDuJour;
-  const detail = aFaire
-    ? `${pluriel(bilan.dues.length, 'carte due', 'cartes dues')} · ${pluriel(bilan.nouvellesDuJour, 'nouvelle')} · ${estimerDuree(aFaire, Journal.secondesParCarte())}`
-    : `Rien à revoir aujourd’hui · ${repartition.acquises} / ${repartition.total} acquises`;
-
-  return el('div', { class: 'pile serree' },
-    boutonMenu(paquet.titre, detail, () => aller('paquet', paquet.cle), aFaire ? 'principal' : ''),
-    barreCompartiments(repartition));
-}
-
-Ecrans.paquets = {
-  titre: 'Paquets de révision',
-  titreCourt: 'Paquets',
-  parent: () => Porte.accueil(),
-  porte: 'tous',
-  rendre(zone) {
-    const pile = el('div', { class: 'pile' });
-    zone.append(pile);
-
-    pile.append(boutonMenu('Progression et statistiques',
-      Journal.total().vues
-        ? `${pluriel(Journal.serie(), 'jour')} d’affilée · ${pluriel(Journal.total().vues, 'carte vue', 'cartes vues')} en tout`
-        : 'Régularité, avancement, points faibles',
-      () => aller('statistiques')));
-
-    const niveau = Porte.courante === 'eleve' ? Profil.niveau : null;
-    const monNiveau = Paquets.pourNiveau(niveau);
-    const autres = Paquets.liste.filter((p) => !monNiveau.includes(p));
-
-    if (niveau) {
-      pile.append(el('h2', { text: `Pour la ${nomNiveau(niveau).toLowerCase()}` }));
-    }
-    pile.append(...monNiveau.map(tuilePaquet));
-
-    if (autres.length) {
-      pile.append(el('details', { class: 'panneau' },
-        el('summary', { text: `Autres paquets (${autres.length})` }),
-        el('div', { class: 'pile' },
-          el('p', { class: 'discret', text: 'Ces paquets visent un autre niveau. Rien n’empêche de les ouvrir.' }),
-          ...autres.map(tuilePaquet))));
-    }
-  },
-};
-
-/* ---------- Un paquet ---------- */
-
-Ecrans.paquet = {
-  titre: 'Paquet',
-  titreCourt: 'Paquet',
-  parent: 'paquets',
-  porte: 'tous',
-  rendre(zone, cle) {
-    const paquet = Paquets.get(cle);
-    if (!paquet) {
-      zone.append(el('p', { text: 'Paquet introuvable.' }));
-      return;
-    }
-    definirTitre(paquet.titre);
-
-    const pile = el('div', { class: 'pile' });
-    const infos = el('div', { class: 'pile' });
-    zone.append(pile);
-
-    const majInfos = () => {
-      const section = SectionsChoisies.get(cle) || null;
-      const cartes = Paquets.cartesDe(paquet, section);
-      const jour = Dates.aujourdhui();
-      const bilan = SessionContenu.bilan(paquet, section, jour);
-      const repartition = Progression.repartition(cartes);
-      const aFaire = bilan.dues.length + bilan.nouvellesDuJour;
-      const formats = Paquets.formatsCommuns(cartes);
-      if (!formats.includes(Profil.donnees.format)) {
-        Profil.enregistrer({ format: formats[0] });
-      }
-
-      infos.replaceChildren(
-        el('div', { class: 'chiffres' },
-          chiffre(bilan.dues.length, bilan.enRetard ? `dues, dont ${bilan.enRetard} en retard` : 'cartes dues'),
-          chiffre(bilan.nouvellesDuJour, bilan.nouvellesDuJour > 1 ? 'nouvelles' : 'nouvelle'),
-          chiffre(`${repartition.acquises} / ${repartition.total}`, 'acquises')),
-        barreCompartiments(repartition),
-        el('h2', { text: 'Format' }),
-        selecteur(formats.map((f) => [f, FORMATS[f]]), Profil.donnees.format, async (format) => {
-          await Profil.enregistrer({ format });
-        }, 'Format de révision'));
-
-      if (aFaire) {
-        infos.append(
-          el('p', { class: 'discret', text: `${estimerDuree(aFaire, Journal.secondesParCarte())} pour la séance du jour, `
-            + `par séries de ${Profil.donnees.tailleSession} cartes.` }),
-          el('button', {
-            type: 'button',
-            class: 'bouton principal bloc grand',
-            onclick: () => lancerContenu({ paquet, section, format: Profil.donnees.format, type: 'jour' }),
-          }, 'Commencer la séance du jour'));
-      } else {
-        infos.append(el('div', { class: 'panneau' },
-          el('p', { text: 'Rien à revoir aujourd’hui dans cette sélection. Les cartes reviendront '
-            + 'd’elles-mêmes à leur échéance.' })));
-      }
-      infos.append(
-        el('button', {
-          type: 'button',
-          class: `bouton bloc grand ${aFaire ? '' : 'principal'}`,
-          onclick: () => lancerContenu({ paquet, section, format: Profil.donnees.format, type: 'libre' }),
-        }, 'S’entraîner librement'),
-        el('p', { class: 'discret', text: 'En entraînement libre, seules les cartes réellement dues '
-          + 'font avancer les compartiments.' }));
-    };
-
-    const sections = [[null, 'Tout le paquet'], ...paquet.sections.map((s) => [s.cle, s.titre])];
-    pile.append(
-      el('p', { text: paquet.resume }),
-      el('h2', { text: 'Sélection' }),
-      selecteur(sections.map(([v, l]) => [v ?? '', l]), SectionsChoisies.get(cle) ?? '', (valeur) => {
-        SectionsChoisies.set(cle, valeur || null);
-        majInfos();
-      }, 'Partie du paquet à réviser'),
-      infos);
-    majInfos();
-  },
-};
+/* La bibliothèque et l'écran d'un paquet sont dans 84-bibliotheque-ecrans.js. */
 
 function lancerContenu(options) {
   const nombre = SessionContenu.demarrer(options);
@@ -3548,9 +5020,10 @@ function rendreCarteContenu(zone, element) {
     entete,
     el('div', { class: 'carte-revision' }, scene, panneau)));
 
-  scene.append(
-    el('p', { class: 'consigne', text: consigneDe(s.paquet, element) }),
-    texteCarte(enonce.question, 'enonce'));
+  scene.append(el('p', { class: 'consigne', text: consigneDe(s.paquet, element) }));
+  if (enonce.question) scene.append(texteCarte(enonce.question, String(enonce.question).length > 90 ? 'enonce long' : 'enonce'));
+  if (carte.masque) scene.append(figureMasque(carte.masque, false));
+  else if (carte.photoQuestion) scene.append(photoZoomable(carte.photoQuestion));
   if (s.paquet.chrono) scene.append(chronometre(element.debut));
 
   if (element.format === 'qcm') formatQcm(carte, enonce, element, panneau);
@@ -3572,9 +5045,42 @@ function chronometre(debut) {
 }
 
 function blocReponse(carte, enonce) {
-  return el('div', { class: 'pile serree' },
-    el('div', { class: 'reponse' }, texteCarte(enonce.reponse, 'reponse-texte')),
+  return el('div', { class: 'pile serree apparition' },
+    enonce.reponse && el('div', { class: 'reponse' }, texteCarte(enonce.reponse, 'reponse-texte')),
+    carte.photoReponse && photoZoomable(carte.photoReponse),
     carte.aide && el('p', { class: 'discret aide' }, texteCarte(carte.aide)));
+}
+
+/** Photo d'une carte ; un toucher l'agrandit en plein écran. */
+function photoZoomable(chemin) {
+  const image = Photos.image(chemin, 'photo-carte');
+  image.addEventListener('click', () => agrandirPhoto(image.src));
+  return image;
+}
+
+function agrandirPhoto(src) {
+  if (!src) return;
+  const fermer = () => voile.remove();
+  const voile = el('div', { class: 'voile-photo', role: 'dialog', 'aria-label': 'Photo agrandie', onclick: fermer },
+    el('img', { src, alt: 'Photo agrandie' }),
+    el('button', { type: 'button', class: 'bouton', onclick: fermer }, 'Fermer'));
+  document.body.append(voile);
+}
+
+/**
+ * Photo à trous. Toutes les zones restent cachées ; la zone interrogée est
+ * en orange, et révélée au retournement.
+ */
+function figureMasque(masque, revele) {
+  const cadre = el('div', { class: 'masque-cadre' }, Photos.image(masque.photo, 'masque-photo'));
+  masque.zones.forEach((zone, i) => {
+    const cible = i === masque.index;
+    cadre.append(el('span', {
+      class: `masque-zone ${cible ? (revele ? 'revelee' : 'cible') : 'autre'}`,
+      style: `left:${zone.x * 100}%;top:${zone.y * 100}%;width:${zone.l * 100}%;height:${zone.h * 100}%`,
+    }, cible && !revele ? '?' : ''));
+  });
+  return cadre;
 }
 
 async function repondreContenu(reussi) {
@@ -3586,6 +5092,9 @@ async function repondreContenu(reussi) {
 /* Format 1 : on se représente la réponse, on retourne, on s'auto-évalue. */
 function formatRetournement(carte, enonce, panneau) {
   const retourner = () => {
+    // Photo à trous : la zone se dévoile sur place, sans dupliquer la photo.
+    const cadre = carte.masque && document.querySelector('.scene .masque-cadre');
+    if (cadre) cadre.replaceWith(figureMasque(carte.masque, true));
     panneau.replaceChildren(blocReponse(carte, enonce), boutonsAutoEvaluation(repondreContenu));
   };
   panneau.append(el('button', {
@@ -3725,7 +5234,7 @@ async function corrigerDerniereReponse() {
   // On rejoue la notation depuis l'état d'avant la réponse, pas depuis l'état
   // déjà rétrogradé au compartiment 1.
   if (precedent.compte && precedent.etatAvant) {
-    await Progression.enregistrer(Leitner.appliquer(precedent.etatAvant, true, s.jour, s.paquet.intervalles));
+    await Progression.enregistrer(appliquerReglages(precedent.etatAvant, true, s.jour, s.paquet));
   }
   // La reprise ajoutée en fin de file n'a plus lieu d'être.
   const reprise = s.file.findIndex((e, i) => i >= s.position && e.id === precedent.id && e.reprise);
@@ -3808,7 +5317,7 @@ function rendreFinDeSerieContenu(zone) {
 
 /** Paquets du niveau de l'élève, plus tous ceux qu'il a déjà entamés. */
 function paquetsSuivis() {
-  const attendus = Porte.courante === 'eleve' ? Paquets.pourNiveau(Profil.niveau) : Paquets.liste;
+  const attendus = Porte.courante === 'eleve' ? Bibliotheque.paquets() : Paquets.liste;
   const entames = Paquets.liste.filter((p) => p.cartes.some((c) => Progression.cartes.has(c.id)));
   return Paquets.liste.filter((p) => attendus.includes(p) || entames.includes(p));
 }
@@ -5444,7 +6953,7 @@ function bilanGlobalEleve() {
   const jour = Dates.aujourdhui();
   let dues = 0;
   let nouvelles = 0;
-  for (const paquet of Paquets.pourNiveau(Profil.niveau)) {
+  for (const paquet of Bibliotheque.paquets()) {
     const bilan = SessionContenu.bilan(paquet, null, jour);
     dues += bilan.dues.length;
     nouvelles += bilan.nouvellesDuJour;
@@ -5476,9 +6985,10 @@ function formulaireProfil(surValidation) {
   let niveau = Profil.niveau;
   const erreur = el('p', { class: 'erreur', role: 'alert' });
 
+  const connecte = Boolean(Nuage.compte());
   const formulaire = el('form', { class: 'panneau pile' },
-    el('h2', { text: Profil.defini() ? 'Mon profil' : 'Avant de commencer' }),
-    champ('Comment veux-tu être appelé ?', pseudo, 'Facultatif. Rien n’est envoyé nulle part.'),
+    el('h2', { text: Profil.defini() ? 'Ma classe' : 'Avant de commencer' }),
+    !connecte && champ('Comment veux-tu être appelé ?', pseudo, 'Facultatif. Rien n’est envoyé nulle part.'),
     el('div', { class: 'champ' },
       el('span', { class: 'champ-libelle', text: 'Ta classe' }),
       selecteurNiveau(niveau, (valeur) => { niveau = valeur; }),
@@ -5493,7 +7003,7 @@ function formulaireProfil(surValidation) {
       erreur.textContent = 'Choisis ta classe pour continuer.';
       return;
     }
-    await Profil.enregistrer({ pseudo: pseudo.value.trim().slice(0, 30), niveau });
+    await Profil.enregistrer({ pseudo: connecte ? Nuage.compte().pseudo : pseudo.value.trim().slice(0, 30), niveau });
     surValidation();
   });
   return formulaire;
@@ -5507,10 +7017,15 @@ Ecrans['accueil-eleve'] = {
   parent: null,
   porte: 'eleve',
   rendre(zone) {
+    if (!Depot.uid && !ModeLocal.actif) {
+      ecranConnexion(zone);
+      return;
+    }
     const pile = el('div', { class: 'pile' });
     zone.append(pile);
+    const compte = Nuage.compte();
 
-    if (!Profil.defini()) {
+    if (!Profil.defini() && !(compte && compte.prof)) {
       pile.append(
         el('p', { text: 'Ces cartes servent à retenir durablement : chaque notion revient juste '
           + 'avant que tu l’oublies, de plus en plus espacée.' }),
@@ -5519,20 +7034,36 @@ Ecrans['accueil-eleve'] = {
     }
 
     const { dues, nouvelles, total } = bilanGlobalEleve();
-    const pseudo = Profil.donnees.pseudo;
-    definirTitre(pseudo ? `Bonjour ${pseudo}` : NOM_APP);
+    const nom = compte ? (compte.prof ? (compte.libelle || compte.identifiant) : compte.pseudo) : Profil.donnees.pseudo;
+    definirTitre(nom ? `Bonjour ${nom}` : NOM_APP);
 
+    const paquets = Bibliotheque.paquets();
+    const miens = paquets.filter((p) => p.proprietaire).length;
     const detail = total
       ? `${pluriel(dues, 'carte due', 'cartes dues')} · ${pluriel(nouvelles, 'nouvelle')} · ${estimerDuree(total, Journal.secondesParCarte())}`
       : 'Tout est à jour pour aujourd’hui';
+    const evaluations = paquets
+      .map((p) => ({ p, date: ReglagesPaquet.evaluation(p) }))
+      .filter((e) => e.date)
+      .sort((a, b) => a.date.localeCompare(b.date));
 
     pile.append(
-      el('p', { class: 'discret', text: `${nomNiveau(Profil.niveau)} · ${pluriel(Paquets.pourNiveau(Profil.niveau).length, 'paquet')} à ton niveau` }),
+      el('p', { class: 'discret', text: [compte && compte.prof ? 'Compte enseignant' : ((compte && compte.classe) || nomNiveau(Profil.niveau)),
+        `${pluriel(paquets.length, 'paquet')} dans ta bibliothèque`].filter(Boolean).join(' · ') }),
+      evaluations.length ? el('div', { class: 'alerte pile serree' }, ...evaluations.slice(0, 3).map(({ p, date }) => {
+        const jours = Dates.ecart(Dates.aujourdhui(), date);
+        return el('p', {}, el('strong', { text: jours === 1 ? 'Demain' : `Dans ${jours} jours` }), ` : évaluation sur « ${p.titre} ».`);
+      })) : null,
       boutonMenu('Réviser', detail, () => aller('paquets'), total ? 'principal' : ''),
+      Depot.uid ? boutonMenu('Créer un paquet de cartes', miens
+        ? `${pluriel(miens, 'paquet créé', 'paquets créés')} · question/réponse, QCM, photo à trous…`
+        : 'Question/réponse, QCM, photo de ta fiche à trous…', () => aller('editer-paquet', 'nouveau'), 'accent') : null,
+      boutonMenu('Bibliothèque du prof', 'Les paquets prêts à l’emploi, à ajouter chez toi', () => aller('catalogue')),
       boutonMenu('Ma progression', serieDuJour(), () => aller('statistiques')),
-      boutonMenu('Mon profil', 'Classe, rythme de travail, remise à zéro', () => aller('profil-eleve')));
+      boutonMenu(compte ? 'Mon compte et mes réglages' : 'Mon profil', compte ? STATUTS_DEPOT[Depot.statut] : 'Classe, rythme de travail, compte',
+        () => aller('profil-eleve')));
 
-    if (!total) {
+    if (!total && paquets.length) {
       pile.append(el('div', { class: 'panneau' },
         el('p', { text: 'Rien n’est dû aujourd’hui. Tu peux quand même t’entraîner librement '
           + 'depuis un paquet : cela ne dérègle pas le calendrier.' })));
@@ -5566,6 +7097,7 @@ Ecrans['profil-eleve'] = {
     zone.append(pile);
 
     pile.append(
+      panneauCompte(),
       formulaireProfil(() => {
         annoncer('Profil enregistré.');
         afficher();
@@ -5574,7 +7106,7 @@ Ecrans['profil-eleve'] = {
       el('section', { class: 'panneau pile' },
         el('h2', { text: 'Rythme de travail' }),
         champReglageProfil('Nouvelles cartes par jour et par paquet', 'nouvellesParJour', 1, 60,
-          'Au-delà de 15, les révisions des jours suivants s’alourdissent vite.'),
+          'Valeur par défaut ; chaque paquet peut avoir la sienne dans ses réglages de révision.'),
         champReglageProfil('Cartes par série', 'tailleSession', 5, 100,
           'Un bouton « continuer » permet d’enchaîner une nouvelle série.')),
 
@@ -5582,7 +7114,7 @@ Ecrans['profil-eleve'] = {
         el('h2', { text: 'Recommencer un paquet' }),
         el('p', { class: 'discret', text: 'Efface la progression d’un paquet : toutes ses cartes '
           + 'redeviennent nouvelles. Les autres paquets ne bougent pas.' }),
-        ...Paquets.liste.map((paquet) => {
+        ...Bibliotheque.paquets().map((paquet) => {
           const repartition = Progression.repartition(paquet.cartes);
           const entamees = repartition.total - repartition.jamaisVues;
           if (!entamees) return el('p', { class: 'discret', text: `${paquet.titre} : jamais commencé.` });
@@ -5603,10 +7135,983 @@ Ecrans['profil-eleve'] = {
       el('section', { class: 'panneau pile' },
         el('h2', { text: 'Effacement' }),
         el('p', { text: 'Supprime toute la base locale de cet appareil : profil, progression, '
-          + 'et, si l’application sert aussi à un enseignant, son trombinoscope.' }),
+          + 'et, si l’application sert aussi à un enseignant, son trombinoscope. Ce qui est '
+          + 'sauvegardé dans ton compte en ligne n’est pas touché.' }),
         effacementComplet()),
 
       boutonChangerPorte());
+  },
+};
+
+// ---- 83-compte.js ----
+/* Compte en ligne : connexion, création, démarrage et synchronisation.
+ *
+ * Les élèves se connectent avec le compte du site du cours. Ceux qui n'en ont
+ * pas encore le créent ici, avec le code de classe donné par le professeur :
+ * c'est le même compte, valable ensuite sur le site.
+ */
+
+/** Sans compte : choix explicite, retenu sur l'appareil. */
+const ModeLocal = {
+  actif: false,
+
+  async charger() {
+    this.actif = Boolean(await Base.lireMeta('mode-local'));
+  },
+
+  async choisir(actif) {
+    this.actif = actif;
+    await Base.ecrireMeta('mode-local', actif);
+  },
+};
+
+/** Recharge tout ce qui dépend du dépôt (appareil ou compte). */
+async function rechargerDonnees() {
+  await Promise.all([Profil.charger(), Progression.charger(), SuiviContenu.charger(), Journal.charger(),
+    ReglagesPaquet.charger(), Bibliotheque.charger()]);
+  Perso.inscrire();
+}
+
+/** Écrans qu'une synchronisation peut redessiner sans gêner l'élève. */
+const ECRANS_RAFRAICHISSABLES = new Set(['accueil-eleve', 'paquets', 'paquet', 'statistiques', 'cartes']);
+
+let synchronisationEnCours = null;
+
+async function synchroniserTout() {
+  if (!Depot.uid) return;
+  if (synchronisationEnCours) return synchronisationEnCours;
+  synchronisationEnCours = (async () => {
+    const uid = Depot.uid;
+    try {
+      await Depot.envoyer();
+      await Depot.recevoir();
+      await Perso.synchroniser();
+      if (Depot.uid !== uid) return;
+      await rechargerDonnees();
+      Depot.relancerSiBesoin();
+      const { nom } = lireRoute();
+      if (Porte.courante === 'eleve' && !SessionContenu.active && ECRANS_RAFRAICHISSABLES.has(nom || 'accueil-eleve')) {
+        afficher();
+      }
+      Photos.precharger(Bibliotheque.paquets());
+    } catch (erreur) {
+      if (erreur.code === 'PAS_DE_SESSION') Depot.changerStatut('session');
+      else if (estHorsLigne(erreur)) Depot.changerStatut('attente');
+      else {
+        console.error(erreur);
+        Depot.changerStatut('erreur');
+      }
+    }
+  })().finally(() => { synchronisationEnCours = null; });
+  return synchronisationEnCours;
+}
+
+/** Après connexion ou création de compte. */
+async function ouvrirCompte(compte) {
+  await Depot.ouvrir(compte.uid);
+  await ModeLocal.choisir(false);
+  await rechargerDonnees();
+  await synchroniserTout();
+  // Le niveau sert à proposer les bons paquets : on le déduit de la classe.
+  if (!Profil.niveau && compte.classe) {
+    const niveau = /term/i.test(compte.classe) ? 'terminale' : /(1re|1ère|premi)/i.test(compte.classe) ? 'premiere'
+      : /(2nde|seconde|snt)/i.test(compte.classe) ? 'seconde' : null;
+    if (niveau) await Profil.enregistrer({ niveau, pseudo: compte.pseudo });
+  }
+}
+
+async function fermerCompte() {
+  await Depot.envoyer().catch(() => {});
+  if (Depot.enAttente()) {
+    annoncer('Des révisions n’ont pas encore été sauvegardées : elles partiront à ta prochaine connexion.');
+  }
+  Nuage.seDeconnecter();
+  Depot.fermer();
+  await rechargerDonnees();
+  location.hash = '';
+  afficher();
+}
+
+/* ---------- Formulaire de connexion ---------- */
+
+function champMotDePasseCompte(placeholder, autocomplete) {
+  const entree = el('input', { type: 'password', autocomplete, placeholder, autocapitalize: 'off', spellcheck: 'false' });
+  const basculer = el('button', {
+    type: 'button',
+    class: 'bouton discret-bouton',
+    'aria-label': 'Afficher le mot de passe',
+    onclick: () => {
+      entree.type = entree.type === 'password' ? 'text' : 'password';
+      basculer.textContent = entree.type === 'password' ? 'Voir' : 'Cacher';
+    },
+  }, 'Voir');
+  return { entree, bloc: el('div', { class: 'rangee saisie mot-de-passe' }, entree, basculer) };
+}
+
+function formulaireConnexion() {
+  let mode = 'connexion';
+  const zone = el('div', { class: 'pile' });
+
+  const dessiner = () => {
+    const identifiant = el('input', {
+      type: 'text', autocomplete: 'username', autocapitalize: 'off', spellcheck: 'false',
+      placeholder: mode === 'connexion' ? 'ton identifiant (ou adresse du professeur)' : 'ex. : lea-m2',
+    });
+    const mdp = champMotDePasseCompte(mode === 'connexion' ? 'mot de passe' : 'choisis un mot de passe',
+      mode === 'connexion' ? 'current-password' : 'new-password');
+    const code = el('input', { type: 'text', autocomplete: 'off', autocapitalize: 'characters', placeholder: 'code donné en classe' });
+    const erreur = el('p', { class: 'erreur', role: 'alert' });
+    const valider = el('button', { type: 'submit', class: 'bouton principal bloc grand' },
+      mode === 'connexion' ? 'Me connecter' : 'Créer mon compte');
+
+    const formulaire = el('form', { class: 'panneau pile' },
+      selecteur([['connexion', 'J’ai déjà un compte'], ['creation', 'Créer mon compte']], mode, (v) => {
+        mode = v;
+        dessiner();
+      }, 'Connexion ou création'),
+      el('p', { class: 'discret', text: mode === 'connexion'
+        ? 'Le même identifiant et le même mot de passe que sur le site du cours.'
+        : 'Ton compte servira aussi sur le site du cours. N’utilise pas ton vrai nom : un surnom suffit.' }),
+      champ('Identifiant', identifiant, mode === 'creation' ? 'Minuscules, chiffres et tirets, de 3 à 32 caractères.' : null),
+      champ('Mot de passe', mdp.bloc, mode === 'creation' ? REGLE_MOT_DE_PASSE : null),
+      mode === 'creation' && champ('Code de classe', code, 'Ton professeur te le donne.'),
+      erreur,
+      valider);
+
+    formulaire.addEventListener('submit', async (evenement) => {
+      evenement.preventDefault();
+      erreur.textContent = '';
+      valider.disabled = true;
+      valider.textContent = 'Un instant…';
+      try {
+        const compte = mode === 'connexion'
+          ? await Nuage.seConnecter(identifiant.value, mdp.entree.value)
+          : await Nuage.creerCompte(identifiant.value, mdp.entree.value, code.value);
+        await ouvrirCompte(compte);
+        annoncer(compte.prof ? `Connecté : ${compte.libelle || compte.identifiant}` : `Bienvenue ${compte.pseudo} !`);
+        location.hash = '';
+        afficher();
+      } catch (e) {
+        erreur.textContent = messageNuage(e);
+        valider.disabled = false;
+        valider.textContent = mode === 'connexion' ? 'Me connecter' : 'Créer mon compte';
+      }
+    });
+    zone.replaceChildren(formulaire);
+    identifiant.focus();
+  };
+  dessiner();
+  return zone;
+}
+
+/** Accueil d'un élève non connecté. */
+function ecranConnexion(zone) {
+  definirTitre(NOM_APP);
+  zone.append(el('div', { class: 'pile' },
+    el('div', { class: 'accroche' },
+      el('h2', { text: 'Tes flashcards, ta méthode' }),
+      el('p', { text: 'Crée tes paquets de cartes, même à partir d’une photo de ta fiche. Ajoute ceux du prof. '
+        + 'La boîte de Leitner te ramène chaque carte juste avant que tu l’oublies.' })),
+    formulaireConnexion(),
+    el('details', { class: 'panneau' },
+      el('summary', { text: 'Utiliser sans compte' }),
+      el('div', { class: 'pile' },
+        el('p', { class: 'discret', text: 'Sans compte, tu peux réviser les paquets livrés avec l’application, '
+          + 'mais pas créer tes cartes. Ta progression reste sur cet appareil seulement.' }),
+        el('button', {
+          type: 'button',
+          class: 'bouton bloc',
+          onclick: async () => {
+            await ModeLocal.choisir(true);
+            afficher();
+          },
+        }, 'Continuer sans compte'))),
+    boutonChangerPorte()));
+}
+
+/* ---------- Jauge des photos ---------- */
+
+function jaugePhotos() {
+  const zone = el('div', { class: 'pile serree' }, el('p', { class: 'discret', text: 'Photos : calcul…' }));
+  Nuage.mesPhotos()
+    .then(({ nombre, octets }) => {
+      const part = Math.min(1, nombre / QUOTA_PHOTOS);
+      const classe = part >= 0.9 ? 'faible' : part >= 0.7 ? 'moyen' : 'bon';
+      zone.replaceChildren(
+        el('div', { class: 'ligne-entete' },
+          el('span', { class: 'ligne-titre', text: 'Photos' }),
+          el('span', { class: `ligne-taux ${classe}`, text: `${nombre} / ${QUOTA_PHOTOS}` })),
+        el('div', { class: 'jauge' }, el('span', { class: `remplissage ${classe}`, style: `width:${Math.max(2, part * 100)}%` })),
+        el('span', { class: 'discret', text: `${formaterOctets(octets || 1)} utilisés. `
+          + (part >= 0.9 ? 'Presque plein : supprime des cartes photo dont tu n’as plus besoin.' : 'Chaque photo est allégée avant l’envoi.') }));
+    })
+    .catch(() => zone.replaceChildren(el('p', { class: 'discret', text: 'Photos : jauge indisponible hors connexion.' })));
+  return zone;
+}
+
+/** Panneau « Mon compte » de l'écran de profil. */
+function panneauCompte() {
+  const compte = Nuage.compte();
+  if (!compte) {
+    return el('section', { class: 'panneau pile' },
+      el('h2', { text: 'Compte' }),
+      el('p', { text: 'Tu utilises l’application sans compte : ta progression reste sur cet appareil.' }),
+      el('button', {
+        type: 'button',
+        class: 'bouton principal bloc',
+        onclick: async () => {
+          await ModeLocal.choisir(false);
+          location.hash = '';
+          afficher();
+        },
+      }, 'Me connecter ou créer un compte'));
+  }
+  return el('section', { class: 'panneau pile' },
+    el('h2', { text: 'Mon compte' }),
+    el('p', {}, el('strong', { text: compte.prof ? (compte.libelle || compte.identifiant) : compte.pseudo }),
+      compte.classe ? ` · ${compte.classe}` : '', compte.prof ? ' · compte enseignant' : ''),
+    el('p', { class: 'discret', text: `${STATUTS_DEPOT[Depot.statut]}.` }),
+    jaugePhotos(),
+    el('div', { class: 'rangee' },
+      el('button', {
+        type: 'button',
+        class: 'bouton',
+        onclick: async () => {
+          await synchroniserTout();
+          annoncer(STATUTS_DEPOT[Depot.statut]);
+          afficher();
+        },
+      }, 'Synchroniser maintenant'),
+      el('button', { type: 'button', class: 'bouton', onclick: fermerCompte }, 'Me déconnecter')));
+}
+
+/* ---------- Pied de page : état de la sauvegarde ---------- */
+
+function majPied() {
+  const zone = $('.confidentialite');
+  if (!zone) return;
+  zone.classList.toggle('alerte-pied', ['erreur', 'session'].includes(Depot.statut));
+  if (Porte.courante !== 'eleve') {
+    zone.textContent = 'Trombinoscope : données enregistrées uniquement sur cet appareil, jamais envoyées.';
+    return;
+  }
+  const compte = Nuage.compte();
+  zone.textContent = compte
+    ? `${STATUTS_DEPOT[Depot.statut]} · ${compte.prof ? (compte.libelle || compte.identifiant) : compte.pseudo}`
+    : 'Sans compte : progression enregistrée sur cet appareil seulement.';
+}
+
+Depot.surStatut = majPied;
+
+// ---- 84-bibliotheque-ecrans.js ----
+/* Écrans de la bibliothèque : mes paquets, un paquet, le catalogue du prof,
+ * les réglages de révision d'un paquet, la fiche d'un paquet, ses cartes. */
+
+const SectionsChoisies = new Map();
+
+function etiquetteOrigine(paquet) {
+  if (paquet.proprietaire) return paquet.public ? 'Publié · bibliothèque commune' : 'Mon paquet';
+  if (paquet.origine === 'prof') return 'Bibliothèque du prof';
+  return 'Livré avec l’appli';
+}
+
+function badgeEvaluation(paquet) {
+  const { dateEvaluation } = ReglagesPaquet.de(paquet);
+  if (!dateEvaluation) return null;
+  const jours = Dates.ecart(Dates.aujourdhui(), dateEvaluation);
+  if (jours < 0) return null;
+  const texte = jours === 0 ? 'Évaluation aujourd’hui' : jours === 1 ? 'Évaluation demain' : `Évaluation dans ${jours} j`;
+  return el('span', { class: `badge ${jours <= 3 ? 'urgent' : 'accent'}`, text: texte });
+}
+
+function nombreCartesSources(paquet) {
+  return new Set(paquet.cartes.map((c) => c.source || c.id)).size;
+}
+
+function tuilePaquet(paquet) {
+  const jour = Dates.aujourdhui();
+  const bilan = SessionContenu.bilan(paquet, null, jour);
+  const repartition = Progression.repartition(paquet.cartes);
+  const aFaire = bilan.dues.length + bilan.nouvellesDuJour;
+  let detail;
+  if (!paquet.cartes.length) detail = 'Paquet vide : ajoute tes premières cartes';
+  else if (aFaire) {
+    detail = `${pluriel(bilan.dues.length, 'carte due', 'cartes dues')} · ${pluriel(bilan.nouvellesDuJour, 'nouvelle')} · `
+      + estimerDuree(aFaire, Journal.secondesParCarte());
+  } else detail = `Rien à revoir aujourd’hui · ${repartition.acquises} / ${repartition.total} acquises`;
+
+  return el('div', { class: 'tuile-paquet', style: `--couleur:${paquet.couleur || '#1B2A4A'}` },
+    el('button', { type: 'button', class: `bouton menu tuile${aFaire ? ' a-faire' : ''}`, onclick: () => aller('paquet', paquet.cle) },
+      el('span', { class: 'libelle', text: paquet.titre }),
+      el('span', { class: 'detail', text: detail }),
+      el('span', { class: 'badges' },
+        el('span', { class: 'badge', text: etiquetteOrigine(paquet) }),
+        el('span', { class: 'badge', text: pluriel(paquet.cartes.length, 'carte') }),
+        badgeEvaluation(paquet))),
+    paquet.cartes.length ? barreCompartiments(repartition) : null);
+}
+
+/** Paquets regroupés par thème, thèmes dans l'ordre alphabétique. */
+function parTheme(paquets) {
+  const groupes = new Map();
+  for (const paquet of paquets) {
+    const theme = paquet.theme || 'Sans thème';
+    if (!groupes.has(theme)) groupes.set(theme, []);
+    groupes.get(theme).push(paquet);
+  }
+  return [...groupes.entries()].sort(([a], [b]) => (a === 'Sans thème') - (b === 'Sans thème') || comparerFr(a, b));
+}
+
+/* ---------- Ma bibliothèque ---------- */
+
+Ecrans.paquets = {
+  titre: 'Ma bibliothèque',
+  titreCourt: 'Bibliothèque',
+  parent: () => Porte.accueil(),
+  porte: 'tous',
+  rendre(zone) {
+    const pile = el('div', { class: 'pile' });
+    zone.append(pile);
+    const paquets = Bibliotheque.paquets();
+    const jour = Dates.aujourdhui();
+    let aFaire = 0;
+    for (const paquet of paquets) {
+      const bilan = SessionContenu.bilan(paquet, null, jour);
+      aFaire += bilan.dues.length + bilan.nouvellesDuJour;
+    }
+
+    pile.append(el('div', { class: 'chiffres' },
+      chiffre(aFaire, aFaire > 1 ? 'cartes à voir aujourd’hui' : 'carte à voir aujourd’hui'),
+      chiffre(paquets.length, paquets.length > 1 ? 'paquets' : 'paquet'),
+      chiffre(paquets.reduce((s, p) => s + p.cartes.length, 0), 'cartes en tout')));
+
+    const actions = el('div', { class: 'rangee' });
+    if (Depot.uid) {
+      actions.append(el('button', { type: 'button', class: 'bouton accent', onclick: () => aller('editer-paquet', 'nouveau') },
+        '+ Nouveau paquet'));
+    }
+    actions.append(el('button', { type: 'button', class: 'bouton', onclick: () => aller('catalogue') }, 'Bibliothèque du prof'));
+    pile.append(actions);
+
+    if (!paquets.length) {
+      pile.append(el('div', { class: 'panneau pile vide' },
+        el('h2', { text: 'Ta bibliothèque est vide' }),
+        el('p', { text: 'Crée ton premier paquet, ou va piocher dans la bibliothèque du prof.' })));
+      return;
+    }
+    for (const [theme, groupe] of parTheme(paquets)) {
+      pile.append(el('h2', { class: 'titre-theme', text: theme }), ...groupe.map(tuilePaquet));
+    }
+  },
+};
+
+/* ---------- Un paquet ---------- */
+
+function resumeReglage(paquet) {
+  const r = ReglagesPaquet.de(paquet);
+  const nom = r.rythme === 'perso' ? 'Sur mesure' : r.rythme === 'paquet' ? 'Rythme du paquet' : RYTHMES[r.rythme].titre;
+  return `${nom} (${r.intervalles.join('-')} j) · ${pluriel(ReglagesPaquet.nouvellesParJour(paquet), 'nouvelle')} par jour`
+    + (r.dateEvaluation ? ` · évaluation le ${Dates.formater(r.dateEvaluation)}` : '');
+}
+
+Ecrans.paquet = {
+  titre: 'Paquet',
+  titreCourt: 'Paquet',
+  parent: 'paquets',
+  porte: 'tous',
+  rendre(zone, cle) {
+    const paquet = Paquets.get(cle);
+    if (!paquet) {
+      zone.append(el('div', { class: 'panneau pile' },
+        el('p', { text: 'Paquet introuvable. Il a peut-être été supprimé ou retiré de la bibliothèque commune.' }),
+        el('button', { type: 'button', class: 'bouton', onclick: () => aller('paquets') }, 'Retour à ma bibliothèque')));
+      return;
+    }
+    definirTitre(paquet.titre);
+
+    const pile = el('div', { class: 'pile' });
+    const infos = el('div', { class: 'pile' });
+    zone.append(pile);
+
+    const majInfos = () => {
+      const section = SectionsChoisies.get(cle) || null;
+      const cartes = Paquets.cartesDe(paquet, section);
+      const jour = Dates.aujourdhui();
+      const bilan = SessionContenu.bilan(paquet, section, jour);
+      const repartition = Progression.repartition(cartes);
+      const aFaire = bilan.dues.length + bilan.nouvellesDuJour;
+      const formats = Paquets.formatsCommuns(cartes);
+      if (formats.length && !formats.includes(Profil.donnees.format)) {
+        Profil.enregistrer({ format: formats[0] });
+      }
+
+      if (!cartes.length) {
+        infos.replaceChildren(el('div', { class: 'panneau pile vide' },
+          el('h2', { text: 'Aucune carte pour l’instant' }),
+          el('p', { text: 'Ajoute des cartes une par une, à partir d’une photo, ou colle une liste entière.' })));
+        return;
+      }
+
+      infos.replaceChildren(
+        el('div', { class: 'chiffres' },
+          chiffre(bilan.dues.length, bilan.enRetard ? `dues, dont ${bilan.enRetard} en retard` : 'cartes dues'),
+          chiffre(bilan.nouvellesDuJour, bilan.nouvellesDuJour > 1 ? 'nouvelles' : 'nouvelle'),
+          chiffre(`${repartition.acquises} / ${repartition.total}`, 'acquises')),
+        barreCompartiments(repartition),
+        formats.length > 1 && el('h2', { text: 'Format' }),
+        formats.length > 1 && selecteur(formats.map((f) => [f, FORMATS[f]]), Profil.donnees.format, async (format) => {
+          await Profil.enregistrer({ format });
+        }, 'Format de révision'));
+
+      if (aFaire) {
+        infos.append(
+          el('p', { class: 'discret', text: `${estimerDuree(aFaire, Journal.secondesParCarte())} pour la séance du jour, `
+            + `par séries de ${Profil.donnees.tailleSession} cartes.` }),
+          el('button', {
+            type: 'button',
+            class: 'bouton principal bloc grand',
+            onclick: () => lancerContenu({ paquet, section, format: Profil.donnees.format, type: 'jour' }),
+          }, 'Commencer la séance du jour'));
+      } else {
+        infos.append(el('div', { class: 'panneau' },
+          el('p', { text: 'Rien à revoir aujourd’hui dans cette sélection. Les cartes reviendront '
+            + 'd’elles-mêmes à leur échéance.' })));
+      }
+      infos.append(
+        el('button', {
+          type: 'button',
+          class: `bouton bloc grand ${aFaire ? '' : 'principal'}`,
+          onclick: () => lancerContenu({ paquet, section, format: Profil.donnees.format, type: 'libre' }),
+        }, 'S’entraîner librement'));
+    };
+
+    const badges = el('div', { class: 'badges' },
+      el('span', { class: 'badge', text: etiquetteOrigine(paquet) }),
+      paquet.theme && el('span', { class: 'badge', text: paquet.theme }),
+      badgeEvaluation(paquet));
+    pile.append(badges);
+    if (paquet.resume) pile.append(el('p', { text: paquet.resume }));
+
+    if (paquet.sections.length > 1) {
+      const sections = [[null, 'Tout le paquet'], ...paquet.sections.map((s) => [s.cle, s.titre])];
+      pile.append(
+        el('h2', { text: 'Sélection' }),
+        selecteur(sections.map(([v, l]) => [v ?? '', l]), SectionsChoisies.get(cle) ?? '', (valeur) => {
+          SectionsChoisies.set(cle, valeur || null);
+          majInfos();
+        }, 'Partie du paquet à réviser'));
+    }
+    pile.append(infos);
+    majInfos();
+
+    /* Gestion */
+    const gestion = el('section', { class: 'panneau pile' }, el('h2', { text: 'Organiser' }));
+    if (Porte.courante === 'eleve') {
+      gestion.append(boutonMenu('Réglages de révision', resumeReglage(paquet), () => aller('reglages-paquet', cle)));
+    }
+    if (paquet.proprietaire && Depot.uid) {
+      gestion.append(
+        el('div', { class: 'rangee' },
+          el('button', { type: 'button', class: 'bouton accent', onclick: () => aller('carte', `${paquet.id}~nouvelle`) }, '+ Ajouter une carte'),
+          el('button', { type: 'button', class: 'bouton', onclick: () => aller('import', paquet.id) }, 'Coller une liste')),
+        el('div', { class: 'rangee' },
+          el('button', { type: 'button', class: 'bouton', onclick: () => aller('cartes', paquet.id) },
+            `Voir et modifier les cartes (${nombreCartesSources(paquet)})`),
+          el('button', { type: 'button', class: 'bouton', onclick: () => aller('editer-paquet', paquet.id) }, 'Titre, thème, couleur')));
+    } else if (Porte.courante === 'eleve' && Bibliotheque.contient(cle)) {
+      gestion.append(el('button', {
+        type: 'button',
+        class: 'bouton bloc',
+        onclick: async () => {
+          await Bibliotheque.retirer(cle);
+          annoncer('Paquet retiré de ta bibliothèque. Ta progression est conservée.');
+          aller('paquets');
+        },
+      }, 'Retirer de ma bibliothèque'));
+    }
+    if (gestion.children.length > 1) pile.append(gestion);
+  },
+};
+
+/* ---------- Bibliothèque du prof (catalogue) ---------- */
+
+function ligneCatalogue(paquet) {
+  const { cle, titre, theme, niveaux, nombre, description, enLigne, id, miens } = paquet;
+  const zone = el('div', { class: 'panneau pile serree carte-catalogue', style: `--couleur:${paquet.couleur || '#1B2A4A'}` });
+  const apercu = el('div', { class: 'pile serree' });
+
+  const dessiner = () => {
+    const dedans = Bibliotheque.contient(cle);
+    const bouton = el('button', {
+      type: 'button',
+      class: `bouton ${dedans ? '' : 'accent'}`,
+      onclick: async () => {
+        bouton.disabled = true;
+        try {
+          if (dedans) {
+            await Bibliotheque.retirer(cle);
+            annoncer('Retiré de ta bibliothèque.');
+          } else {
+            await Bibliotheque.ajouter(cle);
+            if (enLigne) await Perso.synchroniser();
+            annoncer(`« ${titre} » est dans ta bibliothèque.`);
+          }
+        } catch (e) {
+          annoncer(messageNuage(e));
+        }
+        dessiner();
+      },
+    }, dedans ? '✓ Dans ma bibliothèque · retirer' : '+ Ajouter à ma bibliothèque');
+
+    zone.replaceChildren(
+      el('div', { class: 'ligne-entete' },
+        el('strong', { class: 'ligne-titre', text: titre }),
+        el('span', { class: 'discret', text: pluriel(nombre, 'carte') })),
+      el('div', { class: 'badges' },
+        theme && el('span', { class: 'badge', text: theme }),
+        ...(niveaux || []).map((n) => el('span', { class: 'badge', text: nomNiveau(n) })),
+        miens && el('span', { class: 'badge accent', text: 'Publié par moi' })),
+      description && el('p', { class: 'discret', text: description }),
+      el('div', { class: 'rangee' },
+        miens ? null : bouton,
+        el('button', {
+          type: 'button',
+          class: 'bouton',
+          onclick: async () => {
+            if (apercu.childElementCount) {
+              apercu.replaceChildren();
+              return;
+            }
+            apercu.replaceChildren(el('p', { class: 'discret', text: 'Chargement…' }));
+            try {
+              const cartes = enLigne
+                ? (await Perso.cartesPubliques(id)).flatMap(cartesDeLigne)
+                : Paquets.get(cle).cartes;
+              apercu.replaceChildren(el('dl', { class: 'rappel-cartes' }, cartes.slice(0, 8).flatMap((c) => [
+                el('dt', {}, texteCarte(c.question || (c.masque ? 'Photo à trous' : 'Photo'))),
+                el('dd', {}, texteCarte(c.reponse || '(photo)')),
+              ])), cartes.length > 8 && el('p', { class: 'discret', text: `… et ${cartes.length - 8} autres.` }));
+            } catch (e) {
+              apercu.replaceChildren(el('p', { class: 'erreur', text: messageNuage(e) }));
+            }
+          },
+        }, 'Aperçu')),
+      apercu);
+  };
+  dessiner();
+  return zone;
+}
+
+Ecrans.catalogue = {
+  titre: 'Bibliothèque du prof',
+  titreCourt: 'Catalogue',
+  parent: 'paquets',
+  porte: 'eleve',
+  async rendre(zone) {
+    const recherche = el('input', { type: 'search', placeholder: 'Chercher un paquet, un thème…', 'aria-label': 'Chercher' });
+    const resultats = el('div', { class: 'pile' });
+    zone.append(el('div', { class: 'pile' },
+      el('p', { class: 'discret', text: 'Les paquets préparés par tes professeurs. Ajoute ceux qui te servent : '
+        + 'ils rejoignent ta bibliothèque, avec ta propre progression et tes propres réglages.' }),
+      recherche,
+      resultats));
+
+    const integres = Paquets.liste.filter((p) => p.origine === 'integre').map((p) => ({
+      cle: p.cle, titre: p.titre, theme: p.theme, niveaux: p.niveaux, nombre: p.cartes.length,
+      description: p.resume, enLigne: false, couleur: '#1B2A4A',
+    }));
+    let enLigne = [];
+    let message = null;
+    if (Depot.uid) {
+      resultats.append(el('p', { class: 'discret', text: 'Chargement de la bibliothèque…' }));
+      try {
+        enLigne = (await Perso.catalogue()).map((p) => ({
+          cle: `p:${p.id}`, id: p.id, titre: p.titre, theme: p.theme, niveaux: p.niveaux, couleur: p.couleur,
+          nombre: (p.leitner_cartes && p.leitner_cartes[0] && p.leitner_cartes[0].count) || 0,
+          description: p.description, enLigne: true, miens: p.auteur === Depot.uid,
+        }));
+      } catch (e) {
+        message = messageNuage(e);
+      }
+    } else {
+      message = 'Connecte-toi pour voir les paquets publiés par tes professeurs.';
+    }
+
+    const dessiner = () => {
+      const filtre = normaliserReponse(recherche.value);
+      const garde = (p) => !filtre || normaliserReponse(`${p.titre} ${p.theme} ${p.description}`).includes(filtre);
+      const blocs = [];
+      if (message) blocs.push(el('div', { class: 'alerte', text: message }));
+      const publies = enLigne.filter(garde);
+      if (publies.length) {
+        for (const [theme, groupe] of parTheme(publies)) {
+          blocs.push(el('h2', { class: 'titre-theme', text: theme }), ...groupe.map(ligneCatalogue));
+        }
+      } else if (!message && !filtre) {
+        blocs.push(el('p', { class: 'discret', text: 'Aucun paquet publié pour le moment. Ça arrive !' }));
+      }
+      const fournis = integres.filter(garde);
+      if (fournis.length) {
+        blocs.push(el('h2', { class: 'titre-theme', text: 'Livrés avec l’application' }), ...fournis.map(ligneCatalogue));
+      }
+      if (filtre && !publies.length && !fournis.length) blocs.push(el('p', { class: 'discret', text: 'Aucun paquet ne correspond.' }));
+      resultats.replaceChildren(...blocs);
+    };
+    recherche.addEventListener('input', dessiner);
+    dessiner();
+  },
+};
+
+/* ---------- Réglages de révision d'un paquet ---------- */
+
+function pastillesIntervalles(intervalles) {
+  return el('span', { class: 'pastilles' }, ...intervalles.map((n) => el('span', { class: 'pastille', text: `${n} j` })));
+}
+
+function frise(passages, debut, fin) {
+  const total = Math.max(1, Dates.ecart(debut, fin));
+  const ligne = el('div', { class: 'frise', role: 'img',
+    'aria-label': `Passages prévus : ${passages.map((p) => Dates.formater(p)).join(', ')}` });
+  ligne.append(el('span', { class: 'frise-trait' }));
+  passages.forEach((date, i) => {
+    const part = Math.min(100, (Dates.ecart(debut, date) / total) * 100);
+    ligne.append(el('span', { class: `frise-point${i === 0 ? ' premier' : ''}`, style: `left:${part}%`,
+      title: Dates.formater(date) }));
+  });
+  ligne.append(el('span', { class: 'frise-fin', style: 'left:100%', title: Dates.formater(fin) }));
+  return el('div', { class: 'pile serree' }, ligne,
+    el('div', { class: 'ligne-entete discret' },
+      el('span', { text: 'aujourd’hui' }),
+      el('span', { text: Dates.versDate(fin).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) })));
+}
+
+Ecrans['reglages-paquet'] = {
+  titre: 'Réglages de révision',
+  titreCourt: 'Réglages',
+  parent: 'paquet',
+  libelleRetour: 'Paquet',
+  porte: 'eleve',
+  surRetour(cle) {
+    aller('paquet', cle);
+  },
+  rendre(zone, cle) {
+    const paquet = Paquets.get(cle);
+    if (!paquet) {
+      aller('paquets');
+      return;
+    }
+    definirTitre(`Réglages · ${paquet.titre}`);
+    const pile = el('div', { class: 'pile' });
+    zone.append(pile);
+
+    const dessiner = () => {
+      const jour = Dates.aujourdhui();
+      const reglage = ReglagesPaquet.de(paquet);
+      const brut = ReglagesPaquet.brut(cle);
+      const repartition = Progression.repartition(paquet.cartes);
+
+      /* Rythmes proposés */
+      const options = [];
+      const propre = paquet.intervalles.join() !== INTERVALLES_CONTENU.join()
+        && !Object.values(RYTHMES).some((r) => r.intervalles.join() === paquet.intervalles.join());
+      if (propre) options.push(['paquet', { titre: 'Conseillé', resume: 'Le rythme prévu pour ce paquet', intervalles: paquet.intervalles }]);
+      options.push(...Object.entries(RYTHMES));
+      options.push(['perso', { titre: 'Sur mesure', resume: 'Tu choisis chaque délai',
+        intervalles: intervallesValides(brut.intervalles) || reglage.intervalles }]);
+      let actif = reglage.rythme;
+      if (actif === 'paquet' && !propre) {
+        actif = Object.keys(RYTHMES).find((k) => RYTHMES[k].intervalles.join() === reglage.intervalles.join()) || 'standard';
+      }
+
+      const tuiles = el('div', { class: 'grille-rythmes' }, ...options.map(([valeur, r]) => el('button', {
+        type: 'button',
+        class: 'tuile-rythme',
+        'aria-pressed': String(valeur === actif),
+        onclick: async () => {
+          if (valeur === 'perso') {
+            await ReglagesPaquet.enregistrer(cle, { rythme: 'perso', intervalles: r.intervalles });
+          } else {
+            await ReglagesPaquet.enregistrer(cle, { rythme: valeur === 'paquet' ? null : valeur });
+          }
+          annoncer(`Rythme « ${r.titre} » choisi.`);
+          dessiner();
+        },
+      }, el('strong', { text: r.titre }), el('span', { class: 'discret', text: r.resume }), pastillesIntervalles(r.intervalles))));
+
+      /* Délais sur mesure */
+      let surMesure = null;
+      if (actif === 'perso') {
+        const entrees = reglage.intervalles.map((n, i) => {
+          const entree = el('input', { type: 'number', inputmode: 'numeric', min: 1, max: 365, value: n,
+            'aria-label': `Délai de la boîte ${i + 1}` });
+          entree.addEventListener('change', async () => {
+            const valeurs = intervallesValides(entrees.map((e) => e.value));
+            if (!valeurs) {
+              annoncer('Chaque délai doit être compris entre 1 et 365 jours.');
+              return;
+            }
+            await ReglagesPaquet.enregistrer(cle, { rythme: 'perso', intervalles: valeurs });
+            annoncer('Délais enregistrés.');
+            dessiner();
+          });
+          return entree;
+        });
+        surMesure = el('div', { class: 'pile serree' },
+          el('p', { class: 'discret', text: 'Délai (en jours) avant de revoir une carte réussie, boîte par boîte.' }),
+          el('div', { class: 'grille-delais' }, ...entrees.map((e, i) => el('label', { class: 'champ' },
+            el('span', { class: 'champ-libelle', text: `Boîte ${i + 1}` }), e))),
+          reglage.intervalles.some((n, i) => i && n < reglage.intervalles[i - 1])
+            && el('p', { class: 'erreur', text: 'Astuce : des délais croissants marchent mieux, chaque réussite doit éloigner la carte.' }));
+      }
+
+      /* Les cinq boîtes */
+      const boites = el('div', { class: 'boites' },
+        el('div', { class: 'boite nouvelles' },
+          el('strong', { text: repartition.jamaisVues }),
+          el('span', { text: 'jamais vues' })),
+        ...reglage.intervalles.map((n, i) => el('div', { class: `boite c${i + 1}` },
+          el('span', { class: 'boite-nom', text: `Boîte ${i + 1}` }),
+          el('strong', { text: repartition.compte[i] }),
+          el('span', { text: i === 4 ? `acquises · revues ${decrireDelai(n)}` : `revues ${decrireDelai(n)}` }))));
+
+      /* Nouvelles cartes par jour */
+      const nouvelles = el('input', { type: 'number', inputmode: 'numeric', min: 1, max: 100,
+        value: Number.isInteger(brut.nouvellesParJour) ? brut.nouvellesParJour : Profil.donnees.nouvellesParJour });
+      nouvelles.addEventListener('change', async () => {
+        const n = Math.min(100, Math.max(1, Math.round(Number(nouvelles.value)) || Profil.donnees.nouvellesParJour));
+        await ReglagesPaquet.enregistrer(cle, { nouvellesParJour: n });
+        annoncer('Réglage enregistré.');
+        dessiner();
+      });
+
+      /* Évaluation */
+      const date = el('input', { type: 'date', value: reglage.dateEvaluation || '', min: Dates.ajouter(jour, 1) });
+      date.addEventListener('change', async () => {
+        await ReglagesPaquet.enregistrer(cle, { dateEvaluation: date.value || null });
+        annoncer(date.value ? `Évaluation fixée au ${Dates.formater(date.value)}.` : 'Date retirée.');
+        dessiner();
+      });
+      const evaluation = ReglagesPaquet.evaluation(paquet, jour);
+      const analyse = el('div', { class: 'pile serree' });
+      if (evaluation) {
+        const restants = Dates.ecart(jour, evaluation);
+        const parJour = ReglagesPaquet.nouvellesParJour(paquet, jour);
+        const finDecouverte = repartition.jamaisVues ? Dates.ajouter(jour, Math.ceil(repartition.jamaisVues / parJour) - 1) : null;
+        const { passages, fin } = calendrierCarte(reglage.intervalles, jour, evaluation);
+        analyse.append(
+          el('p', {}, el('strong', { text: `Évaluation dans ${pluriel(restants, 'jour')}.` }),
+            ` Jusqu’à la veille, aucune carte ne sera repoussée au-delà : la veille, tout ce qui n’est pas sûr revient.`),
+          finDecouverte && el('p', { text: `${pluriel(repartition.jamaisVues, 'carte')} jamais vue${repartition.jamaisVues > 1 ? 's' : ''} : `
+            + `${parJour} par jour, toutes découvertes d’ici le ${Dates.formater(finDecouverte)}.` }),
+          el('p', { class: 'discret', text: `Une carte découverte aujourd’hui et toujours réussie passera ${pluriel(passages.length, 'fois', 'fois')} avant l’évaluation :` }),
+          frise(passages, jour, fin));
+        if (restants <= 3) {
+          analyse.append(el('div', { class: 'alerte', text: 'C’est tout proche : choisis le rythme intensif et '
+            + 'complète par de l’entraînement libre chaque jour.' }));
+        }
+      } else {
+        const { passages, fin } = calendrierCarte(reglage.intervalles, jour, null);
+        analyse.append(
+          el('p', { class: 'discret', text: 'Sans évaluation prévue, voici les passages d’une carte toujours réussie sur deux mois :' }),
+          frise(passages, jour, fin));
+      }
+
+      pile.replaceChildren(
+        el('section', { class: 'panneau pile' },
+          el('h2', { text: 'Le principe' }),
+          el('p', { class: 'discret', text: 'Une carte réussie monte d’une boîte et revient plus tard. Ratée, '
+            + 'elle redescend dans la boîte 1 et revient dès le lendemain.' }),
+          boites),
+        el('section', { class: 'panneau pile' },
+          el('h2', { text: 'Rythme' }),
+          tuiles,
+          surMesure),
+        el('section', { class: 'panneau pile' },
+          el('h2', { text: 'Date d’évaluation' }),
+          el('div', { class: 'rangee saisie' }, date,
+            reglage.dateEvaluation && el('button', {
+              type: 'button',
+              class: 'bouton',
+              onclick: async () => {
+                await ReglagesPaquet.enregistrer(cle, { dateEvaluation: null });
+                dessiner();
+              },
+            }, 'Retirer')),
+          analyse),
+        el('section', { class: 'panneau pile' },
+          el('h2', { text: 'Nouvelles cartes' }),
+          champ('Nouvelles cartes par jour', nouvelles, evaluation
+            ? `Avec l’évaluation, l’appli en propose au moins ${ReglagesPaquet.nouvellesParJour(paquet, jour)} par jour pour tout voir à temps.`
+            : 'Au-delà de 15, les révisions des jours suivants s’alourdissent vite.')));
+    };
+    dessiner();
+  },
+};
+
+/* ---------- Fiche d'un paquet (création, modification) ---------- */
+
+Ecrans['editer-paquet'] = {
+  titre: 'Paquet',
+  titreCourt: 'Paquet',
+  parent: 'paquets',
+  porte: 'eleve',
+  surRetour(id) {
+    if (id && id !== 'nouveau') aller('paquet', `p:${id}`);
+    else aller('paquets');
+  },
+  rendre(zone, id) {
+    if (!Depot.uid) {
+      aller('paquets');
+      return;
+    }
+    const ligne = id && id !== 'nouveau' ? Perso.ligne(id) : null;
+    if (id !== 'nouveau' && !ligne) {
+      zone.append(el('p', { text: 'Paquet introuvable.' }));
+      return;
+    }
+    const prof = Nuage.compte() && Nuage.compte().prof;
+    definirTitre(ligne ? 'Modifier le paquet' : 'Nouveau paquet');
+
+    const titre = el('input', { type: 'text', maxlength: 80, value: ligne ? ligne.titre : '', placeholder: 'ex. : Les ions, Vocabulaire anglais ch. 3' });
+    const listeThemes = el('datalist', { id: 'themes-connus' }, ...Perso.themes().map((t) => el('option', { value: t })));
+    const theme = el('input', { type: 'text', maxlength: 60, list: 'themes-connus', value: ligne ? ligne.theme : '',
+      placeholder: 'ex. : Chimie, Histoire, Anglais' });
+    const description = el('textarea', { maxlength: 400, rows: 2, placeholder: 'Facultatif' });
+    description.value = ligne ? ligne.description : '';
+    let couleur = (ligne && ligne.couleur) || COULEURS_PAQUET[Math.floor(Math.random() * COULEURS_PAQUET.length)];
+    const nuancier = el('div', { class: 'nuancier', role: 'group', 'aria-label': 'Couleur' });
+    const majNuancier = () => {
+      for (const b of nuancier.children) b.setAttribute('aria-pressed', String(b.dataset.couleur === couleur));
+    };
+    for (const c of COULEURS_PAQUET) {
+      nuancier.append(el('button', { type: 'button', class: 'pastille-couleur', 'data-couleur': c, style: `background:${c}`,
+        'aria-label': `Couleur ${c}`, onclick: () => { couleur = c; majNuancier(); } }));
+    }
+    majNuancier();
+
+    let niveaux = ligne ? [...(ligne.niveaux || [])] : [];
+    const public_ = el('input', { type: 'checkbox' });
+    public_.checked = Boolean(ligne && ligne.public);
+    let intervalles = ligne && ligne.reglages && intervallesValides(ligne.reglages.intervalles);
+    const rythmeConseille = Object.keys(RYTHMES).find((k) => intervalles && RYTHMES[k].intervalles.join() === intervalles.join()) || 'standard';
+
+    const erreur = el('p', { class: 'erreur', role: 'alert' });
+    const enregistrer = el('button', { type: 'submit', class: 'bouton principal bloc grand' }, ligne ? 'Enregistrer' : 'Créer le paquet');
+
+    const formulaire = el('form', { class: 'pile' },
+      el('section', { class: 'panneau pile' },
+        champ('Titre', titre),
+        champ('Thème', theme, 'Les paquets d’un même thème sont rangés ensemble.'),
+        listeThemes,
+        champ('Description', description),
+        el('div', { class: 'champ' }, el('span', { class: 'champ-libelle', text: 'Couleur' }), nuancier)),
+      prof && el('section', { class: 'panneau pile' },
+        el('h2', { text: 'Bibliothèque commune' }),
+        el('label', { class: 'case-a-cocher' }, public_, el('span', { text: 'Publier ce paquet : tous les élèves pourront l’ajouter à leur bibliothèque.' })),
+        el('div', { class: 'champ' },
+          el('span', { class: 'champ-libelle', text: 'Niveaux visés' }),
+          el('div', { class: 'puces' }, ...NIVEAUX.map(([v, l]) => {
+            const b = el('button', { type: 'button', class: 'puce', 'aria-pressed': String(niveaux.includes(v)),
+              onclick: () => {
+                niveaux = niveaux.includes(v) ? niveaux.filter((n) => n !== v) : [...niveaux, v];
+                b.setAttribute('aria-pressed', String(niveaux.includes(v)));
+              } }, l);
+            return b;
+          }))),
+        el('div', { class: 'champ' },
+          el('span', { class: 'champ-libelle', text: 'Rythme conseillé' }),
+          selecteur(Object.entries(RYTHMES).map(([k, r]) => [k, r.titre]), rythmeConseille, (v) => {
+            intervalles = RYTHMES[v].intervalles;
+          }, 'Rythme conseillé'),
+          el('span', { class: 'champ-aide', text: 'Chaque élève peut ensuite l’adapter.' }))),
+      erreur,
+      enregistrer);
+
+    formulaire.addEventListener('submit', async (evenement) => {
+      evenement.preventDefault();
+      if (!titre.value.trim()) {
+        erreur.textContent = 'Donne un titre à ton paquet.';
+        titre.focus();
+        return;
+      }
+      enregistrer.disabled = true;
+      try {
+        const resultat = await Perso.enregistrerPaquet(ligne ? ligne.id : null, {
+          titre: titre.value, theme: theme.value, description: description.value, couleur,
+          public: public_.checked, niveaux, intervalles: prof ? (intervalles || RYTHMES.standard.intervalles) : undefined,
+        });
+        annoncer(ligne ? 'Paquet enregistré.' : 'Paquet créé. Ajoute ta première carte !');
+        if (ligne) aller('paquet', `p:${resultat.id}`);
+        else aller('carte', `${resultat.id}~nouvelle`);
+      } catch (e) {
+        erreur.textContent = messageNuage(e);
+        enregistrer.disabled = false;
+      }
+    });
+
+    zone.append(formulaire);
+    if (ligne) {
+      zone.append(el('section', { class: 'panneau pile marge-haut' },
+        el('h2', { text: 'Supprimer' }),
+        confirmationDeuxTemps({
+          libelle: 'Supprimer ce paquet',
+          question: `Supprimer « ${ligne.titre} » et toutes ses cartes ?`,
+          detail: 'Les cartes et leurs photos seront effacées définitivement.',
+          libelleConfirmer: 'Oui, supprimer',
+          action: async () => {
+            await Perso.supprimerPaquet(ligne.id);
+            annoncer('Paquet supprimé.');
+            aller('paquets');
+          },
+        })));
+    }
+    titre.focus();
+  },
+};
+
+/* ---------- Les cartes d'un paquet ---------- */
+
+function apercuLigne(ligne) {
+  const c = ligne.contenu || {};
+  if (ligne.modele === 'masques') return [c.recto || 'Photo à trous', pluriel((c.zones || []).length, 'zone cachée', 'zones cachées')];
+  return [c.recto || (c.photoRecto ? '(photo)' : '—'), c.verso || (c.photoVerso ? '(photo)' : '—')];
+}
+
+Ecrans.cartes = {
+  titre: 'Cartes du paquet',
+  titreCourt: 'Cartes',
+  parent: 'paquet',
+  libelleRetour: 'Paquet',
+  porte: 'eleve',
+  surRetour(id) {
+    aller('paquet', `p:${id}`);
+  },
+  rendre(zone, id) {
+    const ligne = Perso.ligne(id);
+    if (!ligne) {
+      aller('paquets');
+      return;
+    }
+    definirTitre(ligne.titre);
+    const lignes = Perso.lignesCartes(id);
+    const pile = el('div', { class: 'pile' },
+      el('div', { class: 'rangee' },
+        el('button', { type: 'button', class: 'bouton accent', onclick: () => aller('carte', `${id}~nouvelle`) }, '+ Ajouter une carte'),
+        el('button', { type: 'button', class: 'bouton', onclick: () => aller('import', id) }, 'Coller une liste')));
+    if (!lignes.length) pile.append(el('p', { class: 'discret', text: 'Aucune carte pour l’instant.' }));
+    const liste = el('div', { class: 'liste-cartes' });
+    for (const l of lignes) {
+      const [recto, verso] = apercuLigne(l);
+      const photo = (l.contenu || {}).photo || (l.contenu || {}).photoRecto || (l.contenu || {}).photoVerso;
+      liste.append(el('button', { type: 'button', class: 'ligne-carte', onclick: () => aller('carte', `${id}~${l.id}`) },
+        el('span', { class: 'icone-modele', text: MODELES[l.modele].icone, title: MODELES[l.modele].titre }),
+        el('span', { class: 'textes' },
+          el('span', { class: 'recto' }, texteCarte(recto.slice(0, 120))),
+          el('span', { class: 'verso discret' }, texteCarte(verso.slice(0, 120)))),
+        photo && Photos.image(photo, 'vignette')));
+    }
+    pile.append(liste);
+    zone.append(pile);
   },
 };
 
@@ -6107,6 +8612,511 @@ function sectionSauvegarde() {
     zoneImport);
 }
 
+// ---- 86-editeur.js ----
+/* Éditeur de cartes : cinq modèles, photos, photo à trous, import en lot.
+ *
+ * Les photos choisies ne partent qu'à l'enregistrement : abandonner une carte
+ * ne laisse aucune photo orpheline dans le stockage en ligne.
+ */
+
+/** Emplacement de photo de l'éditeur : déjà en ligne (chemin) ou à envoyer (fichier). */
+function emplacementPhoto(chemin) {
+  return { chemin: chemin || null, fichier: null, url: null };
+}
+
+function urlEmplacement(emplacement) {
+  if (emplacement.url) return Promise.resolve(emplacement.url);
+  if (emplacement.chemin) return Photos.url(emplacement.chemin);
+  return Promise.resolve(null);
+}
+
+function aUnePhoto(emplacement) {
+  return Boolean(emplacement.fichier || emplacement.chemin);
+}
+
+/** Boutons « prendre une photo / choisir une image » et vignette. */
+function controlePhoto(emplacement, surChangement, { libelle = 'Photo', grande = false } = {}) {
+  const zone = el('div', { class: `controle-photo${grande ? ' grande' : ''}` });
+  const choisir = (capture) => {
+    const entree = el('input', { type: 'file', accept: 'image/*', hidden: true });
+    if (capture) entree.setAttribute('capture', 'environment');
+    entree.addEventListener('change', () => {
+      const fichier = entree.files && entree.files[0];
+      entree.remove();
+      if (!fichier) return;
+      if (!/^image\//.test(fichier.type) && !/\.(jpe?g|png|webp|heic|heif)$/i.test(fichier.name)) {
+        annoncer('Ce fichier n’est pas une image.');
+        return;
+      }
+      if (emplacement.url) URL.revokeObjectURL(emplacement.url);
+      emplacement.fichier = fichier;
+      emplacement.url = URL.createObjectURL(fichier);
+      dessiner();
+      surChangement();
+    });
+    document.body.append(entree);
+    entree.click();
+  };
+  const dessiner = () => {
+    if (aUnePhoto(emplacement)) {
+      const image = el('img', { class: 'vignette-edition', alt: libelle });
+      urlEmplacement(emplacement).then((url) => { if (url) image.src = url; }).catch(() => {});
+      zone.replaceChildren(image, el('div', { class: 'rangee' },
+        el('button', { type: 'button', class: 'bouton', onclick: () => choisir(true) }, 'Reprendre'),
+        el('button', { type: 'button', class: 'bouton', onclick: () => choisir(false) }, 'Autre image'),
+        el('button', {
+          type: 'button',
+          class: 'bouton danger',
+          onclick: () => {
+            if (emplacement.url) URL.revokeObjectURL(emplacement.url);
+            Object.assign(emplacement, { chemin: null, fichier: null, url: null });
+            dessiner();
+            surChangement();
+          },
+        }, 'Retirer')));
+    } else {
+      zone.replaceChildren(el('div', { class: 'rangee' },
+        el('button', { type: 'button', class: 'bouton', onclick: () => choisir(true) }, '📷 Prendre une photo'),
+        el('button', { type: 'button', class: 'bouton', onclick: () => choisir(false) }, 'Choisir une image')));
+    }
+  };
+  dessiner();
+  return zone;
+}
+
+/** Dessin des zones à cacher sur une photo. Coordonnées en fraction de l'image. */
+function editeurZones(emplacement, zones, surChangement) {
+  const cadre = el('div', { class: 'masque-cadre edition' });
+  const image = el('img', { class: 'masque-photo', alt: 'Photo à annoter', draggable: 'false' });
+  cadre.append(image);
+  urlEmplacement(emplacement).then((url) => { if (url) image.src = url; }).catch(() => {});
+
+  const dessinerZones = () => {
+    for (const z of cadre.querySelectorAll('.masque-zone')) z.remove();
+    zones.forEach((zone, i) => {
+      const supprimer = el('button', {
+        type: 'button', class: 'zone-supprimer', 'aria-label': `Supprimer la zone ${i + 1}`,
+        onpointerdown: (e) => e.stopPropagation(),
+        onclick: (e) => {
+          e.stopPropagation();
+          zones.splice(i, 1);
+          dessinerZones();
+          surChangement();
+        },
+      }, '×');
+      cadre.append(el('span', {
+        class: 'masque-zone cible',
+        style: `left:${zone.x * 100}%;top:${zone.y * 100}%;width:${zone.l * 100}%;height:${zone.h * 100}%`,
+      }, el('span', { class: 'zone-numero', text: i + 1 }), supprimer));
+    });
+  };
+
+  let depart = null;
+  let trace = null;
+  const position = (e) => {
+    const r = image.getBoundingClientRect();
+    return {
+      x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)),
+      y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)),
+    };
+  };
+  const rectangle = (a, b) => ({ x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), l: Math.abs(a.x - b.x), h: Math.abs(a.y - b.y) });
+  const placer = (noeud, z) => {
+    noeud.style.cssText = `left:${z.x * 100}%;top:${z.y * 100}%;width:${z.l * 100}%;height:${z.h * 100}%`;
+  };
+
+  cadre.addEventListener('pointerdown', (e) => {
+    if (!image.complete || !image.naturalWidth) return;
+    e.preventDefault();
+    cadre.setPointerCapture(e.pointerId);
+    depart = position(e);
+    trace = el('span', { class: 'masque-zone trace' });
+    placer(trace, { ...depart, l: 0, h: 0 });
+    cadre.append(trace);
+  });
+  cadre.addEventListener('pointermove', (e) => {
+    if (!depart) return;
+    placer(trace, rectangle(depart, position(e)));
+  });
+  const finir = (e) => {
+    if (!depart) return;
+    const zone = rectangle(depart, position(e));
+    trace.remove();
+    depart = null;
+    if (zone.l > 0.02 && zone.h > 0.015) {
+      if (zones.length >= 40) {
+        annoncer('40 zones au plus par photo.');
+        return;
+      }
+      zones.push(zone);
+      dessinerZones();
+      surChangement();
+    }
+  };
+  cadre.addEventListener('pointerup', finir);
+  cadre.addEventListener('pointercancel', () => {
+    if (trace) trace.remove();
+    depart = null;
+  });
+  dessinerZones();
+  return cadre;
+}
+
+/* ---------- L'écran d'édition ---------- */
+
+function decouperParametreCarte(param) {
+  const [paquetId, carteId] = String(param || '').split('~');
+  return { paquetId, carteId: carteId && carteId !== 'nouvelle' ? carteId : null };
+}
+
+/** Dernier modèle utilisé : on enchaîne souvent des cartes du même type. */
+let dernierModele = 'simple';
+
+Ecrans.carte = {
+  titre: 'Carte',
+  titreCourt: 'Carte',
+  parent: 'paquet',
+  libelleRetour: 'Paquet',
+  porte: 'eleve',
+  surRetour(param) {
+    const { paquetId } = decouperParametreCarte(param);
+    aller('paquet', `p:${paquetId}`);
+  },
+  rendre(zone, param) {
+    const { paquetId, carteId } = decouperParametreCarte(param);
+    const paquet = Perso.ligne(paquetId);
+    if (!Depot.uid || !paquet) {
+      aller('paquets');
+      return;
+    }
+    const ligne = carteId ? Depot.contenu.cartes.find((c) => c.id === carteId) : null;
+    if (carteId && !ligne) {
+      zone.append(el('p', { text: 'Carte introuvable.' }));
+      return;
+    }
+    definirTitre(ligne ? 'Modifier la carte' : `Nouvelle carte · ${paquet.titre}`);
+
+    const c = ligne ? ligne.contenu : {};
+    const etat = {
+      modele: ligne ? ligne.modele : dernierModele,
+      recto: c.recto || '',
+      verso: c.verso || '',
+      aide: c.aide || '',
+      faux: [...(c.faux || []), '', '', ''].slice(0, 3),
+      acceptees: (c.acceptees || []).join('\n'),
+      photoRecto: emplacementPhoto(c.photoRecto),
+      photoVerso: emplacementPhoto(c.photoVerso),
+      photo: emplacementPhoto(c.photo),
+      zones: (c.zones || []).map((z) => ({ ...z })),
+    };
+
+    const choixModele = el('div', { class: 'grille-modeles', role: 'group', 'aria-label': 'Modèle de carte' });
+    const champs = el('div', { class: 'pile' });
+    const apercu = el('div', { class: 'apercu-carte' });
+    const erreur = el('p', { class: 'erreur', role: 'alert' });
+
+    const zoneTexte = (cle, placeholder, lignes = 2) => {
+      const t = el('textarea', { rows: lignes, placeholder, maxlength: cle === 'verso' ? 1500 : 1000 });
+      t.value = etat[cle];
+      t.addEventListener('input', () => {
+        etat[cle] = t.value;
+        majApercu();
+      });
+      return t;
+    };
+    const ligneTexte = (valeur, placeholder, surSaisie) => {
+      const entree = el('input', { type: 'text', value: valeur, placeholder, maxlength: 200, autocomplete: 'off' });
+      entree.addEventListener('input', () => {
+        surSaisie(entree.value);
+        majApercu();
+      });
+      return entree;
+    };
+
+    const majApercu = () => {
+      if (etat.modele === 'masques') {
+        apercu.replaceChildren(el('p', { class: 'discret', text: etat.zones.length
+          ? `${pluriel(etat.zones.length, 'zone')} → ${pluriel(etat.zones.length, 'carte')} : chaque zone sera interrogée à son tour.`
+          : 'Dessine des rectangles sur la photo, du doigt ou à la souris, pour cacher ce qu’il faut retrouver.' }));
+        return;
+      }
+      const face = (titre, texte, emplacement) => el('div', { class: 'face' },
+        el('span', { class: 'face-titre', text: titre }),
+        texte ? texteCarte(texte, 'enonce') : null,
+        aUnePhoto(emplacement) ? el('span', { class: 'badge', text: 'photo' }) : null,
+        !texte && !aUnePhoto(emplacement) ? el('span', { class: 'discret', text: '…' }) : null);
+      const verso = etat.modele === 'qcm'
+        ? [etat.verso, ...etat.faux.filter(Boolean)].join(' · ')
+        : etat.verso;
+      apercu.replaceChildren(
+        face(etat.modele === 'double' ? 'Face A' : 'Question', etat.recto, etat.photoRecto),
+        face(etat.modele === 'double' ? 'Face B' : etat.modele === 'qcm' ? 'Bonne réponse · pièges' : 'Réponse', verso, etat.photoVerso),
+        el('p', { class: 'discret petit', text: 'Astuce : H2O s’affiche avec un indice, x^2 avec un exposant.' }));
+    };
+
+    const dessinerChamps = () => {
+      const blocs = [];
+      switch (etat.modele) {
+        case 'double':
+          blocs.push(
+            champ('Face A', zoneTexte('recto', 'ex. : le mot, le nom de la molécule, la date…')),
+            controlePhoto(etat.photoRecto, majApercu),
+            champ('Face B', zoneTexte('verso', 'ex. : la définition, la formule, l’événement…')),
+            controlePhoto(etat.photoVerso, majApercu));
+          break;
+        case 'qcm':
+          blocs.push(
+            champ('Question', zoneTexte('recto', 'ex. : Quelle est l’unité de la quantité de matière ?')),
+            controlePhoto(etat.photoRecto, majApercu),
+            champ('Bonne réponse', ligneTexte(etat.verso, 'ex. : la mole', (v) => { etat.verso = v; })),
+            el('div', { class: 'champ' },
+              el('span', { class: 'champ-libelle', text: 'Trois pièges' }),
+              el('div', { class: 'pile serree' }, ...etat.faux.map((f, i) => ligneTexte(f, `Piège ${i + 1}`, (v) => { etat.faux[i] = v; }))),
+              el('span', { class: 'champ-aide', text: 'Des erreurs crédibles : celles que tu pourrais faire toi-même.' })));
+          break;
+        case 'saisie': {
+          const acceptees = el('textarea', { rows: 2, placeholder: 'Une par ligne (facultatif)' });
+          acceptees.value = etat.acceptees;
+          acceptees.addEventListener('input', () => { etat.acceptees = acceptees.value; });
+          blocs.push(
+            champ('Question', zoneTexte('recto', 'ex. : Symbole de la masse volumique ?')),
+            controlePhoto(etat.photoRecto, majApercu),
+            champ('Réponse exacte attendue', ligneTexte(etat.verso, 'ex. : ρ', (v) => { etat.verso = v; }),
+              'Accents, majuscules et tirets sont ignorés. Un nombre est comparé à sa valeur (0,5 = 0.5).'),
+            champ('Autres réponses acceptées', acceptees));
+          break;
+        }
+        case 'masques':
+          blocs.push(
+            champ('Consigne (facultatif)', zoneTexte('recto', 'ex. : Retrouve le nom de chaque organe', 1)),
+            el('div', { class: 'champ' },
+              el('span', { class: 'champ-libelle', text: 'Photo de ta fiche, de ton schéma, de ta carte mentale' }),
+              controlePhoto(etat.photo, () => {
+                etat.zones.length = 0;
+                dessinerChamps();
+              }, { grande: true })));
+          if (aUnePhoto(etat.photo)) {
+            blocs.push(
+              el('p', { class: 'discret', text: 'Fais glisser ton doigt pour cacher une zone. Touche × pour en retirer une.' }),
+              editeurZones(etat.photo, etat.zones, majApercu));
+          }
+          break;
+        default:
+          blocs.push(
+            champ('Question', zoneTexte('recto', 'ex. : Qu’est-ce qu’un isotope ?')),
+            controlePhoto(etat.photoRecto, majApercu),
+            champ('Réponse', zoneTexte('verso', 'Ta réponse, ou une photo de ta correction', 3)),
+            controlePhoto(etat.photoVerso, majApercu));
+      }
+      const aide = el('textarea', { rows: 2, placeholder: 'Un moyen mnémotechnique, une explication…', maxlength: 600 });
+      aide.value = etat.aide;
+      aide.addEventListener('input', () => { etat.aide = aide.value; });
+      blocs.push(el('details', { class: 'pile', open: etat.aide ? true : null },
+        el('summary', { text: 'Ajouter une aide (affichée avec la réponse)' }), aide));
+      champs.replaceChildren(...blocs);
+      majApercu();
+    };
+
+    const dessinerModeles = () => {
+      choixModele.replaceChildren(...Object.entries(MODELES).map(([cle, m]) => el('button', {
+        type: 'button',
+        class: 'tuile-modele',
+        'aria-pressed': String(cle === etat.modele),
+        onclick: () => {
+          etat.modele = cle;
+          dessinerModeles();
+          dessinerChamps();
+        },
+      }, el('span', { class: 'icone-modele', text: m.icone }), el('strong', { text: m.titre }), el('span', { class: 'discret', text: m.resume }))));
+    };
+
+    /** Vérifie, envoie les photos, enregistre. Renvoie vrai si tout est passé. */
+    const enregistrer = async (bouton) => {
+      erreur.textContent = '';
+      const m = etat.modele;
+      const probleme = (() => {
+        if (m === 'masques') {
+          if (!aUnePhoto(etat.photo)) return 'Ajoute la photo à annoter.';
+          if (!etat.zones.length) return 'Cache au moins une zone de la photo.';
+          return null;
+        }
+        if (!etat.recto.trim() && !aUnePhoto(etat.photoRecto)) return 'Écris la question (ou ajoute une photo).';
+        if (m === 'qcm') {
+          if (!etat.verso.trim()) return 'Écris la bonne réponse.';
+          if (etat.faux.filter((f) => f.trim()).length < 1) return 'Ajoute au moins un piège (trois, c’est mieux).';
+          return null;
+        }
+        if (m === 'saisie' && !etat.verso.trim()) return 'Écris la réponse attendue.';
+        if (!etat.verso.trim() && !aUnePhoto(etat.photoVerso)) return 'Écris la réponse (ou ajoute une photo).';
+        return null;
+      })();
+      if (probleme) {
+        erreur.textContent = probleme;
+        return false;
+      }
+      const libelle = bouton.textContent;
+      bouton.disabled = true;
+      try {
+        const emplacements = m === 'masques' ? ['photo'] : m === 'simple' || m === 'double' ? ['photoRecto', 'photoVerso'] : ['photoRecto'];
+        const contenu = { recto: etat.recto, verso: etat.verso, aide: etat.aide, faux: etat.faux,
+          acceptees: etat.acceptees.split('\n'), zones: etat.zones };
+        for (const cle of emplacements) {
+          const emplacement = etat[cle];
+          if (emplacement.fichier) {
+            bouton.textContent = 'Envoi de la photo…';
+            emplacement.chemin = await Photos.deposer(emplacement.fichier);
+            emplacement.fichier = null;
+          }
+          if (emplacement.chemin) contenu[cle] = emplacement.chemin;
+        }
+        bouton.textContent = 'Enregistrement…';
+        await Perso.enregistrerCarte(paquetId, ligne ? ligne.id : null, m, contenu);
+        dernierModele = m;
+        return true;
+      } catch (e) {
+        erreur.textContent = messageNuage(e);
+        return false;
+      } finally {
+        bouton.disabled = false;
+        bouton.textContent = libelle;
+      }
+    };
+
+    const boutonEnregistrer = el('button', { type: 'button', class: 'bouton principal grand' }, 'Enregistrer');
+    boutonEnregistrer.addEventListener('click', async () => {
+      if (await enregistrer(boutonEnregistrer)) {
+        annoncer('Carte enregistrée.');
+        aller('paquet', `p:${paquetId}`);
+      }
+    });
+    const boutonSuivante = el('button', { type: 'button', class: 'bouton accent grand' }, ligne ? 'Enregistrer' : 'Enregistrer et carte suivante');
+    boutonSuivante.addEventListener('click', async () => {
+      if (await enregistrer(boutonSuivante)) {
+        const total = Perso.lignesCartes(paquetId).length;
+        annoncer(`Carte enregistrée · ${pluriel(total, 'carte')} dans le paquet.`);
+        if (ligne) aller('cartes', paquetId);
+        else afficher();
+      }
+    });
+
+    zone.append(el('div', { class: 'pile' },
+      el('h2', { text: 'Modèle' }),
+      choixModele,
+      el('section', { class: 'panneau pile' }, champs),
+      el('section', { class: 'pile serree' }, el('h3', { text: 'Aperçu' }), apercu),
+      erreur,
+      el('div', { class: 'rangee' }, boutonSuivante, ligne ? null : boutonEnregistrer),
+      ligne && el('section', { class: 'panneau pile marge-haut' },
+        confirmationDeuxTemps({
+          libelle: 'Supprimer cette carte',
+          question: 'Supprimer cette carte ?',
+          detail: 'Elle disparaît du paquet, avec sa progression et ses photos.',
+          libelleConfirmer: 'Oui, supprimer',
+          action: async () => {
+            await Perso.supprimerCarte(ligne.id);
+            annoncer('Carte supprimée.');
+            aller('cartes', paquetId);
+          },
+        }))));
+    dessinerModeles();
+    dessinerChamps();
+    const premier = champs.querySelector('textarea, input[type=text]');
+    if (premier && !ligne) premier.focus();
+  },
+};
+
+/* ---------- Import d'une liste ---------- */
+
+const SEPARATEURS = ['\t', ';', ' | ', ' = ', ' → ', ' -> ', ' : '];
+
+/** « question ; réponse » par ligne. Le premier séparateur trouvé l'emporte. */
+function lireListe(texte) {
+  const cartes = [];
+  const ignorees = [];
+  for (const brute of texte.split(/\r?\n/)) {
+    const ligne = brute.trim();
+    if (!ligne) continue;
+    const separateur = SEPARATEURS.find((s) => ligne.includes(s));
+    if (!separateur) {
+      ignorees.push(ligne);
+      continue;
+    }
+    const position = ligne.indexOf(separateur);
+    const recto = ligne.slice(0, position).trim();
+    const verso = ligne.slice(position + separateur.length).trim();
+    if (recto && verso) cartes.push({ recto, verso });
+    else ignorees.push(ligne);
+  }
+  return { cartes, ignorees };
+}
+
+Ecrans.import = {
+  titre: 'Coller une liste',
+  titreCourt: 'Import',
+  parent: 'paquet',
+  libelleRetour: 'Paquet',
+  porte: 'eleve',
+  surRetour(id) {
+    aller('paquet', `p:${id}`);
+  },
+  rendre(zone, id) {
+    const paquet = Perso.ligne(id);
+    if (!Depot.uid || !paquet) {
+      aller('paquets');
+      return;
+    }
+    definirTitre(`Coller une liste · ${paquet.titre}`);
+    let modele = 'simple';
+    const texte = el('textarea', { rows: 10, placeholder: 'mole ; unité de quantité de matière\nH2O ; eau\n1789 ; prise de la Bastille' });
+    const bilan = el('div', { class: 'pile serree' });
+    const erreur = el('p', { class: 'erreur', role: 'alert' });
+    const creer = el('button', { type: 'button', class: 'bouton principal bloc grand', disabled: true }, 'Créer les cartes');
+
+    const analyser = () => {
+      const { cartes, ignorees } = lireListe(texte.value);
+      creer.disabled = !cartes.length;
+      creer.textContent = cartes.length ? `Créer ${pluriel(cartes.length, 'carte')}${modele === 'double' ? ' (deux sens)' : ''}` : 'Créer les cartes';
+      bilan.replaceChildren(
+        cartes.length > 0 && el('dl', { class: 'rappel-cartes' }, cartes.slice(0, 4).flatMap((c) => [
+          el('dt', {}, texteCarte(c.recto)), el('dd', {}, texteCarte(c.verso))])),
+        cartes.length > 4 && el('p', { class: 'discret', text: `… et ${cartes.length - 4} autres.` }),
+        ignorees.length > 0 && el('p', { class: 'erreur', text: `${pluriel(ignorees.length, 'ligne ignorée', 'lignes ignorées')} (pas de séparateur) : `
+          + ignorees.slice(0, 3).join(' · ') }));
+      return cartes;
+    };
+    texte.addEventListener('input', analyser);
+    creer.addEventListener('click', async () => {
+      const cartes = analyser();
+      if (cartes.length > 500) {
+        erreur.textContent = '500 cartes au plus en une fois.';
+        return;
+      }
+      creer.disabled = true;
+      try {
+        const n = await Perso.creerCartes(id, cartes.map((c) => ({ modele, contenu: c })));
+        annoncer(`${pluriel(n, 'carte créée', 'cartes créées')}.`);
+        aller('paquet', `p:${id}`);
+      } catch (e) {
+        erreur.textContent = messageNuage(e);
+        creer.disabled = false;
+      }
+    });
+
+    zone.append(el('div', { class: 'pile' },
+      el('p', { text: 'Une carte par ligne : la question, un point-virgule, la réponse. '
+        + 'Pratique pour copier un tableau depuis un tableur ou un document.' }),
+      selecteur([['simple', 'Question → réponse'], ['double', 'Dans les deux sens']], modele, (v) => {
+        modele = v;
+        analyser();
+      }, 'Modèle des cartes importées'),
+      texte,
+      bilan,
+      erreur,
+      creer));
+    texte.focus();
+  },
+};
+
 // ---- 99-demarrage.js ----
 async function demarrer() {
   try {
@@ -6115,9 +9125,15 @@ async function demarrer() {
     await Etat.chargerMeta();
     Dates.decalage = Etat.reglages.decalageJours || 0;
 
+    // Compte en ligne : la copie locale s'affiche tout de suite, la
+    // synchronisation suit en arrière-plan.
+    const compte = Nuage.chargerSession();
+    if (compte) await Depot.ouvrir(compte.uid);
+    await ModeLocal.charger();
+
     // Profil, progression et quotas ne sont pas chiffrés : ils se chargent
     // avant tout choix de porte.
-    await Promise.all([Profil.charger(), Progression.charger(), SuiviContenu.charger(), Journal.charger()]);
+    await rechargerDonnees();
     const porte = await Base.lireMeta('porte');
     Porte.courante = porte === 'prof' || porte === 'eleve' ? porte : null;
 
@@ -6127,6 +9143,7 @@ async function demarrer() {
     }
 
     window.addEventListener('hashchange', afficher);
+    if (compte) synchroniserTout();
     if (Porte.courante === 'prof') {
       afficherVerrou((await Base.lireMeta('chiffrement')) ? 'deverrouiller' : 'creer');
     } else {

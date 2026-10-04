@@ -22,14 +22,25 @@ function estimerDuree(nombreCartes, secondesParCarte = null) {
 }
 
 const Leitner = {
-  /** Résultat d'une réponse notée. Fonction pure. */
-  appliquer(carte, reussi, jour, intervalles = INTERVALLES) {
+  /**
+   * Résultat d'une réponse notée. Fonction pure.
+   *
+   * dateEvaluation : tant qu'elle n'est pas passée, aucune carte n'est
+   * repoussée au-delà de la veille. Le rythme normal reprend ensuite.
+   */
+  appliquer(carte, reussi, jour, intervalles = INTERVALLES, dateEvaluation = null) {
     const compartiment = reussi ? Math.min(5, carte.compartiment + 1) : 1;
+    let echeance = Dates.ajouter(jour, intervalles[compartiment - 1]);
+    if (dateEvaluation && jour < dateEvaluation) {
+      const veille = Dates.ajouter(dateEvaluation, -1);
+      const auPlusTard = veille > jour ? veille : Dates.ajouter(jour, 1);
+      if (echeance > auPlusTard) echeance = auPlusTard;
+    }
     return {
       ...carte,
       compartiment,
       introduite: carte.introduite ?? jour,
-      echeance: Dates.ajouter(jour, intervalles[compartiment - 1]),
+      echeance,
       passages: carte.passages + 1,
       reussites: carte.reussites + (reussi ? 1 : 0),
       dernierPassage: jour,
