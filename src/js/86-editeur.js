@@ -187,7 +187,7 @@ Ecrans.carte = {
       recto: c.recto || '',
       verso: c.verso || '',
       aide: c.aide || '',
-      faux: [...(c.faux || []), '', '', ''].slice(0, 3),
+      faux: [...(c.faux || []), '', '', ''].slice(0, Math.max(3, (c.faux || []).length)),
       acceptees: (c.acceptees || []).join('\n'),
       photoRecto: emplacementPhoto(c.photoRecto),
       photoVerso: emplacementPhoto(c.photoVerso),
@@ -255,8 +255,18 @@ Ecrans.carte = {
             controlePhoto(etat.photoRecto, majApercu),
             champ('Bonne réponse', ligneTexte(etat.verso, 'ex. : la mole', (v) => { etat.verso = v; })),
             el('div', { class: 'champ' },
-              el('span', { class: 'champ-libelle', text: 'Trois pièges' }),
+              el('span', { class: 'champ-libelle', text: `Pièges (${etat.faux.length} sur 7 au plus)` }),
               el('div', { class: 'pile serree' }, ...etat.faux.map((f, i) => ligneTexte(f, `Piège ${i + 1}`, (v) => { etat.faux[i] = v; }))),
+              etat.faux.length < 7 && el('button', {
+                type: 'button',
+                class: 'bouton',
+                onclick: () => {
+                  etat.faux.push('');
+                  dessinerChamps();
+                  const champsPieges = champs.querySelectorAll('input[placeholder^="Piège"]');
+                  champsPieges[champsPieges.length - 1].focus();
+                },
+              }, '+ Ajouter un piège'),
               el('span', { class: 'champ-aide', text: 'Des erreurs crédibles : celles que tu pourrais faire toi-même.' })));
           break;
         case 'saisie': {
@@ -387,7 +397,7 @@ Ecrans.carte = {
     zone.append(el('div', { class: 'pile' },
       el('h2', { text: 'Modèle' }),
       choixModele,
-      el('section', { class: 'panneau pile' }, champs),
+      el('section', { class: 'panneau pile' }, barreSymboles(champs), champs),
       el('section', { class: 'pile serree' }, el('h3', { text: 'Aperçu' }), apercu),
       erreur,
       el('div', { class: 'rangee' }, boutonSuivante, ligne ? null : boutonEnregistrer),
@@ -494,6 +504,7 @@ Ecrans.import = {
         modele = v;
         analyser();
       }, 'Modèle des cartes importées'),
+      barreSymboles(texte.parentNode || zone),
       texte,
       bilan,
       erreur,

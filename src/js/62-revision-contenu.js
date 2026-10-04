@@ -298,6 +298,8 @@ function formatSaisie(carte, enonce, element, panneau) {
     evenement.preventDefault();
     verifier();
   });
+  // Le grec et les symboles n'existent pas sur tous les claviers.
+  formulaire.append(barreSymboles(formulaire, { compacte: true }));
   panneau.append(formulaire, suite);
   champSaisie.focus();
 }

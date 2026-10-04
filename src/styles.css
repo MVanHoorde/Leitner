@@ -854,3 +854,35 @@ textarea:focus, input[type=search]:focus { border-color: var(--cyan); outline: n
   .apparition, .masque-zone.revelee, .photo-carte.chargement { animation: none; }
   .tuile-paquet .bouton.tuile { transition: none; }
 }
+
+/* Barre de symboles */
+.barre-symboles {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: #F1F4F9;
+  border: 1px solid var(--bord);
+  border-radius: 10px;
+}
+.symboles-onglets { display: flex; flex-wrap: wrap; gap: 4px; }
+/* Une seule rangée qui défile : la barre ne doit pas manger l'écran du téléphone. */
+.symboles-liste { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+.symboles-liste .symbole { flex: none; }
+.symbole, .symbole-onglet {
+  min-width: 40px;
+  min-height: 40px;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 18px;
+  color: var(--marine);
+  background: #fff;
+  border: 1px solid var(--bord);
+  border-radius: 8px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.symbole-onglet { font-size: 14px; font-weight: 700; }
+.symbole-onglet[aria-pressed="true"] { background: var(--marine); border-color: var(--marine); color: #fff; }
+.symboles-onglets .symbole { font-weight: 700; background: var(--cyan-pale); border-color: var(--cyan); }
+.symboles-repliables > summary { font-size: 15px; }

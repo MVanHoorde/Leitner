@@ -99,7 +99,11 @@ const Paquets = {
   /** Le QCM a besoin de trois fausses réponses crédibles : celles de la carte,
    *  sinon celles de sa section, et à défaut celles du paquet entier. */
   distracteurs(carte) {
-    if (carte.distracteurs && carte.distracteurs.length >= 3) {
+    // Carte créée dans l'appli : tous ses pièges (jusqu'à 7), complétés par
+    // ceux du paquet s'il y en a moins de trois.
+    const propres = carte.source && carte.distracteurs ? melanger([...carte.distracteurs]).slice(0, 7) : [];
+    if (propres.length >= 3) return propres;
+    if (!carte.source && carte.distracteurs && carte.distracteurs.length >= 3) {
       return melanger([...carte.distracteurs]).slice(0, 3);
     }
     const paquet = this.get(carte.paquet);
@@ -107,7 +111,9 @@ const Paquets = {
       .filter((c) => c.id !== carte.id && c.reponse && c.reponse !== carte.reponse)
       .map((c) => c.reponse))]);
     const voisines = reponses(this.cartesDe(paquet, carte.section));
-    return (voisines.length >= 3 ? voisines : reponses(paquet.cartes)).slice(0, 3);
+    const autres = (voisines.length >= 3 ? voisines : reponses(paquet.cartes))
+      .filter((r) => !propres.includes(r));
+    return [...propres, ...autres].slice(0, Math.max(3, propres.length));
   },
 
   /** Formats proposables pour un ensemble de cartes. */

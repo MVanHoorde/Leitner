@@ -9,6 +9,11 @@
  * Un chiffre qui suit une lettre ou une parenthèse fermante est un indice
  * (CH3) ; en tête de mot il reste normal (2-méthylbutane). Après « ^ »,
  * la suite de chiffres et de signes passe en exposant (SO4^2-).
+ *
+ * Pour les cartes écrites par les élèves : « ^{…} » et « _{…} » mettent
+ * n'importe quel texte en exposant ou en indice (10^{-3}, C_{m}), et « _ »
+ * seul met en indice le mot qui suit (v_0, E_c). La barre de symboles de
+ * l'éditeur insère ces marques.
  */
 function formuleChimique(texte, classe = 'formule') {
   const noeud = el('span', { class: classe });
@@ -17,13 +22,35 @@ function formuleChimique(texte, classe = 'formule') {
     if (tampon) noeud.append(tampon);
     tampon = '';
   };
+  /** Contenu d'un groupe « {…} » commençant en position i, ou null. */
+  const groupe = (i) => {
+    if (texte[i] !== '{') return null;
+    const fin = texte.indexOf('}', i + 1);
+    return fin === -1 ? null : { contenu: texte.slice(i + 1, fin), fin: fin + 1 };
+  };
   for (let i = 0; i < texte.length; i += 1) {
     const caractere = texte[i];
-    if (caractere === '^') {
-      let fin = i + 1;
-      while (fin < texte.length && /[0-9+−-]/.test(texte[fin])) fin += 1;
+    if (caractere === '^' || caractere === '_') {
+      const balise = caractere === '^' ? 'sup' : 'sub';
+      const g = groupe(i + 1);
+      let contenu;
+      let fin;
+      if (g) {
+        ({ contenu, fin } = g);
+      } else {
+        fin = i + 1;
+        const motif = caractere === '^' ? /[0-9+−-]/ : /[0-9A-Za-zÀ-ÿͰ-Ͽ]/;
+        while (fin < texte.length && motif.test(texte[fin])) fin += 1;
+        // x^n : une lettre seule passe aussi en exposant.
+        if (fin === i + 1 && caractere === '^' && /[A-Za-zͰ-Ͽ]/.test(texte[fin] || '')) fin += 1;
+        contenu = texte.slice(i + 1, fin);
+      }
+      if (!contenu) {
+        tampon += caractere;
+        continue;
+      }
       vider();
-      noeud.append(el('sup', { text: texte.slice(i + 1, fin).replace(/-/g, '−') }));
+      noeud.append(el(balise, { text: contenu.replace(/-/g, '−') }));
       i = fin - 1;
     } else if (/\d/.test(caractere) && i > 0 && /[A-Za-z)\]]/.test(texte[i - 1])) {
       let fin = i;
@@ -50,7 +77,8 @@ function normaliserReponse(texte) {
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
-    .replace(/[^a-z0-9]/g, '');
+    // Les lettres grecques comptent : « ρ » est une réponse, pas un blanc.
+    .replace(/[^a-z0-9Ͱ-Ͽ]/g, '');
 }
 
 /** Vrai si la saisie correspond à l'une des formulations acceptées. */

@@ -866,6 +866,38 @@ textarea:focus, input[type=search]:focus { border-color: var(--cyan); outline: n
   .apparition, .masque-zone.revelee, .photo-carte.chargement { animation: none; }
   .tuile-paquet .bouton.tuile { transition: none; }
 }
+
+/* Barre de symboles */
+.barre-symboles {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: #F1F4F9;
+  border: 1px solid var(--bord);
+  border-radius: 10px;
+}
+.symboles-onglets { display: flex; flex-wrap: wrap; gap: 4px; }
+/* Une seule rangée qui défile : la barre ne doit pas manger l'écran du téléphone. */
+.symboles-liste { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; }
+.symboles-liste .symbole { flex: none; }
+.symbole, .symbole-onglet {
+  min-width: 40px;
+  min-height: 40px;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 18px;
+  color: var(--marine);
+  background: #fff;
+  border: 1px solid var(--bord);
+  border-radius: 8px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.symbole-onglet { font-size: 14px; font-weight: 700; }
+.symbole-onglet[aria-pressed="true"] { background: var(--marine); border-color: var(--marine); color: #fff; }
+.symboles-onglets .symbole { font-weight: 700; background: var(--cyan-pale); border-color: var(--cyan); }
+.symboles-repliables > summary { font-size: 15px; }
 </style>
 </head>
 <body>
@@ -1110,6 +1142,11 @@ function confirmationDeuxTemps({ libelle, question, detail, libelleConfirmer, ac
  * Un chiffre qui suit une lettre ou une parenthèse fermante est un indice
  * (CH3) ; en tête de mot il reste normal (2-méthylbutane). Après « ^ »,
  * la suite de chiffres et de signes passe en exposant (SO4^2-).
+ *
+ * Pour les cartes écrites par les élèves : « ^{…} » et « _{…} » mettent
+ * n'importe quel texte en exposant ou en indice (10^{-3}, C_{m}), et « _ »
+ * seul met en indice le mot qui suit (v_0, E_c). La barre de symboles de
+ * l'éditeur insère ces marques.
  */
 function formuleChimique(texte, classe = 'formule') {
   const noeud = el('span', { class: classe });
@@ -1118,13 +1155,35 @@ function formuleChimique(texte, classe = 'formule') {
     if (tampon) noeud.append(tampon);
     tampon = '';
   };
+  /** Contenu d'un groupe « {…} » commençant en position i, ou null. */
+  const groupe = (i) => {
+    if (texte[i] !== '{') return null;
+    const fin = texte.indexOf('}', i + 1);
+    return fin === -1 ? null : { contenu: texte.slice(i + 1, fin), fin: fin + 1 };
+  };
   for (let i = 0; i < texte.length; i += 1) {
     const caractere = texte[i];
-    if (caractere === '^') {
-      let fin = i + 1;
-      while (fin < texte.length && /[0-9+−-]/.test(texte[fin])) fin += 1;
+    if (caractere === '^' || caractere === '_') {
+      const balise = caractere === '^' ? 'sup' : 'sub';
+      const g = groupe(i + 1);
+      let contenu;
+      let fin;
+      if (g) {
+        ({ contenu, fin } = g);
+      } else {
+        fin = i + 1;
+        const motif = caractere === '^' ? /[0-9+−-]/ : /[0-9A-Za-zÀ-ÿͰ-Ͽ]/;
+        while (fin < texte.length && motif.test(texte[fin])) fin += 1;
+        // x^n : une lettre seule passe aussi en exposant.
+        if (fin === i + 1 && caractere === '^' && /[A-Za-zͰ-Ͽ]/.test(texte[fin] || '')) fin += 1;
+        contenu = texte.slice(i + 1, fin);
+      }
+      if (!contenu) {
+        tampon += caractere;
+        continue;
+      }
       vider();
-      noeud.append(el('sup', { text: texte.slice(i + 1, fin).replace(/-/g, '−') }));
+      noeud.append(el(balise, { text: contenu.replace(/-/g, '−') }));
       i = fin - 1;
     } else if (/\d/.test(caractere) && i > 0 && /[A-Za-z)\]]/.test(texte[i - 1])) {
       let fin = i;
@@ -1151,7 +1210,8 @@ function normaliserReponse(texte) {
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
-    .replace(/[^a-z0-9]/g, '');
+    // Les lettres grecques comptent : « ρ » est une réponse, pas un blanc.
+    .replace(/[^a-z0-9Ͱ-Ͽ]/g, '');
 }
 
 /** Vrai si la saisie correspond à l'une des formulations acceptées. */
@@ -2841,7 +2901,11 @@ const Paquets = {
   /** Le QCM a besoin de trois fausses réponses crédibles : celles de la carte,
    *  sinon celles de sa section, et à défaut celles du paquet entier. */
   distracteurs(carte) {
-    if (carte.distracteurs && carte.distracteurs.length >= 3) {
+    // Carte créée dans l'appli : tous ses pièges (jusqu'à 7), complétés par
+    // ceux du paquet s'il y en a moins de trois.
+    const propres = carte.source && carte.distracteurs ? melanger([...carte.distracteurs]).slice(0, 7) : [];
+    if (propres.length >= 3) return propres;
+    if (!carte.source && carte.distracteurs && carte.distracteurs.length >= 3) {
       return melanger([...carte.distracteurs]).slice(0, 3);
     }
     const paquet = this.get(carte.paquet);
@@ -2849,7 +2913,9 @@ const Paquets = {
       .filter((c) => c.id !== carte.id && c.reponse && c.reponse !== carte.reponse)
       .map((c) => c.reponse))]);
     const voisines = reponses(this.cartesDe(paquet, carte.section));
-    return (voisines.length >= 3 ? voisines : reponses(paquet.cartes)).slice(0, 3);
+    const autres = (voisines.length >= 3 ? voisines : reponses(paquet.cartes))
+      .filter((r) => !propres.includes(r));
+    return [...propres, ...autres].slice(0, Math.max(3, propres.length));
   },
 
   /** Formats proposables pour un ensemble de cartes. */
@@ -3831,7 +3897,7 @@ const MODELES = {
   },
   qcm: {
     titre: 'QCM',
-    resume: 'Une bonne réponse et trois pièges que tu choisis.',
+    resume: 'Une bonne réponse et jusqu’à sept pièges que tu choisis.',
     icone: 'ABCD',
   },
   saisie: {
@@ -3863,7 +3929,7 @@ function nettoyerContenu(modele, source) {
     if (typeof source[cle] === 'string' && source[cle]) contenu[cle] = source[cle].slice(0, 200);
   }
   if (modele === 'qcm') {
-    contenu.faux = (source.faux || []).map((f) => texteCourt(f, 200)).filter(Boolean).slice(0, 5);
+    contenu.faux = (source.faux || []).map((f) => texteCourt(f, 200)).filter(Boolean).slice(0, 7);
   }
   if (modele === 'saisie') {
     contenu.acceptees = (source.acceptees || []).map((f) => texteCourt(f, 200)).filter(Boolean).slice(0, 10);
@@ -5231,6 +5297,8 @@ function formatSaisie(carte, enonce, element, panneau) {
     evenement.preventDefault();
     verifier();
   });
+  // Le grec et les symboles n'existent pas sur tous les claviers.
+  formulaire.append(barreSymboles(formulaire, { compacte: true }));
   panneau.append(formulaire, suite);
   champSaisie.focus();
 }
@@ -8856,7 +8924,7 @@ Ecrans.carte = {
       recto: c.recto || '',
       verso: c.verso || '',
       aide: c.aide || '',
-      faux: [...(c.faux || []), '', '', ''].slice(0, 3),
+      faux: [...(c.faux || []), '', '', ''].slice(0, Math.max(3, (c.faux || []).length)),
       acceptees: (c.acceptees || []).join('\n'),
       photoRecto: emplacementPhoto(c.photoRecto),
       photoVerso: emplacementPhoto(c.photoVerso),
@@ -8924,8 +8992,18 @@ Ecrans.carte = {
             controlePhoto(etat.photoRecto, majApercu),
             champ('Bonne réponse', ligneTexte(etat.verso, 'ex. : la mole', (v) => { etat.verso = v; })),
             el('div', { class: 'champ' },
-              el('span', { class: 'champ-libelle', text: 'Trois pièges' }),
+              el('span', { class: 'champ-libelle', text: `Pièges (${etat.faux.length} sur 7 au plus)` }),
               el('div', { class: 'pile serree' }, ...etat.faux.map((f, i) => ligneTexte(f, `Piège ${i + 1}`, (v) => { etat.faux[i] = v; }))),
+              etat.faux.length < 7 && el('button', {
+                type: 'button',
+                class: 'bouton',
+                onclick: () => {
+                  etat.faux.push('');
+                  dessinerChamps();
+                  const champsPieges = champs.querySelectorAll('input[placeholder^="Piège"]');
+                  champsPieges[champsPieges.length - 1].focus();
+                },
+              }, '+ Ajouter un piège'),
               el('span', { class: 'champ-aide', text: 'Des erreurs crédibles : celles que tu pourrais faire toi-même.' })));
           break;
         case 'saisie': {
@@ -9056,7 +9134,7 @@ Ecrans.carte = {
     zone.append(el('div', { class: 'pile' },
       el('h2', { text: 'Modèle' }),
       choixModele,
-      el('section', { class: 'panneau pile' }, champs),
+      el('section', { class: 'panneau pile' }, barreSymboles(champs), champs),
       el('section', { class: 'pile serree' }, el('h3', { text: 'Aperçu' }), apercu),
       erreur,
       el('div', { class: 'rangee' }, boutonSuivante, ligne ? null : boutonEnregistrer),
@@ -9163,6 +9241,7 @@ Ecrans.import = {
         modele = v;
         analyser();
       }, 'Modèle des cartes importées'),
+      barreSymboles(texte.parentNode || zone),
       texte,
       bilan,
       erreur,
@@ -9170,6 +9249,87 @@ Ecrans.import = {
     texte.focus();
   },
 };
+
+// ---- 87-symboles.js ----
+/* Barre de symboles : alphabet grec, maths, chimie, indices et exposants.
+ *
+ * Elle écrit dans le dernier champ de texte touché. Les boutons ne prennent
+ * pas le focus (mousedown annulé) : le clavier du téléphone reste ouvert et
+ * le curseur ne bouge pas. Indices et exposants s'écrivent « _{…} » et
+ * « ^{…} », que formuleChimique() met en forme à l'affichage.
+ */
+
+const SYMBOLES = {
+  'α β γ': ['α', 'β', 'γ', 'δ', 'ε', 'ζ', 'η', 'θ', 'λ', 'μ', 'ν', 'ξ', 'π', 'ρ', 'σ', 'τ', 'φ', 'χ', 'ψ', 'ω',
+    'Γ', 'Δ', 'Θ', 'Λ', 'Π', 'Σ', 'Φ', 'Ψ', 'Ω'],
+  'Maths': ['×', '÷', '±', '≈', '≠', '≤', '≥', '√', '∞', '°', '·', '∝', '∑', '∫', '∂', '→', '⇒', '⇔', '∈', '½', '‰'],
+  'Chimie': ['→', '⇌', '⇄', '↑', '↓', '·', '⁺', '⁻', '°C', 'Å', 'ℓ', 'mol·L⁻¹', 'g·mol⁻¹', 'e⁻'],
+};
+
+/** Ajoute du texte à la place de la sélection ; « | » marque où laisser le curseur. */
+function insererDansChamp(champ, modele) {
+  if (!champ) return;
+  const [avant, apres = ''] = modele.split('|');
+  const debut = champ.selectionStart ?? champ.value.length;
+  const fin = champ.selectionEnd ?? champ.value.length;
+  const selection = champ.value.slice(debut, fin);
+  champ.setRangeText(avant + selection + apres, debut, fin, 'end');
+  const curseur = debut + avant.length + selection.length;
+  if (apres) champ.setSelectionRange(curseur, curseur);
+  champ.dispatchEvent(new Event('input', { bubbles: true }));
+  champ.focus();
+}
+
+/**
+ * zone : élément dont les champs reçoivent les symboles. Le dernier champ
+ * touché à l'intérieur est retenu ; à défaut, le premier.
+ */
+function barreSymboles(zone, { compacte = false } = {}) {
+  let cible = null;
+  // Le focus seul ne suffit pas (certains navigateurs ne le signalent pas) :
+  // un toucher ou une frappe dans un champ le désigne aussi.
+  const retenir = (e) => {
+    if (e.target.matches && e.target.matches('textarea, input[type=text]')) cible = e.target;
+  };
+  for (const evenement of ['focusin', 'pointerdown', 'input', 'keyup']) zone.addEventListener(evenement, retenir);
+  // L'éditeur redessine ses champs : un champ retenu peut avoir disparu.
+  const champ = () => (cible && cible.isConnected ? cible : zone.querySelector('textarea, input[type=text]'));
+
+  const bouton = (libelle, modele, titre) => el('button', {
+    type: 'button',
+    class: 'symbole',
+    title: titre || libelle,
+    onmousedown: (e) => e.preventDefault(),
+    onclick: () => insererDansChamp(champ(), modele),
+  }, libelle);
+
+  const contenu = el('div', { class: 'symboles-liste' });
+  const onglets = Object.keys(SYMBOLES);
+  let actif = onglets[0];
+  const dessiner = () => {
+    contenu.replaceChildren(...SYMBOLES[actif].map((s) => bouton(s, s)));
+    for (const b of barreOnglets.children) b.setAttribute('aria-pressed', String(b.dataset.onglet === actif));
+  };
+  const barreOnglets = el('div', { class: 'symboles-onglets', role: 'group', 'aria-label': 'Familles de symboles' },
+    ...onglets.map((nom) => el('button', {
+      type: 'button',
+      class: 'symbole-onglet',
+      'data-onglet': nom,
+      onmousedown: (e) => e.preventDefault(),
+      onclick: () => {
+        actif = nom;
+        dessiner();
+      },
+    }, nom)),
+    bouton('x²', '^{|}', 'Exposant : ce que tu tapes entre les accolades monte'),
+    bouton('x₂', '_{|}', 'Indice : ce que tu tapes entre les accolades descend'));
+  dessiner();
+
+  const barre = el('div', { class: `barre-symboles${compacte ? ' compacte' : ''}` }, barreOnglets, contenu);
+  if (!compacte) return barre;
+  // En révision, la barre reste repliée : elle ne doit pas cacher la carte.
+  return el('details', { class: 'symboles-repliables' }, el('summary', { text: 'Ω  Symboles' }), barre);
+}
 
 // ---- 99-demarrage.js ----
 async function demarrer() {

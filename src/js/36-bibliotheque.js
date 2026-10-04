@@ -197,7 +197,7 @@ const MODELES = {
   },
   qcm: {
     titre: 'QCM',
-    resume: 'Une bonne réponse et trois pièges que tu choisis.',
+    resume: 'Une bonne réponse et jusqu’à sept pièges que tu choisis.',
     icone: 'ABCD',
   },
   saisie: {
@@ -229,7 +229,7 @@ function nettoyerContenu(modele, source) {
     if (typeof source[cle] === 'string' && source[cle]) contenu[cle] = source[cle].slice(0, 200);
   }
   if (modele === 'qcm') {
-    contenu.faux = (source.faux || []).map((f) => texteCourt(f, 200)).filter(Boolean).slice(0, 5);
+    contenu.faux = (source.faux || []).map((f) => texteCourt(f, 200)).filter(Boolean).slice(0, 7);
   }
   if (modele === 'saisie') {
     contenu.acceptees = (source.acceptees || []).map((f) => texteCourt(f, 200)).filter(Boolean).slice(0, 10);
