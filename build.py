@@ -4,6 +4,7 @@
     python build.py
 """
 
+import base64
 from pathlib import Path
 
 RACINE = Path(__file__).resolve().parent
@@ -44,6 +45,8 @@ def main():
         "/*@PDFJS*/": bibliotheque,
         "/*@PDFJS_WORKER*/": worker,
         "/*@JS*/": proteger_script(js),
+        # Icône de l'écran d'accueil, intégrée pour que le fichier reste autonome.
+        "/*@ICONE*/": base64.b64encode((SRC / "icone.png").read_bytes()).decode("ascii"),
     }
     for marqueur in remplacements:
         if gabarit.count(marqueur) != 1:
