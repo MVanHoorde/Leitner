@@ -21,6 +21,9 @@ Elle a deux entrées, choisies au lancement :
   « passer à un autre fichier » (ou écraser) ; liste modifiée → les élèves
   connus gardent leur progression, les arrivées sont ajoutées, les absents du
   fichier peuvent être retirés.
+  « Mes classes » (`src/js/81-classes.js`) : renommer ou fusionner, supprimer
+  une classe, retirer les élèves de la démonstration (reconnus exactement, le
+  tirage étant fixe), ajouter un élève à la main avec une photo.
 
 ## Les données en ligne
 

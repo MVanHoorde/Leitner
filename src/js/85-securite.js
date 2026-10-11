@@ -143,7 +143,7 @@ const Verrou = {
     Import.reinitialiser();
     Etat.viderDonnees();
     const { nom } = lireRoute();
-    if (['session', 'import', 'eleve'].includes(nom)) history.replaceState(null, '', '#/accueil');
+    if (['session', 'import', 'eleve', 'nouvel-eleve'].includes(nom)) history.replaceState(null, '', '#/accueil');
     // Quand on quitte volontairement l'espace enseignant, c'est l'écran de choix
     // qui prend la suite, pas la demande de mot de passe.
     if (Porte.courante === 'prof') afficherVerrou('deverrouiller');

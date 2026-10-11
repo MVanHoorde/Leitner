@@ -136,8 +136,66 @@ function blocsTexte(pdfjs, contenu, vue) {
     });
 }
 
+/* ---------- Accents ---------- */
+
+/** Accents « isolés » (un glyphe à part) et l'accent combinant qui leur correspond. */
+const ACCENTS_ISOLES = {
+  '´': '\u0301', '`': '\u0300', '¨': '\u0308', 'ˆ': '\u0302', '^': '\u0302', '¸': '\u0327',
+  '˜': '\u0303', '~': '\u0303', 'ˇ': '\u030C', '˚': '\u030A', '˝': '\u030B',
+};
+const MOTIF_ACCENT_SEUL = /^[´`¨ˆ^¸˜~ˇ˚˝\u0300-\u036f]+$/;
+
+function enCombinant(accents) {
+  return [...accents].map((c) => ACCENTS_ISOLES[c] || c).join('');
+}
+
+/**
+ * Certains PDF dessinent l'accent comme un fragment de texte à part, posé
+ * au-dessus de la lettre (« BERANGER » + « ´ »). On le rattache à la lettre
+ * qu'il surplombe, estimée d'après sa position dans le fragment voisin.
+ */
+function rattacherAccents(blocs) {
+  const accents = blocs.filter((b) => MOTIF_ACCENT_SEUL.test(b.str.trim()));
+  if (!accents.length) return blocs;
+  const lettres = blocs.filter((b) => !accents.includes(b));
+  for (const accent of accents) {
+    const support = lettres
+      .filter((b) => accent.cx >= b.x0 - b.h * 0.3 && accent.cx <= b.x1 + b.h * 0.3
+        && accent.y1 >= b.y0 - b.h * 0.8 && accent.y0 <= b.y1)
+      .sort((a, b) => Math.abs(a.cy - accent.cy) - Math.abs(b.cy - accent.cy))[0];
+    if (!support) continue;
+    const texte = support.str;
+    const position = (accent.cx - support.x0) / Math.max(1, support.x1 - support.x0);
+    let k = borner(Math.floor(position * texte.length), 0, texte.length - 1);
+    // Un accent ne se pose que sur une lettre : on recule jusqu'à la plus proche.
+    while (k > 0 && !/\p{L}/u.test(texte[k])) k -= 1;
+    support.str = (texte.slice(0, k + 1) + enCombinant(accent.str.trim()) + texte.slice(k + 1)).normalize('NFC');
+    accent.str = '';
+  }
+  return blocs.filter((b) => b.str);
+}
+
+/**
+ * Recompose les accents restés dans le texte : « E\u0301 » devient « É »,
+ * et un accent isolé collé à une lettre (« E´ ») se rattache à celle-ci.
+ */
+function recomposerAccents(texte) {
+  return texte
+    .replace(/(\p{L})\s?([´`¨ˆ¸˜ˇ˚˝])(?=\p{L}|\s|$)/gu, (tout, lettre, accent) => lettre + enCombinant(accent))
+    .replace(/(^|\s)([´`¨ˆ¸˜ˇ˚˝])(\p{L})/gu, (tout, avant, accent, lettre) => avant + lettre + enCombinant(accent))
+    .normalize('NFC');
+}
+
+/** Un mot coupé en deux fragments autour d'une lettre accentuée (« B » + « ÉRANGER ») : pas d'espace. */
+function coupureSurAccent(avant, apres, ecart, hauteur) {
+  if (ecart > hauteur * 0.4) return false;
+  const accentuee = /[À-ÖØ-öø-ÿŒœŸ]/;
+  return (/\p{L}$/u.test(avant) && accentuee.test(apres.charAt(0))) || (accentuee.test(avant.slice(-1)) && /^\p{L}/u.test(apres));
+}
+
 /** Assemble des fragments de texte en lignes, en coupant sur les grands écarts horizontaux. */
-function assemblerLignes(blocs) {
+function assemblerLignes(blocsBruts) {
+  const blocs = rattacherAccents(blocsBruts.map((b) => ({ ...b })));
   const rangs = [];
   for (const bloc of [...blocs].sort((a, b) => a.y1 - b.y1)) {
     const rang = rangs.find((r) => Math.abs(r.y1 - bloc.y1) <= Math.max(r.h, bloc.h) * 0.5);
@@ -156,14 +214,15 @@ function assemblerLignes(blocs) {
       if (!courante || ecart > rang.h * 2) {
         courante = { texte: '', x0: bloc.x0, x1: bloc.x1, y0: rang.y1 - rang.h, y1: rang.y1 };
         lignes.push(courante);
-      } else if (ecart > rang.h * 0.12 && !courante.texte.endsWith(' ') && !bloc.str.startsWith(' ')) {
+      } else if (ecart > rang.h * 0.12 && !courante.texte.endsWith(' ') && !bloc.str.startsWith(' ')
+        && !coupureSurAccent(courante.texte, bloc.str, ecart, rang.h)) {
         courante.texte += ' ';
       }
       courante.texte += bloc.str;
       courante.x1 = Math.max(courante.x1, bloc.x1);
     }
   }
-  for (const ligne of lignes) ligne.texte = ligne.texte.replace(/\s+/g, ' ').trim();
+  for (const ligne of lignes) ligne.texte = recomposerAccents(ligne.texte.replace(/\s+/g, ' ').trim());
   return lignes.filter((l) => l.texte);
 }
 
@@ -227,7 +286,8 @@ const MOTIF_COORDONNEES = /\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|(?:\+33|0)\s?[1-9](?:
 function estLigneIdentite(texte) {
   if (/\d/.test(texte) || texte.includes('@')) return false;
   if (MOTS_HORS_IDENTITE.test(sansAccents(texte).toLowerCase())) return false;
-  if (!/^\p{L}[\p{L}\s'’.-]*$/u.test(texte)) return false;
+  // \p{M} : un accent combinant qu'aucune lettre précomposée n'a pu absorber.
+  if (!/^\p{L}[\p{L}\p{M}\s'’.-]*$/u.test(texte)) return false;
   return texte.replace(/[^\p{L}]/gu, '').length >= 2;
 }
 

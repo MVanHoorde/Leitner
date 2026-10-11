@@ -1056,6 +1056,8 @@ textarea:focus, input[type=search]:focus { border-color: var(--cyan); outline: n
 /* Réimport d'une classe (75-import.js) */
 .vignette-absent { flex: none; width: 48px; height: 48px; object-fit: cover; border-radius: 8px; font-size: 10px; }
 .ligne-verif.connu:not(.incertaine) .remarque { color: var(--gris); font-weight: 500; }
+
+.pile.centre { align-items: center; }
 </style>
 </head>
 <body>
@@ -2697,9 +2699,30 @@ const Etat = {
   },
 
   async supprimerEleve(id) {
-    await Base.modifier({ suppressions: { eleves: [id], cartes: [id] } });
-    this.eleves.delete(id);
-    this.cartes.delete(id);
+    await this.supprimerEleves([id]);
+  },
+
+  /** Supprime des élèves et leurs cartes en une seule écriture. */
+  async supprimerEleves(ids) {
+    if (!ids.length) return;
+    await Base.modifier({ suppressions: { eleves: ids, cartes: ids } });
+    for (const id of ids) {
+      this.eleves.delete(id);
+      this.cartes.delete(id);
+    }
+    if (this.filtreClasse && !this.classes().includes(this.filtreClasse)) this.filtreClasse = null;
+  },
+
+  /** Renomme une classe ; vers le nom d'une classe existante, les deux sont fusionnées. */
+  async renommerClasse(ancienne, nouvelle) {
+    const eleves = this.listeEleves(ancienne).map((e) => nettoyerEleve({ ...e, classe: nouvelle }));
+    await Base.modifier({ ecritures: { eleves } });
+    for (const e of eleves) this.eleves.set(e.id, e);
+    if (this.filtreClasse === ancienne) this.filtreClasse = eleves.length ? eleves[0].classe : null;
+  },
+
+  async supprimerClasse(classe) {
+    await this.supprimerEleves(this.listeEleves(classe).map((e) => e.id));
   },
 
   /** Oublie les données déchiffrées (verrouillage). */
@@ -3270,7 +3293,8 @@ function dessinerVisage(graine, taille = 400) {
   return canvas.toDataURL('image/jpeg', 0.8);
 }
 
-function genererDemo() {
+/** Les élèves de la démonstration, sans photo : le tirage est fixe, donc toujours le même. */
+function listeDemo() {
   const alea = generateurAleatoire(20260901);
   const noms = melanger([...NOMS_DEMO], alea);
   const eleves = [];
@@ -3279,10 +3303,20 @@ function genererDemo() {
     for (let k = 0; k < effectif; k++, rang++) {
       const nom = noms[rang % noms.length];
       const prenom = PRENOMS_DEMO[Math.floor(alea() * PRENOMS_DEMO.length)];
-      eleves.push({ nom, prenom, classe, photo: dessinerVisage(`${classe}|${nom}|${prenom}`) });
+      eleves.push({ nom, prenom, classe });
     }
   }
   return eleves;
+}
+
+function genererDemo() {
+  return listeDemo().map((e) => ({ ...e, photo: dessinerVisage(`${e.classe}|${e.nom}|${e.prenom}`) }));
+}
+
+/** Élèves enregistrés qui viennent de la démonstration : même classe, même nom, même prénom. */
+function elevesFictifs() {
+  const signatures = new Set(listeDemo().map((e) => `${e.classe}|${e.nom}|${e.prenom}`));
+  return [...Etat.eleves.values()].filter((e) => signatures.has(`${e.classe}|${e.nom}|${e.prenom}`));
 }
 
 function demoDejaChargee() {
@@ -8516,8 +8550,66 @@ function blocsTexte(pdfjs, contenu, vue) {
     });
 }
 
+/* ---------- Accents ---------- */
+
+/** Accents « isolés » (un glyphe à part) et l'accent combinant qui leur correspond. */
+const ACCENTS_ISOLES = {
+  '´': '\u0301', '`': '\u0300', '¨': '\u0308', 'ˆ': '\u0302', '^': '\u0302', '¸': '\u0327',
+  '˜': '\u0303', '~': '\u0303', 'ˇ': '\u030C', '˚': '\u030A', '˝': '\u030B',
+};
+const MOTIF_ACCENT_SEUL = /^[´`¨ˆ^¸˜~ˇ˚˝\u0300-\u036f]+$/;
+
+function enCombinant(accents) {
+  return [...accents].map((c) => ACCENTS_ISOLES[c] || c).join('');
+}
+
+/**
+ * Certains PDF dessinent l'accent comme un fragment de texte à part, posé
+ * au-dessus de la lettre (« BERANGER » + « ´ »). On le rattache à la lettre
+ * qu'il surplombe, estimée d'après sa position dans le fragment voisin.
+ */
+function rattacherAccents(blocs) {
+  const accents = blocs.filter((b) => MOTIF_ACCENT_SEUL.test(b.str.trim()));
+  if (!accents.length) return blocs;
+  const lettres = blocs.filter((b) => !accents.includes(b));
+  for (const accent of accents) {
+    const support = lettres
+      .filter((b) => accent.cx >= b.x0 - b.h * 0.3 && accent.cx <= b.x1 + b.h * 0.3
+        && accent.y1 >= b.y0 - b.h * 0.8 && accent.y0 <= b.y1)
+      .sort((a, b) => Math.abs(a.cy - accent.cy) - Math.abs(b.cy - accent.cy))[0];
+    if (!support) continue;
+    const texte = support.str;
+    const position = (accent.cx - support.x0) / Math.max(1, support.x1 - support.x0);
+    let k = borner(Math.floor(position * texte.length), 0, texte.length - 1);
+    // Un accent ne se pose que sur une lettre : on recule jusqu'à la plus proche.
+    while (k > 0 && !/\p{L}/u.test(texte[k])) k -= 1;
+    support.str = (texte.slice(0, k + 1) + enCombinant(accent.str.trim()) + texte.slice(k + 1)).normalize('NFC');
+    accent.str = '';
+  }
+  return blocs.filter((b) => b.str);
+}
+
+/**
+ * Recompose les accents restés dans le texte : « E\u0301 » devient « É »,
+ * et un accent isolé collé à une lettre (« E´ ») se rattache à celle-ci.
+ */
+function recomposerAccents(texte) {
+  return texte
+    .replace(/(\p{L})\s?([´`¨ˆ¸˜ˇ˚˝])(?=\p{L}|\s|$)/gu, (tout, lettre, accent) => lettre + enCombinant(accent))
+    .replace(/(^|\s)([´`¨ˆ¸˜ˇ˚˝])(\p{L})/gu, (tout, avant, accent, lettre) => avant + lettre + enCombinant(accent))
+    .normalize('NFC');
+}
+
+/** Un mot coupé en deux fragments autour d'une lettre accentuée (« B » + « ÉRANGER ») : pas d'espace. */
+function coupureSurAccent(avant, apres, ecart, hauteur) {
+  if (ecart > hauteur * 0.4) return false;
+  const accentuee = /[À-ÖØ-öø-ÿŒœŸ]/;
+  return (/\p{L}$/u.test(avant) && accentuee.test(apres.charAt(0))) || (accentuee.test(avant.slice(-1)) && /^\p{L}/u.test(apres));
+}
+
 /** Assemble des fragments de texte en lignes, en coupant sur les grands écarts horizontaux. */
-function assemblerLignes(blocs) {
+function assemblerLignes(blocsBruts) {
+  const blocs = rattacherAccents(blocsBruts.map((b) => ({ ...b })));
   const rangs = [];
   for (const bloc of [...blocs].sort((a, b) => a.y1 - b.y1)) {
     const rang = rangs.find((r) => Math.abs(r.y1 - bloc.y1) <= Math.max(r.h, bloc.h) * 0.5);
@@ -8536,14 +8628,15 @@ function assemblerLignes(blocs) {
       if (!courante || ecart > rang.h * 2) {
         courante = { texte: '', x0: bloc.x0, x1: bloc.x1, y0: rang.y1 - rang.h, y1: rang.y1 };
         lignes.push(courante);
-      } else if (ecart > rang.h * 0.12 && !courante.texte.endsWith(' ') && !bloc.str.startsWith(' ')) {
+      } else if (ecart > rang.h * 0.12 && !courante.texte.endsWith(' ') && !bloc.str.startsWith(' ')
+        && !coupureSurAccent(courante.texte, bloc.str, ecart, rang.h)) {
         courante.texte += ' ';
       }
       courante.texte += bloc.str;
       courante.x1 = Math.max(courante.x1, bloc.x1);
     }
   }
-  for (const ligne of lignes) ligne.texte = ligne.texte.replace(/\s+/g, ' ').trim();
+  for (const ligne of lignes) ligne.texte = recomposerAccents(ligne.texte.replace(/\s+/g, ' ').trim());
   return lignes.filter((l) => l.texte);
 }
 
@@ -8607,7 +8700,8 @@ const MOTIF_COORDONNEES = /\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|(?:\+33|0)\s?[1-9](?:
 function estLigneIdentite(texte) {
   if (/\d/.test(texte) || texte.includes('@')) return false;
   if (MOTS_HORS_IDENTITE.test(sansAccents(texte).toLowerCase())) return false;
-  if (!/^\p{L}[\p{L}\s'’.-]*$/u.test(texte)) return false;
+  // \p{M} : un accent combinant qu'aucune lettre précomposée n'a pu absorber.
+  if (!/^\p{L}[\p{L}\p{M}\s'’.-]*$/u.test(texte)) return false;
   return texte.replace(/[^\p{L}]/gu, '').length >= 2;
 }
 
@@ -9470,6 +9564,7 @@ Ecrans.accueil = {
       boutonMenu('Prochain cours', 'Revoir une classe avant d’entrer en salle', () => aller('prochain-cours')),
       boutonMenu('Tableau de bord', 'Progression, objectif, suivi par élève', () => aller('tableau')),
       boutonMenu('Élèves', `${pluriel(Etat.eleves.size, 'élève')} · ${pluriel(classes.length, 'classe')}`, () => aller('eleves')),
+      boutonMenu('Mes classes', 'Renommer, supprimer, ajouter un élève à la main', () => aller('classes')),
       boutonMenu('Importer un trombinoscope PDF', 'Ajouter une classe', () => aller('import')),
       boutonMenu('Paquets de révision', `${pluriel(Paquets.liste.length, 'paquet')} de contenu · côté élève`, () => aller('paquets')),
       boutonMenu('Réglages et sauvegarde', 'Charge de travail, export, effacement', () => aller('reglages')));
@@ -9512,7 +9607,11 @@ Ecrans.eleves = {
       el('span', { class: 'tuile-nom', text: nomComplet(e) }),
       el('span', { class: 'tuile-classe', text: e.classe }))));
     };
-    zone.append(el('div', { class: 'pile' }, filtreClasses(remplir), compteur, grille));
+    zone.append(el('div', { class: 'pile' },
+      el('div', { class: 'rangee' },
+        el('button', { type: 'button', class: 'bouton', onclick: () => aller('classes') }, 'Gérer les classes'),
+        el('button', { type: 'button', class: 'bouton', onclick: () => aller('nouvel-eleve') }, '+ Ajouter un élève')),
+      filtreClasses(remplir), compteur, grille));
     remplir();
   },
 };
@@ -9653,6 +9752,207 @@ Ecrans.reglages = {
       ? 'Stockage persistant accordé : le navigateur ne purgera pas les données.'
       : 'Stockage non persistant : le navigateur pourrait purger les données en cas de manque d’espace.')
       + (estimation ? ` Espace utilisé : ${formaterOctets(estimation.usage || 0)}.` : '');
+  },
+};
+
+// ---- 81-classes.js ----
+/* Gestion des classes du trombinoscope : renommer, supprimer, retirer la
+ * démonstration, ajouter un élève à la main (arrivée en cours d'année). */
+
+/** Photo choisie ou prise sur l'appareil, réduite comme celles des trombinoscopes importés. */
+async function photoDepuisFichier(fichier) {
+  const url = URL.createObjectURL(fichier);
+  try {
+    const image = await new Promise((resoudre, rejeter) => {
+      const img = new Image();
+      img.onload = () => resoudre(img);
+      img.onerror = () => rejeter(new Error('Cette image ne peut pas être lue.'));
+      img.src = url;
+    });
+    const reduction = Math.min(1, TAILLE_PHOTO / Math.max(image.naturalWidth, image.naturalHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * reduction));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * reduction));
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', QUALITE_JPEG);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/** Bloc d'une classe : voir, renommer, supprimer. */
+function blocClasse(classe) {
+  const eleves = Etat.listeEleves(classe);
+  const bloc = el('section', { class: 'panneau pile serree' });
+  const dessiner = (renommage = false) => {
+    if (renommage) {
+      const entree = el('input', { type: 'text', value: classe, autocomplete: 'off', list: 'liste-classes-gestion' });
+      const formulaire = el('form', { class: 'pile serree' },
+        champ('Nouveau nom de la classe', entree, 'Le nom d’une classe existante fusionne les deux.'),
+        el('div', { class: 'rangee' },
+          el('button', { type: 'submit', class: 'bouton principal' }, 'Renommer'),
+          el('button', { type: 'button', class: 'bouton', onclick: () => dessiner(false) }, 'Annuler')));
+      formulaire.addEventListener('submit', async (evenement) => {
+        evenement.preventDefault();
+        const nouveau = entree.value.replace(/\s+/g, ' ').trim();
+        if (!nouveau) {
+          annoncer('Indiquez le nom de la classe.');
+          return;
+        }
+        if (nouveau === classe) {
+          dessiner(false);
+          return;
+        }
+        const fusion = Etat.classes().includes(nouveau);
+        await Etat.renommerClasse(classe, nouveau);
+        annoncer(fusion ? `« ${classe} » fusionnée dans « ${nouveau} ».` : `Classe renommée en « ${nouveau} ».`);
+        afficher();
+      });
+      bloc.replaceChildren(formulaire);
+      entree.focus();
+      entree.select();
+      return;
+    }
+    bloc.replaceChildren(
+      el('div', { class: 'ligne-entete' },
+        el('strong', { class: 'ligne-titre', text: classe }),
+        el('span', { class: 'discret', text: pluriel(eleves.length, 'élève') })),
+      el('div', { class: 'rangee' },
+        el('button', {
+          type: 'button',
+          class: 'bouton',
+          onclick: () => {
+            Etat.filtreClasse = classe;
+            aller('eleves');
+          },
+        }, 'Voir les élèves'),
+        el('button', { type: 'button', class: 'bouton', onclick: () => dessiner(true) }, 'Renommer'),
+        el('button', { type: 'button', class: 'bouton', onclick: () => aller('nouvel-eleve', classe) }, '+ Élève')),
+      confirmationDeuxTemps({
+        libelle: 'Supprimer la classe',
+        question: `Supprimer « ${classe} » et ses ${pluriel(eleves.length, 'élève')} ?`,
+        detail: 'Leurs photos et leur progression seront effacées de cet appareil.',
+        libelleConfirmer: 'Oui, supprimer la classe',
+        classeBouton: 'bouton danger',
+        action: async () => {
+          await Etat.supprimerClasse(classe);
+          annoncer(`Classe « ${classe} » supprimée.`);
+          afficher();
+        },
+      }));
+  };
+  dessiner(false);
+  return bloc;
+}
+
+Ecrans.classes = {
+  titre: 'Mes classes',
+  titreCourt: 'Classes',
+  parent: 'accueil',
+  rendre(zone) {
+    const pile = el('div', { class: 'pile' });
+    zone.append(pile);
+    const fictifs = elevesFictifs();
+    if (fictifs.length) {
+      const classes = [...new Set(fictifs.map((e) => e.classe))];
+      pile.append(el('div', { class: 'alerte pile serree' },
+        el('p', {}, el('strong', { text: `${pluriel(fictifs.length, 'élève fictif', 'élèves fictifs')} de la démonstration` }),
+          ` : ${classes.join(', ')}.`),
+        el('p', { class: 'discret', text: 'Ces élèves aux visages dessinés viennent du bouton « Essayer avec des élèves fictifs ». '
+          + 'Seuls eux seront retirés : un vrai élève de même classe reste en place.' }),
+        confirmationDeuxTemps({
+          libelle: 'Supprimer les élèves fictifs',
+          question: `Supprimer les ${pluriel(fictifs.length, 'élève fictif', 'élèves fictifs')} ?`,
+          detail: 'Leur progression de démonstration sera effacée.',
+          libelleConfirmer: 'Oui, les supprimer',
+          classeBouton: 'bouton danger bloc',
+          action: async () => {
+            await Etat.supprimerEleves(fictifs.map((e) => e.id));
+            annoncer('Élèves fictifs supprimés.');
+            afficher();
+          },
+        })));
+    }
+    const classes = Etat.classes();
+    pile.append(
+      el('div', { class: 'rangee' },
+        el('button', { type: 'button', class: 'bouton accent', onclick: () => aller('nouvel-eleve') }, '+ Ajouter un élève'),
+        el('button', { type: 'button', class: 'bouton', onclick: () => aller('import') }, 'Importer un trombinoscope PDF')),
+      el('datalist', { id: 'liste-classes-gestion' }, classes.map((c) => el('option', { value: c }))));
+    if (!classes.length) {
+      pile.append(el('p', { class: 'discret', text: 'Aucune classe pour l’instant.' }));
+      return;
+    }
+    pile.append(...classes.map(blocClasse));
+  },
+};
+
+/* ---------- Ajouter un élève à la main ---------- */
+
+Ecrans['nouvel-eleve'] = {
+  titre: 'Ajouter un élève',
+  titreCourt: 'Nouvel élève',
+  parent: 'classes',
+  rendre(zone, classeInitiale) {
+    let photo = '';
+    const nom = el('input', { type: 'text', autocomplete: 'off', required: true });
+    const prenom = el('input', { type: 'text', autocomplete: 'off' });
+    const classe = el('input', { type: 'text', autocomplete: 'off', list: 'liste-classes-ajout', value: classeInitiale || Etat.filtreClasse || '' });
+    const apercu = el('div', { class: 'photo-fiche sans-photo', text: 'Pas de photo' });
+    const choisir = (capture) => {
+      const entree = el('input', { type: 'file', accept: 'image/*', hidden: true });
+      if (capture) entree.setAttribute('capture', 'user');
+      entree.addEventListener('change', async () => {
+        const fichier = entree.files && entree.files[0];
+        entree.remove();
+        if (!fichier) return;
+        try {
+          photo = await photoDepuisFichier(fichier);
+          apercu.replaceWith(el('img', { class: 'photo-fiche', src: photo, alt: 'Photo de l’élève' }));
+        } catch (erreur) {
+          annoncer(erreur.message);
+        }
+      });
+      document.body.append(entree);
+      entree.click();
+    };
+
+    const formulaire = el('form', { class: 'panneau pile' },
+      champ('Nom', nom), champ('Prénom', prenom), champ('Classe', classe),
+      el('datalist', { id: 'liste-classes-ajout' }, Etat.classes().map((c) => el('option', { value: c }))),
+      el('button', { type: 'submit', class: 'bouton principal bloc grand' }, 'Enregistrer l’élève'));
+    formulaire.addEventListener('submit', async (evenement) => {
+      evenement.preventDefault();
+      if (!nom.value.trim() || !classe.value.trim()) {
+        annoncer('Le nom et la classe sont obligatoires.');
+        return;
+      }
+      if (!photo) {
+        annoncer('Ajoute une photo : c’est elle qu’on apprend à reconnaître.');
+        return;
+      }
+      const doublon = Etat.listeEleves(classe.value.replace(/\s+/g, ' ').trim())
+        .some((e) => cleEleve(e) === cleEleve({ nom: nom.value, prenom: prenom.value }));
+      if (doublon) {
+        annoncer('Cet élève est déjà enregistré dans cette classe.');
+        return;
+      }
+      const [eleve] = await Etat.ajouterEleves([{ nom: nom.value, prenom: prenom.value, classe: classe.value, photo }]);
+      Etat.filtreClasse = eleve.classe;
+      annoncer(`${nomComplet(eleve)} ajouté à « ${eleve.classe} ».`);
+      aller('eleves');
+    });
+
+    zone.append(el('div', { class: 'pile' },
+      el('div', { class: 'pile serree centre' },
+        apercu,
+        el('div', { class: 'rangee' },
+          el('button', { type: 'button', class: 'bouton', onclick: () => choisir(true) }, '📷 Prendre une photo'),
+          el('button', { type: 'button', class: 'bouton', onclick: () => choisir(false) }, 'Choisir une image'))),
+      formulaire));
+    nom.focus();
   },
 };
 
@@ -11129,7 +11429,7 @@ const Verrou = {
     Import.reinitialiser();
     Etat.viderDonnees();
     const { nom } = lireRoute();
-    if (['session', 'import', 'eleve'].includes(nom)) history.replaceState(null, '', '#/accueil');
+    if (['session', 'import', 'eleve', 'nouvel-eleve'].includes(nom)) history.replaceState(null, '', '#/accueil');
     // Quand on quitte volontairement l'espace enseignant, c'est l'écran de choix
     // qui prend la suite, pas la demande de mot de passe.
     if (Porte.courante === 'prof') afficherVerrou('deverrouiller');

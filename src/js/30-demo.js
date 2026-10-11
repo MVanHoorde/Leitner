@@ -170,7 +170,8 @@ function dessinerVisage(graine, taille = 400) {
   return canvas.toDataURL('image/jpeg', 0.8);
 }
 
-function genererDemo() {
+/** Les élèves de la démonstration, sans photo : le tirage est fixe, donc toujours le même. */
+function listeDemo() {
   const alea = generateurAleatoire(20260901);
   const noms = melanger([...NOMS_DEMO], alea);
   const eleves = [];
@@ -179,10 +180,20 @@ function genererDemo() {
     for (let k = 0; k < effectif; k++, rang++) {
       const nom = noms[rang % noms.length];
       const prenom = PRENOMS_DEMO[Math.floor(alea() * PRENOMS_DEMO.length)];
-      eleves.push({ nom, prenom, classe, photo: dessinerVisage(`${classe}|${nom}|${prenom}`) });
+      eleves.push({ nom, prenom, classe });
     }
   }
   return eleves;
+}
+
+function genererDemo() {
+  return listeDemo().map((e) => ({ ...e, photo: dessinerVisage(`${e.classe}|${e.nom}|${e.prenom}`) }));
+}
+
+/** Élèves enregistrés qui viennent de la démonstration : même classe, même nom, même prénom. */
+function elevesFictifs() {
+  const signatures = new Set(listeDemo().map((e) => `${e.classe}|${e.nom}|${e.prenom}`));
+  return [...Etat.eleves.values()].filter((e) => signatures.has(`${e.classe}|${e.nom}|${e.prenom}`));
 }
 
 function demoDejaChargee() {

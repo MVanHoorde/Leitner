@@ -139,9 +139,30 @@ const Etat = {
   },
 
   async supprimerEleve(id) {
-    await Base.modifier({ suppressions: { eleves: [id], cartes: [id] } });
-    this.eleves.delete(id);
-    this.cartes.delete(id);
+    await this.supprimerEleves([id]);
+  },
+
+  /** Supprime des élèves et leurs cartes en une seule écriture. */
+  async supprimerEleves(ids) {
+    if (!ids.length) return;
+    await Base.modifier({ suppressions: { eleves: ids, cartes: ids } });
+    for (const id of ids) {
+      this.eleves.delete(id);
+      this.cartes.delete(id);
+    }
+    if (this.filtreClasse && !this.classes().includes(this.filtreClasse)) this.filtreClasse = null;
+  },
+
+  /** Renomme une classe ; vers le nom d'une classe existante, les deux sont fusionnées. */
+  async renommerClasse(ancienne, nouvelle) {
+    const eleves = this.listeEleves(ancienne).map((e) => nettoyerEleve({ ...e, classe: nouvelle }));
+    await Base.modifier({ ecritures: { eleves } });
+    for (const e of eleves) this.eleves.set(e.id, e);
+    if (this.filtreClasse === ancienne) this.filtreClasse = eleves.length ? eleves[0].classe : null;
+  },
+
+  async supprimerClasse(classe) {
+    await this.supprimerEleves(this.listeEleves(classe).map((e) => e.id));
   },
 
   /** Oublie les données déchiffrées (verrouillage). */

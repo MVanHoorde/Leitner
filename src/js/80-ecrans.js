@@ -68,6 +68,7 @@ Ecrans.accueil = {
       boutonMenu('Prochain cours', 'Revoir une classe avant d’entrer en salle', () => aller('prochain-cours')),
       boutonMenu('Tableau de bord', 'Progression, objectif, suivi par élève', () => aller('tableau')),
       boutonMenu('Élèves', `${pluriel(Etat.eleves.size, 'élève')} · ${pluriel(classes.length, 'classe')}`, () => aller('eleves')),
+      boutonMenu('Mes classes', 'Renommer, supprimer, ajouter un élève à la main', () => aller('classes')),
       boutonMenu('Importer un trombinoscope PDF', 'Ajouter une classe', () => aller('import')),
       boutonMenu('Paquets de révision', `${pluriel(Paquets.liste.length, 'paquet')} de contenu · côté élève`, () => aller('paquets')),
       boutonMenu('Réglages et sauvegarde', 'Charge de travail, export, effacement', () => aller('reglages')));
@@ -110,7 +111,11 @@ Ecrans.eleves = {
       el('span', { class: 'tuile-nom', text: nomComplet(e) }),
       el('span', { class: 'tuile-classe', text: e.classe }))));
     };
-    zone.append(el('div', { class: 'pile' }, filtreClasses(remplir), compteur, grille));
+    zone.append(el('div', { class: 'pile' },
+      el('div', { class: 'rangee' },
+        el('button', { type: 'button', class: 'bouton', onclick: () => aller('classes') }, 'Gérer les classes'),
+        el('button', { type: 'button', class: 'bouton', onclick: () => aller('nouvel-eleve') }, '+ Ajouter un élève')),
+      filtreClasses(remplir), compteur, grille));
     remplir();
   },
 };
