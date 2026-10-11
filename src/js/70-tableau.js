@@ -167,7 +167,7 @@ function tableauEleves(classe) {
     return el('tr', { onclick: () => aller('eleve', eleve.id) },
       el('td', {}, el('div', { class: 'cellule-eleve' },
         photoEleve(eleve, 'mini'),
-        el('span', {}, el('strong', { text: nomComplet(eleve) }), el('br'), el('span', { class: 'discret', text: eleve.classe })))),
+        el('span', {}, el('strong', { text: nomComplet(eleve) }), el('br'), el('span', { class: 'discret', text: libelleClasses(eleve) })))),
       el('td', { class: 'centre', text: carte.introduite ? carte.compartiment : '—' }),
       el('td', { class: 'centre', text: carte.passages }),
       el('td', { text: carte.dernierEchec ? Dates.formater(carte.dernierEchec) : 'Aucun' }));

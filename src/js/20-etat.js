@@ -21,19 +21,38 @@ const SUIVI_DEFAUT = Object.freeze({
 const MOTIF_PHOTO = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
 
 /**
- * Liste blanche : seuls id, nom, prénom, classe et photo d'un élève
+ * Liste blanche : seuls id, nom, prénom, classe, groupes et photo d'un élève
  * sont conservés. Tout autre champ (date de naissance, téléphone,
  * entreprise…) est écarté ici, avant toute écriture en base.
+ *
+ * classe : la classe d'origine ; groupes : les autres classes ou groupes où
+ * l'élève figure aussi (« TSP », un groupe de spécialité). Un même élève reste
+ * une seule fiche et une seule carte Leitner, quel que soit le nombre de groupes.
  */
 function nettoyerEleve(source) {
   const texte = (valeur) => String(valeur ?? '').replace(/\s+/g, ' ').trim().slice(0, 80);
+  const classe = texte(source.classe);
+  const groupes = [...new Set((Array.isArray(source.groupes) ? source.groupes : []).map(texte))]
+    .filter((g) => g && g !== classe)
+    .slice(0, 10);
   return {
     id: typeof source.id === 'string' && source.id ? source.id : nouvelId(),
     nom: texte(source.nom),
     prenom: texte(source.prenom),
-    classe: texte(source.classe),
+    classe: classe || groupes.shift() || '',
+    groupes,
     photo: typeof source.photo === 'string' && MOTIF_PHOTO.test(source.photo) ? source.photo : '',
   };
+}
+
+/** Toutes les classes et tous les groupes d'un élève, la classe d'origine en tête. */
+function classesEleve(eleve) {
+  return [eleve.classe, ...(eleve.groupes || [])].filter(Boolean);
+}
+
+/** « Terminale 3 · TSP » */
+function libelleClasses(eleve) {
+  return classesEleve(eleve).join(' · ');
 }
 
 /** Valide une carte venant d'une sauvegarde. */
@@ -110,13 +129,13 @@ const Etat = {
 
   classes() {
     const noms = new Set();
-    for (const e of this.eleves.values()) if (e.classe) noms.add(e.classe);
+    for (const e of this.eleves.values()) for (const c of classesEleve(e)) noms.add(c);
     return [...noms].sort(comparerFr);
   },
 
   listeEleves(classe = null) {
     return [...this.eleves.values()]
-      .filter((e) => !classe || e.classe === classe)
+      .filter((e) => !classe || classesEleve(e).includes(classe))
       .sort((a, b) => comparerFr(a.nom, b.nom) || comparerFr(a.prenom, b.prenom));
   },
 
@@ -153,16 +172,42 @@ const Etat = {
     if (this.filtreClasse && !this.classes().includes(this.filtreClasse)) this.filtreClasse = null;
   },
 
-  /** Renomme une classe ; vers le nom d'une classe existante, les deux sont fusionnées. */
+  /** Renomme une classe ou un groupe ; vers un nom existant, les deux sont fusionnés. */
   async renommerClasse(ancienne, nouvelle) {
-    const eleves = this.listeEleves(ancienne).map((e) => nettoyerEleve({ ...e, classe: nouvelle }));
+    const remplacer = (c) => (c === ancienne ? nouvelle : c);
+    const eleves = this.listeEleves(ancienne).map((e) => nettoyerEleve({
+      ...e, classe: remplacer(e.classe), groupes: (e.groupes || []).map(remplacer),
+    }));
     await Base.modifier({ ecritures: { eleves } });
     for (const e of eleves) this.eleves.set(e.id, e);
-    if (this.filtreClasse === ancienne) this.filtreClasse = eleves.length ? eleves[0].classe : null;
+    if (this.filtreClasse === ancienne) this.filtreClasse = nouvelle;
   },
 
+  /**
+   * Supprime une classe ou un groupe : un élève qui n'y figurait que là est
+   * effacé ; un élève qui appartient aussi à un autre groupe y reste.
+   */
   async supprimerClasse(classe) {
-    await this.supprimerEleves(this.listeEleves(classe).map((e) => e.id));
+    const eleves = this.listeEleves(classe);
+    const aEffacer = eleves.filter((e) => classesEleve(e).length === 1).map((e) => e.id);
+    const aGarder = eleves.filter((e) => classesEleve(e).length > 1).map((e) => {
+      const restantes = classesEleve(e).filter((c) => c !== classe);
+      return nettoyerEleve({ ...e, classe: restantes[0], groupes: restantes.slice(1) });
+    });
+    if (aGarder.length) {
+      await Base.modifier({ ecritures: { eleves: aGarder } });
+      for (const e of aGarder) this.eleves.set(e.id, e);
+    }
+    await this.supprimerEleves(aEffacer);
+    if (this.filtreClasse === classe) this.filtreClasse = null;
+    return { effaces: aEffacer.length, gardes: aGarder.length };
+  },
+
+  /** Ajoute un élève déjà enregistré à une autre classe ou à un groupe. */
+  async ajouterAuGroupe(id, groupe) {
+    const eleve = this.eleves.get(id);
+    if (!eleve || classesEleve(eleve).includes(groupe)) return eleve;
+    return this.modifierEleve({ ...eleve, groupes: [...(eleve.groupes || []), groupe] });
   },
 
   /** Oublie les données déchiffrées (verrouillage). */

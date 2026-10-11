@@ -1058,6 +1058,14 @@ textarea:focus, input[type=search]:focus { border-color: var(--cyan); outline: n
 .ligne-verif.connu:not(.incertaine) .remarque { color: var(--gris); font-weight: 500; }
 
 .pile.centre { align-items: center; }
+/* Élève déjà enregistré dans une autre classe : rattachement à valider. */
+.ligne-verif.double { background: var(--cyan-pale); border: 2px solid var(--cyan); }
+.ligne-verif.double .remarque { color: var(--marine); }
+.cadre-groupe { border: 2px solid var(--cyan); background: var(--cyan-pale); }
+/* Auto-évaluation par étapes (trombinoscope) */
+.evaluation-etapes .puces.parties { justify-content: center; flex-wrap: wrap; overflow: visible; }
+.evaluation-etapes .puces.parties .puce { min-height: 48px; font-size: 17px; }
+.evaluation-etapes .auto-evaluation .bouton { flex: 1 1 30%; }
 </style>
 </head>
 <body>
@@ -2581,19 +2589,38 @@ const SUIVI_DEFAUT = Object.freeze({
 const MOTIF_PHOTO = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
 
 /**
- * Liste blanche : seuls id, nom, prénom, classe et photo d'un élève
+ * Liste blanche : seuls id, nom, prénom, classe, groupes et photo d'un élève
  * sont conservés. Tout autre champ (date de naissance, téléphone,
  * entreprise…) est écarté ici, avant toute écriture en base.
+ *
+ * classe : la classe d'origine ; groupes : les autres classes ou groupes où
+ * l'élève figure aussi (« TSP », un groupe de spécialité). Un même élève reste
+ * une seule fiche et une seule carte Leitner, quel que soit le nombre de groupes.
  */
 function nettoyerEleve(source) {
   const texte = (valeur) => String(valeur ?? '').replace(/\s+/g, ' ').trim().slice(0, 80);
+  const classe = texte(source.classe);
+  const groupes = [...new Set((Array.isArray(source.groupes) ? source.groupes : []).map(texte))]
+    .filter((g) => g && g !== classe)
+    .slice(0, 10);
   return {
     id: typeof source.id === 'string' && source.id ? source.id : nouvelId(),
     nom: texte(source.nom),
     prenom: texte(source.prenom),
-    classe: texte(source.classe),
+    classe: classe || groupes.shift() || '',
+    groupes,
     photo: typeof source.photo === 'string' && MOTIF_PHOTO.test(source.photo) ? source.photo : '',
   };
+}
+
+/** Toutes les classes et tous les groupes d'un élève, la classe d'origine en tête. */
+function classesEleve(eleve) {
+  return [eleve.classe, ...(eleve.groupes || [])].filter(Boolean);
+}
+
+/** « Terminale 3 · TSP » */
+function libelleClasses(eleve) {
+  return classesEleve(eleve).join(' · ');
 }
 
 /** Valide une carte venant d'une sauvegarde. */
@@ -2670,13 +2697,13 @@ const Etat = {
 
   classes() {
     const noms = new Set();
-    for (const e of this.eleves.values()) if (e.classe) noms.add(e.classe);
+    for (const e of this.eleves.values()) for (const c of classesEleve(e)) noms.add(c);
     return [...noms].sort(comparerFr);
   },
 
   listeEleves(classe = null) {
     return [...this.eleves.values()]
-      .filter((e) => !classe || e.classe === classe)
+      .filter((e) => !classe || classesEleve(e).includes(classe))
       .sort((a, b) => comparerFr(a.nom, b.nom) || comparerFr(a.prenom, b.prenom));
   },
 
@@ -2713,16 +2740,42 @@ const Etat = {
     if (this.filtreClasse && !this.classes().includes(this.filtreClasse)) this.filtreClasse = null;
   },
 
-  /** Renomme une classe ; vers le nom d'une classe existante, les deux sont fusionnées. */
+  /** Renomme une classe ou un groupe ; vers un nom existant, les deux sont fusionnés. */
   async renommerClasse(ancienne, nouvelle) {
-    const eleves = this.listeEleves(ancienne).map((e) => nettoyerEleve({ ...e, classe: nouvelle }));
+    const remplacer = (c) => (c === ancienne ? nouvelle : c);
+    const eleves = this.listeEleves(ancienne).map((e) => nettoyerEleve({
+      ...e, classe: remplacer(e.classe), groupes: (e.groupes || []).map(remplacer),
+    }));
     await Base.modifier({ ecritures: { eleves } });
     for (const e of eleves) this.eleves.set(e.id, e);
-    if (this.filtreClasse === ancienne) this.filtreClasse = eleves.length ? eleves[0].classe : null;
+    if (this.filtreClasse === ancienne) this.filtreClasse = nouvelle;
   },
 
+  /**
+   * Supprime une classe ou un groupe : un élève qui n'y figurait que là est
+   * effacé ; un élève qui appartient aussi à un autre groupe y reste.
+   */
   async supprimerClasse(classe) {
-    await this.supprimerEleves(this.listeEleves(classe).map((e) => e.id));
+    const eleves = this.listeEleves(classe);
+    const aEffacer = eleves.filter((e) => classesEleve(e).length === 1).map((e) => e.id);
+    const aGarder = eleves.filter((e) => classesEleve(e).length > 1).map((e) => {
+      const restantes = classesEleve(e).filter((c) => c !== classe);
+      return nettoyerEleve({ ...e, classe: restantes[0], groupes: restantes.slice(1) });
+    });
+    if (aGarder.length) {
+      await Base.modifier({ ecritures: { eleves: aGarder } });
+      for (const e of aGarder) this.eleves.set(e.id, e);
+    }
+    await this.supprimerEleves(aEffacer);
+    if (this.filtreClasse === classe) this.filtreClasse = null;
+    return { effaces: aEffacer.length, gardes: aGarder.length };
+  },
+
+  /** Ajoute un élève déjà enregistré à une autre classe ou à un groupe. */
+  async ajouterAuGroupe(id, groupe) {
+    const eleve = this.eleves.get(id);
+    if (!eleve || classesEleve(eleve).includes(groupe)) return eleve;
+    return this.modifierEleve({ ...eleve, groupes: [...(eleve.groupes || []), groupe] });
   },
 
   /** Oublie les données déchiffrées (verrouillage). */
@@ -6898,6 +6951,32 @@ const Leitner = {
     };
   },
 
+  /**
+   * Trombinoscope : une réponse à plusieurs niveaux.
+   *   'sur'      tout retrouvé sans hésiter : la carte monte d'une boîte ;
+   *   'hesitant' tout retrouvé en hésitant, ou le nom sans la classe : elle
+   *              reste dans sa boîte et revient au même rythme ;
+   *   'partiel'  une partie seulement : elle descend d'une boîte et revient demain ;
+   *   'echec'    rien : retour en boîte 1.
+   * Fonction pure.
+   */
+  noter(carte, niveau, jour, intervalles = INTERVALLES) {
+    if (niveau === 'sur') return this.appliquer(carte, true, jour, intervalles);
+    if (niveau === 'echec' || !niveau) return this.appliquer(carte, false, jour, intervalles);
+    const hesitant = niveau === 'hesitant';
+    const compartiment = hesitant ? Math.max(1, carte.compartiment) : Math.max(1, carte.compartiment - 1);
+    return {
+      ...carte,
+      compartiment,
+      introduite: carte.introduite ?? jour,
+      echeance: Dates.ajouter(jour, hesitant ? intervalles[compartiment - 1] : 1),
+      passages: carte.passages + 1,
+      reussites: carte.reussites + (hesitant ? 1 : 0),
+      dernierPassage: jour,
+      dernierEchec: hesitant ? carte.dernierEchec : jour,
+    };
+  },
+
   /** Nombre minimal de jours avant d'atteindre le compartiment 5 sans aucun échec. */
   joursAvantMaitrise(carte, jour) {
     if (carte.introduite === null) return INTERVALLES.slice(1, 4).reduce((a, b) => a + b, 0);
@@ -7046,17 +7125,18 @@ const Session = {
     return s && s.position < s.file.length ? s.file[s.position] : null;
   },
 
-  async repondre(reussi) {
+  /** niveau : 'sur' | 'hesitant' | 'partiel' | 'echec' (Leitner.noter) ; à défaut, déduit de reussi. */
+  async repondre(reussi, niveau = null) {
     const s = this.active;
     const element = this.elementCourant();
     if (!element) return;
 
     if (!element.reprise) {
-      s.resultats.push({ id: element.id, reussi });
+      s.resultats.push({ id: element.id, reussi, niveau });
       const carte = Etat.cartes.get(element.id);
       if (s.algo && carte) {
         const nouvelle = carte.introduite === null;
-        await Etat.enregistrerCarte(Leitner.appliquer(carte, reussi, s.jour));
+        await Etat.enregistrerCarte(Leitner.noter(carte, niveau || (reussi ? 'sur' : 'echec'), s.jour));
         const suivi = {};
         if (!Leitner.sessionAlgoFaite(s.jour)) suivi.sessionAlgo = { date: s.jour, id: s.id };
         if (nouvelle) {
@@ -7105,7 +7185,7 @@ function distracteurs(eleve) {
 function blocIdentite(eleve, variante = '') {
   return el('div', { class: `identite ${variante}` },
     el('div', { class: 'identite-nom', text: nomComplet(eleve) || 'Nom inconnu' }),
-    el('div', { class: 'identite-classe', text: eleve.classe }));
+    el('div', { class: 'identite-classe', text: libelleClasses(eleve) }));
 }
 
 function selecteurMode(auChangement) {
@@ -7275,7 +7355,7 @@ function rendreCarte(zone, element) {
       el('span', { text: `Carte ${s.position + 1} sur ${s.file.length}` }),
       element.reprise && el('span', { class: 'badge', text: 'À revoir' }),
       s.algo && carte.introduite === null && el('span', { class: 'badge', text: 'Nouvel élève' }),
-      s.classe === null && el('span', { text: eleve.classe })),
+      s.classe === null && el('span', { text: libelleClasses(eleve) })),
     el('div', { class: 'carte-revision' }, scene, panneau)));
 
   if (s.mode === 'qcm') modeQcm(eleve, element, scene, panneau);
@@ -7305,6 +7385,79 @@ function boutonsAutoEvaluation(surReponse = null) {
   return rangee;
 }
 
+/**
+ * Auto-évaluation par étapes : on touche ce qu'on avait retrouvé (classe ou
+ * groupe, prénom, nom), puis on dit si on était sûr. La carte avance selon
+ * ce niveau (Leitner.noter) : retrouver la classe avant les noms est déjà un
+ * progrès, et une hésitation ne vaut pas une certitude.
+ */
+function evaluationParEtapes() {
+  const parties = [['classe', 'Classe / groupe'], ['prenom', 'Prénom'], ['nom', 'Nom']];
+  const trouve = { classe: false, prenom: false, nom: false };
+  const repondre = async (niveau) => {
+    for (const b of zone.querySelectorAll('button')) b.disabled = true;
+    toucheEcran = null;
+    await Session.repondre(niveau === 'sur' || niveau === 'hesitant', niveau);
+    afficher();
+  };
+  /** Le niveau d'après les parties retrouvées et la certitude. */
+  const niveau = (sur) => {
+    const n = Object.values(trouve).filter(Boolean).length;
+    if (n === 3) return sur ? 'sur' : 'hesitant';
+    if (trouve.prenom && trouve.nom) return 'hesitant';
+    return n ? 'partiel' : 'echec';
+  };
+  const puces = el('div', { class: 'puces parties', role: 'group', 'aria-label': 'Ce que vous aviez retrouvé' },
+    parties.map(([cle, libelle], i) => el('button', {
+      type: 'button',
+      class: 'puce',
+      'aria-pressed': 'false',
+      'data-partie': cle,
+      onclick: (e) => basculer(cle, e.currentTarget),
+    }, `${i + 1}. ${libelle}`)));
+  const basculer = (cle, bouton) => {
+    trouve[cle] = !trouve[cle];
+    bouton.setAttribute('aria-pressed', String(trouve[cle]));
+  };
+  const zone = el('div', { class: 'pile serree evaluation-etapes' },
+    el('p', { class: 'consigne', text: 'Touchez ce que vous aviez retrouvé :' }),
+    puces,
+    el('div', { class: 'rangee auto-evaluation' },
+      el('button', { type: 'button', class: 'bouton accent', onclick: () => repondre('echec') }, 'Rien trouvé'),
+      el('button', { type: 'button', class: 'bouton', onclick: () => repondre(niveau(false)) }, 'Valider · j’hésitais'),
+      el('button', { type: 'button', class: 'bouton principal', onclick: () => repondre(niveau(true)) }, 'Valider · sûr')),
+    el('p', { class: 'discret petit', text: 'Tout et sûr : la carte monte. Tout en hésitant : elle reste. '
+      + 'Une partie : elle descend et revient demain. Rien : boîte 1. Touches 1, 2, 3 puis Entrée (sûr) ou H (hésitant).' }));
+  toucheEcran = (e) => {
+    const rang = Number(e.key);
+    if (rang >= 1 && rang <= 3) basculer(parties[rang - 1][0], puces.children[rang - 1]);
+    else if (e.key === 'Enter') repondre(niveau(true));
+    else if (e.key === 'h' || e.key === 'H') repondre(niveau(false));
+    else if (e.key === '0') repondre('echec');
+  };
+  return zone;
+}
+
+/** Identité → photo : on ne peut que se dire sûr, hésitant ou perdu. */
+function evaluationCertitude() {
+  const repondre = async (niveau) => {
+    for (const b of rangee.querySelectorAll('button')) b.disabled = true;
+    toucheEcran = null;
+    await Session.repondre(niveau === 'sur' || niveau === 'hesitant', niveau);
+    afficher();
+  };
+  const rangee = el('div', { class: 'rangee auto-evaluation' },
+    el('button', { type: 'button', class: 'bouton accent grand', onclick: () => repondre('echec') }, 'Je ne savais pas'),
+    el('button', { type: 'button', class: 'bouton grand', onclick: () => repondre('hesitant') }, 'J’hésitais'),
+    el('button', { type: 'button', class: 'bouton principal grand', onclick: () => repondre('sur') }, 'Je savais'));
+  toucheEcran = (e) => {
+    if (e.key === 'ArrowLeft' || e.key === '1') repondre('echec');
+    if (e.key === '2') repondre('hesitant');
+    if (e.key === 'ArrowRight' || e.key === '3') repondre('sur');
+  };
+  return rangee;
+}
+
 /** Modes 1 et 2 : on se représente la réponse, on retourne la carte, on s'auto-évalue. */
 function modeRetournement(eleve, mode, scene, panneau) {
   if (mode === 'photo') scene.append(photoEleve(eleve, 'photo-revision'));
@@ -7312,7 +7465,7 @@ function modeRetournement(eleve, mode, scene, panneau) {
 
   const retourner = () => {
     if (mode === 'identite') scene.replaceChildren(photoEleve(eleve, 'photo-revision'));
-    panneau.replaceChildren(blocIdentite(eleve), boutonsAutoEvaluation());
+    panneau.replaceChildren(blocIdentite(eleve), mode === 'photo' ? evaluationParEtapes() : evaluationCertitude());
   };
   panneau.append(
     el('p', { class: 'consigne', text: mode === 'photo'
@@ -7402,7 +7555,7 @@ function rendreFinDeSerie(zone) {
       el('div', { class: 'grille-eleves' }, ratees.map((e) => el('div', { class: 'tuile-eleve' },
         photoEleve(e, 'vignette'),
         el('span', { class: 'tuile-nom', text: nomComplet(e) }),
-        el('span', { class: 'tuile-classe', text: e.classe }))))));
+        el('span', { class: 'tuile-classe', text: libelleClasses(e) }))))));
   }
 
   const actions = el('div', { class: 'rangee' });
@@ -8361,7 +8514,7 @@ function tableauEleves(classe) {
     return el('tr', { onclick: () => aller('eleve', eleve.id) },
       el('td', {}, el('div', { class: 'cellule-eleve' },
         photoEleve(eleve, 'mini'),
-        el('span', {}, el('strong', { text: nomComplet(eleve) }), el('br'), el('span', { class: 'discret', text: eleve.classe })))),
+        el('span', {}, el('strong', { text: nomComplet(eleve) }), el('br'), el('span', { class: 'discret', text: libelleClasses(eleve) })))),
       el('td', { class: 'centre', text: carte.introduite ? carte.compartiment : '—' }),
       el('td', { class: 'centre', text: carte.passages }),
       el('td', { text: carte.dernierEchec ? Dates.formater(carte.dernierEchec) : 'Aucun' }));
@@ -8550,6 +8703,35 @@ function blocsTexte(pdfjs, contenu, vue) {
     });
 }
 
+/* ---------- Encodage ---------- */
+
+/**
+ * Certains trombinoscopes déclarent une police en encodage Mac (MacRoman)
+ * alors que leurs octets sont en Windows (WinAnsi) : « é » se lit « È »,
+ * « è » « Ë », et « É » devient « … », si bien que la ligne n'est plus
+ * reconnue comme un nom. On relit alors chaque caractère avec la bonne table.
+ */
+const LU_EN_MACROMAN = 'ÄÇÉÑÖÜáàâäãåéëíìîïñóòôöõúûü†°§•¶ß®™´¨≠ÆØ∞≤≥¥∂∑∏π∫ªºΩæø¿¡¬√ƒ≈∆«»…\u00A0ÀÃÕŒœ–—“”‘’÷◊ÿŸ⁄€‹›ﬁﬂ‡·‚„‰ÂÊÁËÈÍÎÏÌÓÔÒÚÛÙıˆ˜¯˘˙˚¸˝˛ˇ';
+const VRAI_EN_WINANSI = '€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ\u00A0¡¤¥¦§¨ª«¬\u00AD®¯°²³´¶·¸¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿ';
+const CORRECTION_ENCODAGE = new Map([...LU_EN_MACROMAN].map((c, i) => [c, VRAI_EN_WINANSI[i]]));
+
+/**
+ * Indices d'un texte mal lu : un signe qui n'est pas une lettre, une majuscule
+ * au milieu d'un mot en minuscules (« HÈlËne »), ou une majuscule accentuée
+ * en plein mot suivie d'une minuscule (« LÈa »).
+ */
+function anomaliesTexte(texte) {
+  const compter = (motif) => (texte.match(motif) || []).length;
+  return compter(/[^\p{L}\p{M}\p{N}\s'’.,:;/@()+-]/gu) + compter(/\p{Ll}\p{Lu}/gu) + compter(/\p{L}[À-ÖØ-Þ]\p{Ll}/gu);
+}
+
+/** Relit le texte avec la table Windows si cela le rend plus plausible ; sinon le laisse tel quel. */
+function corrigerEncodage(texte) {
+  if (![...texte].some((c) => CORRECTION_ENCODAGE.has(c))) return texte;
+  const relu = [...texte].map((c) => CORRECTION_ENCODAGE.get(c) || c).join('');
+  return anomaliesTexte(relu) < anomaliesTexte(texte) ? relu : texte;
+}
+
 /* ---------- Accents ---------- */
 
 /** Accents « isolés » (un glyphe à part) et l'accent combinant qui leur correspond. */
@@ -8609,7 +8791,7 @@ function coupureSurAccent(avant, apres, ecart, hauteur) {
 
 /** Assemble des fragments de texte en lignes, en coupant sur les grands écarts horizontaux. */
 function assemblerLignes(blocsBruts) {
-  const blocs = rattacherAccents(blocsBruts.map((b) => ({ ...b })));
+  const blocs = rattacherAccents(blocsBruts.map((b) => ({ ...b, str: corrigerEncodage(b.str) })));
   const rangs = [];
   for (const bloc of [...blocs].sort((a, b) => a.y1 - b.y1)) {
     const rang = rangs.find((r) => Math.abs(r.y1 - bloc.y1) <= Math.max(r.h, bloc.h) * 0.5);
@@ -8982,16 +9164,34 @@ function cleEleve(e) {
   return sansAccents(`${e.nom}|${e.prenom}`).toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
-/** Classe déjà enregistrée dont on retrouve au moins la moitié des noms du fichier, ou null. */
-function classeReconnue(noms) {
+/** Classes déjà enregistrées qui partagent des élèves avec le fichier, les plus proches d'abord. */
+function chevauchements(noms) {
   const cles = new Set(noms.map(cleEleve));
-  if (!cles.size) return null;
-  let meilleure = null;
-  for (const classe of Etat.classes()) {
-    const communs = Etat.listeEleves(classe).filter((e) => cles.has(cleEleve(e))).length;
-    if (communs && (!meilleure || communs > meilleure.communs)) meilleure = { classe, communs };
-  }
-  return meilleure && meilleure.communs >= Math.max(2, cles.size / 2) ? meilleure.classe : null;
+  return Etat.classes()
+    .map((classe) => {
+      const eleves = Etat.listeEleves(classe);
+      return { classe, communs: eleves.filter((e) => cles.has(cleEleve(e))).length, taille: eleves.length };
+    })
+    .filter((c) => c.communs)
+    .sort((a, b) => b.communs - a.communs);
+}
+
+/**
+ * La classe que ce fichier réimporte, ou null. Il faut que presque tout le
+ * fichier y soit, et l'essentiel de la classe dans le fichier : un groupe de
+ * spécialité tiré d'une classe (TSP pris dans Terminale 3) n'est pas un réimport.
+ */
+function classeReconnue(noms) {
+  const total = new Set(noms.map(cleEleve)).size;
+  const [meilleure] = chevauchements(noms);
+  if (!meilleure || !total) return null;
+  return meilleure.communs >= Math.max(2, total * 0.8) && meilleure.communs >= meilleure.taille * 0.6 ? meilleure.classe : null;
+}
+
+/** Le même élève enregistré dans une autre classe ou un autre groupe, ou null. */
+function eleveAilleurs(saisie) {
+  const cle = cleEleve(saisie);
+  return [...Etat.eleves.values()].find((e) => cleEleve(e) === cle && !classesEleve(e).includes(saisie.classe)) || null;
 }
 
 /** Ce que le fichier change dans une classe : arrivées, élèves absents du fichier, élèves déjà connus. */
@@ -9231,7 +9431,13 @@ function ecranClasse(zone) {
     valider(douteux ? 'appariement' : 'verification');
   });
 
+  const ailleurs = reconnue ? [] : chevauchements(etat.noms);
   zone.append(el('div', { class: 'pile' },
+    ailleurs.length > 0 && el('div', { class: 'panneau pile serree cadre-groupe' },
+      el('p', {}, el('strong', { text: 'Des élèves de ce fichier sont déjà enregistrés : ' }),
+        ailleurs.map((c) => `${pluriel(c.communs, 'élève')} en « ${c.classe} »`).join(', '), '.'),
+      el('p', { text: 'Si ce fichier est un groupe (spécialité, option…), donne-lui son propre nom : '
+        + 'ces élèves y seront rattachés en plus de leur classe, avec la même progression. Tu valideras chacun à l’étape suivante.' })),
     ecart && el('div', { class: 'panneau pile serree' },
       el('p', {}, el('strong', { text: `Classe déjà enregistrée : « ${reconnue} ».` })),
       el('p', { text: `Ce fichier apporte ${pluriel(ecart.nouveaux.length, 'nouvel élève', 'nouveaux élèves')}`
@@ -9381,15 +9587,27 @@ function ecranVerification(zone) {
     const s = photo.saisie;
     const ligne = el('div', { class: 'ligne-verif' });
     const remarque = el('p', { class: 'remarque' });
+    const homonyme = el('input', { type: 'checkbox' });
+    homonyme.checked = Boolean(photo.homonyme);
+    homonyme.addEventListener('change', () => {
+      photo.homonyme = homonyme.checked;
+      maj();
+    });
+    const caseHomonyme = el('label', { class: 'case petit' }, homonyme, 'C’est un autre élève (homonyme) : créer une fiche à part');
     const maj = () => {
       const manque = !s.nom.trim();
       const connu = !manque && eleveExistant(s);
+      const autre = !manque && !connu && eleveAilleurs(s);
+      const double = Boolean(autre) && !photo.homonyme;
       ligne.classList.toggle('incertaine', photo.incertaine || manque);
       ligne.classList.toggle('connu', Boolean(connu));
+      ligne.classList.toggle('double', double);
+      caseHomonyme.hidden = !autre;
       remarque.textContent = manque ? 'Nom manquant'
         : photo.incertaine ? 'Association incertaine : vérifiez'
           : connu ? 'Déjà enregistré : photo mise à jour, progression conservée'
-            : Etat.classes().includes(s.classe) ? 'Nouvel élève dans cette classe' : '';
+            : double ? `Déjà en « ${libelleClasses(autre)} » : sera aussi rattaché à « ${s.classe} », même fiche et même progression`
+              : Etat.classes().includes(s.classe) ? 'Nouvel élève dans cette classe' : '';
       remarque.hidden = !remarque.textContent;
     };
     const entree = (cleChamp, libelle) => {
@@ -9403,7 +9621,7 @@ function ecranVerification(zone) {
     ligne.append(
       el('img', { class: 'photo-verif', src: photo.image, alt: '' }),
       el('div', { class: 'champs-verif' },
-        entree('nom', 'Nom'), entree('prenom', 'Prénom'), entree('classe', 'Classe'), remarque),
+        entree('nom', 'Nom'), entree('prenom', 'Prénom'), entree('classe', 'Classe'), remarque, caseHomonyme),
       el('button', {
         type: 'button',
         class: 'bouton danger',
@@ -9451,20 +9669,26 @@ function ecranVerification(zone) {
       // Un élève déjà connu est mis à jour, pas dupliqué : il garde son identifiant, donc sa carte Leitner.
       const nouveaux = [];
       const misAJour = [];
+      const rattaches = [];
       for (const p of photos) {
         const saisie = { ...p.saisie, classe: p.saisie.classe || etat.classe };
         const existant = eleveExistant(saisie);
+        const autre = !existant && !p.homonyme && eleveAilleurs(saisie);
         if (existant) misAJour.push({ ...existant, nom: saisie.nom, prenom: saisie.prenom, photo: p.image });
+        // Même élève dans un autre groupe : il y est rattaché, sa photo et sa progression ne bougent pas.
+        else if (autre) rattaches.push([autre.id, saisie.classe]);
         else nouveaux.push({ ...saisie, photo: p.image });
       }
       if (nouveaux.length) await Etat.ajouterEleves(nouveaux);
       for (const eleve of misAJour) await Etat.modifierEleve(eleve);
+      for (const [id, groupe] of rattaches) await Etat.ajouterAuGroupe(id, groupe);
       for (const id of aRetirer) await Etat.supprimerEleve(id);
       Etat.filtreClasse = etat.classe;
       Import.reinitialiser();
       annoncer([
         nouveaux.length && pluriel(nouveaux.length, 'élève ajouté', 'élèves ajoutés'),
         misAJour.length && pluriel(misAJour.length, 'élève mis à jour', 'élèves mis à jour'),
+        rattaches.length && pluriel(rattaches.length, 'élève rattaché à ce groupe', 'élèves rattachés à ce groupe'),
         aRetirer.size && pluriel(aRetirer.size, 'élève retiré', 'élèves retirés'),
       ].filter(Boolean).join(' · ') + '.');
       aller('eleves');
@@ -9605,7 +9829,7 @@ Ecrans.eleves = {
       },
       photoEleve(e, 'vignette'),
       el('span', { class: 'tuile-nom', text: nomComplet(e) }),
-      el('span', { class: 'tuile-classe', text: e.classe }))));
+      el('span', { class: 'tuile-classe', text: libelleClasses(e) }))));
     };
     zone.append(el('div', { class: 'pile' },
       el('div', { class: 'rangee' },
@@ -9643,10 +9867,14 @@ Ecrans.eleve = {
     const nom = el('input', { type: 'text', value: eleve.nom, autocomplete: 'off', required: true });
     const prenom = el('input', { type: 'text', value: eleve.prenom, autocomplete: 'off' });
     const classe = el('input', { type: 'text', value: eleve.classe, autocomplete: 'off', list: 'liste-classes' });
+    const groupes = el('input', { type: 'text', value: (eleve.groupes || []).join(', '), autocomplete: 'off',
+      placeholder: 'Exemple : TSP, groupe 2' });
     const listeClasses = el('datalist', { id: 'liste-classes' }, Etat.classes().map((c) => el('option', { value: c })));
 
     const formulaire = el('form', { class: 'panneau pile' },
-      champ('Nom', nom), champ('Prénom', prenom), champ('Classe', classe), listeClasses,
+      champ('Nom', nom), champ('Prénom', prenom), champ('Classe', classe),
+      champ('Autres classes ou groupes', groupes, 'Séparés par des virgules. L’élève apparaît dans chacun, avec une seule progression.'),
+      listeClasses,
       el('button', { type: 'submit', class: 'bouton principal bloc' }, 'Enregistrer les modifications'));
     formulaire.addEventListener('submit', async (evenement) => {
       evenement.preventDefault();
@@ -9654,7 +9882,8 @@ Ecrans.eleve = {
         annoncer('Le nom est obligatoire.');
         return;
       }
-      const maj = await Etat.modifierEleve({ ...Etat.eleves.get(id), nom: nom.value, prenom: prenom.value, classe: classe.value });
+      const maj = await Etat.modifierEleve({ ...Etat.eleves.get(id), nom: nom.value, prenom: prenom.value, classe: classe.value,
+        groupes: groupes.value.split(',') });
       definirTitre(nomComplet(maj));
       annoncer('Fiche enregistrée.');
     });
@@ -9785,6 +10014,8 @@ async function photoDepuisFichier(fichier) {
 /** Bloc d'une classe : voir, renommer, supprimer. */
 function blocClasse(classe) {
   const eleves = Etat.listeEleves(classe);
+  // Les élèves qui sont aussi dans un autre groupe ne seront pas effacés avec celui-ci.
+  const ailleurs = eleves.filter((e) => classesEleve(e).length > 1).length;
   const bloc = el('section', { class: 'panneau pile serree' });
   const dessiner = (renommage = false) => {
     if (renommage) {
@@ -9832,13 +10063,15 @@ function blocClasse(classe) {
         el('button', { type: 'button', class: 'bouton', onclick: () => aller('nouvel-eleve', classe) }, '+ Élève')),
       confirmationDeuxTemps({
         libelle: 'Supprimer la classe',
-        question: `Supprimer « ${classe} » et ses ${pluriel(eleves.length, 'élève')} ?`,
-        detail: 'Leurs photos et leur progression seront effacées de cet appareil.',
+        question: `Supprimer « ${classe} » ?`,
+        detail: `${pluriel(eleves.length - ailleurs, 'élève')} n’appartenant qu’à ce groupe ${eleves.length - ailleurs > 1 ? 'seront effacés' : 'sera effacé'}, `
+          + `avec photo et progression.${ailleurs ? ` ${pluriel(ailleurs, 'élève')} aussi dans un autre groupe ${ailleurs > 1 ? 'y restent' : 'y reste'}.` : ''}`,
         libelleConfirmer: 'Oui, supprimer la classe',
         classeBouton: 'bouton danger',
         action: async () => {
-          await Etat.supprimerClasse(classe);
-          annoncer(`Classe « ${classe} » supprimée.`);
+          const { effaces, gardes } = await Etat.supprimerClasse(classe);
+          annoncer(`« ${classe} » supprimée : ${pluriel(effaces, 'élève effacé', 'élèves effacés')}`
+            + `${gardes ? `, ${pluriel(gardes, 'gardé')} dans ${gardes > 1 ? 'leurs' : 'son'} autre groupe` : ''}.`);
           afficher();
         },
       }));

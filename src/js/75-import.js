@@ -136,6 +136,35 @@ function blocsTexte(pdfjs, contenu, vue) {
     });
 }
 
+/* ---------- Encodage ---------- */
+
+/**
+ * Certains trombinoscopes déclarent une police en encodage Mac (MacRoman)
+ * alors que leurs octets sont en Windows (WinAnsi) : « é » se lit « È »,
+ * « è » « Ë », et « É » devient « … », si bien que la ligne n'est plus
+ * reconnue comme un nom. On relit alors chaque caractère avec la bonne table.
+ */
+const LU_EN_MACROMAN = 'ÄÇÉÑÖÜáàâäãåéëíìîïñóòôöõúûü†°§•¶ß®™´¨≠ÆØ∞≤≥¥∂∑∏π∫ªºΩæø¿¡¬√ƒ≈∆«»…\u00A0ÀÃÕŒœ–—“”‘’÷◊ÿŸ⁄€‹›ﬁﬂ‡·‚„‰ÂÊÁËÈÍÎÏÌÓÔÒÚÛÙıˆ˜¯˘˙˚¸˝˛ˇ';
+const VRAI_EN_WINANSI = '€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ\u00A0¡¤¥¦§¨ª«¬\u00AD®¯°²³´¶·¸¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿ';
+const CORRECTION_ENCODAGE = new Map([...LU_EN_MACROMAN].map((c, i) => [c, VRAI_EN_WINANSI[i]]));
+
+/**
+ * Indices d'un texte mal lu : un signe qui n'est pas une lettre, une majuscule
+ * au milieu d'un mot en minuscules (« HÈlËne »), ou une majuscule accentuée
+ * en plein mot suivie d'une minuscule (« LÈa »).
+ */
+function anomaliesTexte(texte) {
+  const compter = (motif) => (texte.match(motif) || []).length;
+  return compter(/[^\p{L}\p{M}\p{N}\s'’.,:;/@()+-]/gu) + compter(/\p{Ll}\p{Lu}/gu) + compter(/\p{L}[À-ÖØ-Þ]\p{Ll}/gu);
+}
+
+/** Relit le texte avec la table Windows si cela le rend plus plausible ; sinon le laisse tel quel. */
+function corrigerEncodage(texte) {
+  if (![...texte].some((c) => CORRECTION_ENCODAGE.has(c))) return texte;
+  const relu = [...texte].map((c) => CORRECTION_ENCODAGE.get(c) || c).join('');
+  return anomaliesTexte(relu) < anomaliesTexte(texte) ? relu : texte;
+}
+
 /* ---------- Accents ---------- */
 
 /** Accents « isolés » (un glyphe à part) et l'accent combinant qui leur correspond. */
@@ -195,7 +224,7 @@ function coupureSurAccent(avant, apres, ecart, hauteur) {
 
 /** Assemble des fragments de texte en lignes, en coupant sur les grands écarts horizontaux. */
 function assemblerLignes(blocsBruts) {
-  const blocs = rattacherAccents(blocsBruts.map((b) => ({ ...b })));
+  const blocs = rattacherAccents(blocsBruts.map((b) => ({ ...b, str: corrigerEncodage(b.str) })));
   const rangs = [];
   for (const bloc of [...blocs].sort((a, b) => a.y1 - b.y1)) {
     const rang = rangs.find((r) => Math.abs(r.y1 - bloc.y1) <= Math.max(r.h, bloc.h) * 0.5);
@@ -568,16 +597,34 @@ function cleEleve(e) {
   return sansAccents(`${e.nom}|${e.prenom}`).toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
-/** Classe déjà enregistrée dont on retrouve au moins la moitié des noms du fichier, ou null. */
-function classeReconnue(noms) {
+/** Classes déjà enregistrées qui partagent des élèves avec le fichier, les plus proches d'abord. */
+function chevauchements(noms) {
   const cles = new Set(noms.map(cleEleve));
-  if (!cles.size) return null;
-  let meilleure = null;
-  for (const classe of Etat.classes()) {
-    const communs = Etat.listeEleves(classe).filter((e) => cles.has(cleEleve(e))).length;
-    if (communs && (!meilleure || communs > meilleure.communs)) meilleure = { classe, communs };
-  }
-  return meilleure && meilleure.communs >= Math.max(2, cles.size / 2) ? meilleure.classe : null;
+  return Etat.classes()
+    .map((classe) => {
+      const eleves = Etat.listeEleves(classe);
+      return { classe, communs: eleves.filter((e) => cles.has(cleEleve(e))).length, taille: eleves.length };
+    })
+    .filter((c) => c.communs)
+    .sort((a, b) => b.communs - a.communs);
+}
+
+/**
+ * La classe que ce fichier réimporte, ou null. Il faut que presque tout le
+ * fichier y soit, et l'essentiel de la classe dans le fichier : un groupe de
+ * spécialité tiré d'une classe (TSP pris dans Terminale 3) n'est pas un réimport.
+ */
+function classeReconnue(noms) {
+  const total = new Set(noms.map(cleEleve)).size;
+  const [meilleure] = chevauchements(noms);
+  if (!meilleure || !total) return null;
+  return meilleure.communs >= Math.max(2, total * 0.8) && meilleure.communs >= meilleure.taille * 0.6 ? meilleure.classe : null;
+}
+
+/** Le même élève enregistré dans une autre classe ou un autre groupe, ou null. */
+function eleveAilleurs(saisie) {
+  const cle = cleEleve(saisie);
+  return [...Etat.eleves.values()].find((e) => cleEleve(e) === cle && !classesEleve(e).includes(saisie.classe)) || null;
 }
 
 /** Ce que le fichier change dans une classe : arrivées, élèves absents du fichier, élèves déjà connus. */
@@ -817,7 +864,13 @@ function ecranClasse(zone) {
     valider(douteux ? 'appariement' : 'verification');
   });
 
+  const ailleurs = reconnue ? [] : chevauchements(etat.noms);
   zone.append(el('div', { class: 'pile' },
+    ailleurs.length > 0 && el('div', { class: 'panneau pile serree cadre-groupe' },
+      el('p', {}, el('strong', { text: 'Des élèves de ce fichier sont déjà enregistrés : ' }),
+        ailleurs.map((c) => `${pluriel(c.communs, 'élève')} en « ${c.classe} »`).join(', '), '.'),
+      el('p', { text: 'Si ce fichier est un groupe (spécialité, option…), donne-lui son propre nom : '
+        + 'ces élèves y seront rattachés en plus de leur classe, avec la même progression. Tu valideras chacun à l’étape suivante.' })),
     ecart && el('div', { class: 'panneau pile serree' },
       el('p', {}, el('strong', { text: `Classe déjà enregistrée : « ${reconnue} ».` })),
       el('p', { text: `Ce fichier apporte ${pluriel(ecart.nouveaux.length, 'nouvel élève', 'nouveaux élèves')}`
@@ -967,15 +1020,27 @@ function ecranVerification(zone) {
     const s = photo.saisie;
     const ligne = el('div', { class: 'ligne-verif' });
     const remarque = el('p', { class: 'remarque' });
+    const homonyme = el('input', { type: 'checkbox' });
+    homonyme.checked = Boolean(photo.homonyme);
+    homonyme.addEventListener('change', () => {
+      photo.homonyme = homonyme.checked;
+      maj();
+    });
+    const caseHomonyme = el('label', { class: 'case petit' }, homonyme, 'C’est un autre élève (homonyme) : créer une fiche à part');
     const maj = () => {
       const manque = !s.nom.trim();
       const connu = !manque && eleveExistant(s);
+      const autre = !manque && !connu && eleveAilleurs(s);
+      const double = Boolean(autre) && !photo.homonyme;
       ligne.classList.toggle('incertaine', photo.incertaine || manque);
       ligne.classList.toggle('connu', Boolean(connu));
+      ligne.classList.toggle('double', double);
+      caseHomonyme.hidden = !autre;
       remarque.textContent = manque ? 'Nom manquant'
         : photo.incertaine ? 'Association incertaine : vérifiez'
           : connu ? 'Déjà enregistré : photo mise à jour, progression conservée'
-            : Etat.classes().includes(s.classe) ? 'Nouvel élève dans cette classe' : '';
+            : double ? `Déjà en « ${libelleClasses(autre)} » : sera aussi rattaché à « ${s.classe} », même fiche et même progression`
+              : Etat.classes().includes(s.classe) ? 'Nouvel élève dans cette classe' : '';
       remarque.hidden = !remarque.textContent;
     };
     const entree = (cleChamp, libelle) => {
@@ -989,7 +1054,7 @@ function ecranVerification(zone) {
     ligne.append(
       el('img', { class: 'photo-verif', src: photo.image, alt: '' }),
       el('div', { class: 'champs-verif' },
-        entree('nom', 'Nom'), entree('prenom', 'Prénom'), entree('classe', 'Classe'), remarque),
+        entree('nom', 'Nom'), entree('prenom', 'Prénom'), entree('classe', 'Classe'), remarque, caseHomonyme),
       el('button', {
         type: 'button',
         class: 'bouton danger',
@@ -1037,20 +1102,26 @@ function ecranVerification(zone) {
       // Un élève déjà connu est mis à jour, pas dupliqué : il garde son identifiant, donc sa carte Leitner.
       const nouveaux = [];
       const misAJour = [];
+      const rattaches = [];
       for (const p of photos) {
         const saisie = { ...p.saisie, classe: p.saisie.classe || etat.classe };
         const existant = eleveExistant(saisie);
+        const autre = !existant && !p.homonyme && eleveAilleurs(saisie);
         if (existant) misAJour.push({ ...existant, nom: saisie.nom, prenom: saisie.prenom, photo: p.image });
+        // Même élève dans un autre groupe : il y est rattaché, sa photo et sa progression ne bougent pas.
+        else if (autre) rattaches.push([autre.id, saisie.classe]);
         else nouveaux.push({ ...saisie, photo: p.image });
       }
       if (nouveaux.length) await Etat.ajouterEleves(nouveaux);
       for (const eleve of misAJour) await Etat.modifierEleve(eleve);
+      for (const [id, groupe] of rattaches) await Etat.ajouterAuGroupe(id, groupe);
       for (const id of aRetirer) await Etat.supprimerEleve(id);
       Etat.filtreClasse = etat.classe;
       Import.reinitialiser();
       annoncer([
         nouveaux.length && pluriel(nouveaux.length, 'élève ajouté', 'élèves ajoutés'),
         misAJour.length && pluriel(misAJour.length, 'élève mis à jour', 'élèves mis à jour'),
+        rattaches.length && pluriel(rattaches.length, 'élève rattaché à ce groupe', 'élèves rattachés à ce groupe'),
         aRetirer.size && pluriel(aRetirer.size, 'élève retiré', 'élèves retirés'),
       ].filter(Boolean).join(' · ') + '.');
       aller('eleves');

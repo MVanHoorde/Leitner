@@ -109,7 +109,7 @@ Ecrans.eleves = {
       },
       photoEleve(e, 'vignette'),
       el('span', { class: 'tuile-nom', text: nomComplet(e) }),
-      el('span', { class: 'tuile-classe', text: e.classe }))));
+      el('span', { class: 'tuile-classe', text: libelleClasses(e) }))));
     };
     zone.append(el('div', { class: 'pile' },
       el('div', { class: 'rangee' },
@@ -147,10 +147,14 @@ Ecrans.eleve = {
     const nom = el('input', { type: 'text', value: eleve.nom, autocomplete: 'off', required: true });
     const prenom = el('input', { type: 'text', value: eleve.prenom, autocomplete: 'off' });
     const classe = el('input', { type: 'text', value: eleve.classe, autocomplete: 'off', list: 'liste-classes' });
+    const groupes = el('input', { type: 'text', value: (eleve.groupes || []).join(', '), autocomplete: 'off',
+      placeholder: 'Exemple : TSP, groupe 2' });
     const listeClasses = el('datalist', { id: 'liste-classes' }, Etat.classes().map((c) => el('option', { value: c })));
 
     const formulaire = el('form', { class: 'panneau pile' },
-      champ('Nom', nom), champ('Prénom', prenom), champ('Classe', classe), listeClasses,
+      champ('Nom', nom), champ('Prénom', prenom), champ('Classe', classe),
+      champ('Autres classes ou groupes', groupes, 'Séparés par des virgules. L’élève apparaît dans chacun, avec une seule progression.'),
+      listeClasses,
       el('button', { type: 'submit', class: 'bouton principal bloc' }, 'Enregistrer les modifications'));
     formulaire.addEventListener('submit', async (evenement) => {
       evenement.preventDefault();
@@ -158,7 +162,8 @@ Ecrans.eleve = {
         annoncer('Le nom est obligatoire.');
         return;
       }
-      const maj = await Etat.modifierEleve({ ...Etat.eleves.get(id), nom: nom.value, prenom: prenom.value, classe: classe.value });
+      const maj = await Etat.modifierEleve({ ...Etat.eleves.get(id), nom: nom.value, prenom: prenom.value, classe: classe.value,
+        groupes: groupes.value.split(',') });
       definirTitre(nomComplet(maj));
       annoncer('Fiche enregistrée.');
     });

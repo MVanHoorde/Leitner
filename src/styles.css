@@ -1042,3 +1042,11 @@ textarea:focus, input[type=search]:focus { border-color: var(--cyan); outline: n
 .ligne-verif.connu:not(.incertaine) .remarque { color: var(--gris); font-weight: 500; }
 
 .pile.centre { align-items: center; }
+/* Élève déjà enregistré dans une autre classe : rattachement à valider. */
+.ligne-verif.double { background: var(--cyan-pale); border: 2px solid var(--cyan); }
+.ligne-verif.double .remarque { color: var(--marine); }
+.cadre-groupe { border: 2px solid var(--cyan); background: var(--cyan-pale); }
+/* Auto-évaluation par étapes (trombinoscope) */
+.evaluation-etapes .puces.parties { justify-content: center; flex-wrap: wrap; overflow: visible; }
+.evaluation-etapes .puces.parties .puce { min-height: 48px; font-size: 17px; }
+.evaluation-etapes .auto-evaluation .bouton { flex: 1 1 30%; }

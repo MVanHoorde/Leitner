@@ -48,6 +48,32 @@ const Leitner = {
     };
   },
 
+  /**
+   * Trombinoscope : une réponse à plusieurs niveaux.
+   *   'sur'      tout retrouvé sans hésiter : la carte monte d'une boîte ;
+   *   'hesitant' tout retrouvé en hésitant, ou le nom sans la classe : elle
+   *              reste dans sa boîte et revient au même rythme ;
+   *   'partiel'  une partie seulement : elle descend d'une boîte et revient demain ;
+   *   'echec'    rien : retour en boîte 1.
+   * Fonction pure.
+   */
+  noter(carte, niveau, jour, intervalles = INTERVALLES) {
+    if (niveau === 'sur') return this.appliquer(carte, true, jour, intervalles);
+    if (niveau === 'echec' || !niveau) return this.appliquer(carte, false, jour, intervalles);
+    const hesitant = niveau === 'hesitant';
+    const compartiment = hesitant ? Math.max(1, carte.compartiment) : Math.max(1, carte.compartiment - 1);
+    return {
+      ...carte,
+      compartiment,
+      introduite: carte.introduite ?? jour,
+      echeance: Dates.ajouter(jour, hesitant ? intervalles[compartiment - 1] : 1),
+      passages: carte.passages + 1,
+      reussites: carte.reussites + (hesitant ? 1 : 0),
+      dernierPassage: jour,
+      dernierEchec: hesitant ? carte.dernierEchec : jour,
+    };
+  },
+
   /** Nombre minimal de jours avant d'atteindre le compartiment 5 sans aucun échec. */
   joursAvantMaitrise(carte, jour) {
     if (carte.introduite === null) return INTERVALLES.slice(1, 4).reduce((a, b) => a + b, 0);
@@ -196,17 +222,18 @@ const Session = {
     return s && s.position < s.file.length ? s.file[s.position] : null;
   },
 
-  async repondre(reussi) {
+  /** niveau : 'sur' | 'hesitant' | 'partiel' | 'echec' (Leitner.noter) ; à défaut, déduit de reussi. */
+  async repondre(reussi, niveau = null) {
     const s = this.active;
     const element = this.elementCourant();
     if (!element) return;
 
     if (!element.reprise) {
-      s.resultats.push({ id: element.id, reussi });
+      s.resultats.push({ id: element.id, reussi, niveau });
       const carte = Etat.cartes.get(element.id);
       if (s.algo && carte) {
         const nouvelle = carte.introduite === null;
-        await Etat.enregistrerCarte(Leitner.appliquer(carte, reussi, s.jour));
+        await Etat.enregistrerCarte(Leitner.noter(carte, niveau || (reussi ? 'sur' : 'echec'), s.jour));
         const suivi = {};
         if (!Leitner.sessionAlgoFaite(s.jour)) suivi.sessionAlgo = { date: s.jour, id: s.id };
         if (nouvelle) {

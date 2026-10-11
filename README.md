@@ -24,6 +24,14 @@ Elle a deux entrées, choisies au lancement :
   « Mes classes » (`src/js/81-classes.js`) : renommer ou fusionner, supprimer
   une classe, retirer les élèves de la démonstration (reconnus exactement, le
   tirage étant fixe), ajouter un élève à la main avec une photo.
+  Un élève peut appartenir à plusieurs classes ou groupes (`groupes`, en plus
+  de `classe`) : une seule fiche, une seule carte Leitner. À l'import, un élève
+  déjà connu ailleurs est rattaché au nouveau groupe (ligne encadrée, case
+  « homonyme » pour créer une fiche à part). Les PDF dont la police est lue en
+  MacRoman au lieu de WinAnsi (« HÈlËne », « B…RANGER ») sont relus.
+  En révision photo → identité, l'auto-évaluation se fait par étapes (classe,
+  prénom, nom, puis sûr ou hésitant) : `Leitner.noter` fait monter, garder ou
+  descendre la carte selon ce niveau.
 
 ## Les données en ligne
 

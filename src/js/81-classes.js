@@ -27,6 +27,8 @@ async function photoDepuisFichier(fichier) {
 /** Bloc d'une classe : voir, renommer, supprimer. */
 function blocClasse(classe) {
   const eleves = Etat.listeEleves(classe);
+  // Les élèves qui sont aussi dans un autre groupe ne seront pas effacés avec celui-ci.
+  const ailleurs = eleves.filter((e) => classesEleve(e).length > 1).length;
   const bloc = el('section', { class: 'panneau pile serree' });
   const dessiner = (renommage = false) => {
     if (renommage) {
@@ -74,13 +76,15 @@ function blocClasse(classe) {
         el('button', { type: 'button', class: 'bouton', onclick: () => aller('nouvel-eleve', classe) }, '+ Élève')),
       confirmationDeuxTemps({
         libelle: 'Supprimer la classe',
-        question: `Supprimer « ${classe} » et ses ${pluriel(eleves.length, 'élève')} ?`,
-        detail: 'Leurs photos et leur progression seront effacées de cet appareil.',
+        question: `Supprimer « ${classe} » ?`,
+        detail: `${pluriel(eleves.length - ailleurs, 'élève')} n’appartenant qu’à ce groupe ${eleves.length - ailleurs > 1 ? 'seront effacés' : 'sera effacé'}, `
+          + `avec photo et progression.${ailleurs ? ` ${pluriel(ailleurs, 'élève')} aussi dans un autre groupe ${ailleurs > 1 ? 'y restent' : 'y reste'}.` : ''}`,
         libelleConfirmer: 'Oui, supprimer la classe',
         classeBouton: 'bouton danger',
         action: async () => {
-          await Etat.supprimerClasse(classe);
-          annoncer(`Classe « ${classe} » supprimée.`);
+          const { effaces, gardes } = await Etat.supprimerClasse(classe);
+          annoncer(`« ${classe} » supprimée : ${pluriel(effaces, 'élève effacé', 'élèves effacés')}`
+            + `${gardes ? `, ${pluriel(gardes, 'gardé')} dans ${gardes > 1 ? 'leurs' : 'son'} autre groupe` : ''}.`);
           afficher();
         },
       }));
