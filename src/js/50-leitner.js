@@ -4,10 +4,23 @@
  * qu'il y a sur les cartes : elle sert aussi bien aux visages du trombinoscope
  * qu'aux paquets de contenu, qui apportent seulement leur propre rythme. */
 
+/**
+ * Où remettre une carte ratée dans la file : à une place tirée au hasard, au
+ * moins ECART_REPRISE cartes plus loin quand le lot le permet, sinon parmi les
+ * dernières : l'ordre de retour ne doit rien apprendre.
+ */
+function placeReprise(file, position) {
+  let debut = Math.min(position + 1 + ECART_REPRISE, file.length);
+  if (file.length - debut < 2) debut = Math.min(position + 2, file.length);
+  return debut + Math.floor(Math.random() * (file.length - debut + 1));
+}
+
 /** Trombinoscope : calibré pour reconnaître une classe en trois semaines. */
 const INTERVALLES = [1, 2, 3, 5, 8];
 const SECONDES_PAR_CARTE = 8;
 const MAX_REPRISES = 2;
+/** Nombre minimal de cartes avant de revoir une carte ratée. */
+const ECART_REPRISE = 3;
 
 const MODES = {
   photo: 'Photo → identité',
@@ -243,9 +256,9 @@ const Session = {
         if (Object.keys(suivi).length) await Etat.enregistrerSuivi(suivi);
       }
     }
-    // Une carte ratée revient en fin de lot, sans nouvelle notation.
+    // Une carte ratée revient plus loin dans le lot, sans nouvelle notation.
     if (!reussi && element.reprises < MAX_REPRISES) {
-      s.file.push({ id: element.id, reprises: element.reprises + 1, reprise: true });
+      s.file.splice(placeReprise(s.file, s.position), 0, { id: element.id, reprises: element.reprises + 1, reprise: true });
     }
     s.position += 1;
   },

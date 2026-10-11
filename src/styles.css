@@ -1047,6 +1047,10 @@ textarea:focus, input[type=search]:focus { border-color: var(--cyan); outline: n
 .ligne-verif.double .remarque { color: var(--marine); }
 .cadre-groupe { border: 2px solid var(--cyan); background: var(--cyan-pale); }
 /* Auto-évaluation par étapes (trombinoscope) */
-.evaluation-etapes .puces.parties { justify-content: center; flex-wrap: wrap; overflow: visible; }
-.evaluation-etapes .puces.parties .puce { min-height: 48px; font-size: 17px; }
+.evaluation-etapes .parties { display: grid; gap: 8px; }
+.evaluation-etapes .partie { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 8px; }
+.evaluation-etapes .partie-libelle { font-weight: 600; font-size: 17px; }
+.evaluation-etapes .partie .puce { min-height: 48px; font-size: 16px; padding: 8px 12px; }
+.evaluation-etapes .partie .puce.oui[aria-pressed="true"] { background: var(--cyan); border-color: var(--cyan); color: #fff; }
+.evaluation-etapes .partie .puce.non[aria-pressed="true"] { background: var(--rouge); border-color: var(--rouge); color: #fff; }
 .evaluation-etapes .auto-evaluation .bouton { flex: 1 1 30%; }

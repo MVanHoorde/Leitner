@@ -193,8 +193,8 @@ function rendreCarte(zone, element) {
     el('div', { class: 'revision-entete' },
       el('span', { text: `Carte ${s.position + 1} sur ${s.file.length}` }),
       element.reprise && el('span', { class: 'badge', text: 'À revoir' }),
-      s.algo && carte.introduite === null && el('span', { class: 'badge', text: 'Nouvel élève' }),
-      s.classe === null && el('span', { text: libelleClasses(eleve) })),
+      // Pas de classe dans l'en-tête : elle fait partie de ce qu'on cherche (révélée au dos).
+      s.algo && carte.introduite === null && el('span', { class: 'badge', text: 'Nouvel élève' })),
     el('div', { class: 'carte-revision' }, scene, panneau)));
 
   if (s.mode === 'qcm') modeQcm(eleve, element, scene, panneau);
@@ -225,53 +225,67 @@ function boutonsAutoEvaluation(surReponse = null) {
 }
 
 /**
- * Auto-évaluation par étapes : on touche ce qu'on avait retrouvé (classe ou
- * groupe, prénom, nom), puis on dit si on était sûr. La carte avance selon
+ * Auto-évaluation par étapes : pour chaque partie (classe ou groupe, prénom,
+ * nom), on dit si on l'avait sue, puis si on était sûr. La carte avance selon
  * ce niveau (Leitner.noter) : retrouver la classe avant les noms est déjà un
  * progrès, et une hésitation ne vaut pas une certitude.
  */
 function evaluationParEtapes() {
   const parties = [['classe', 'Classe / groupe'], ['prenom', 'Prénom'], ['nom', 'Nom']];
-  const trouve = { classe: false, prenom: false, nom: false };
+  /** null tant qu'on n'a pas répondu pour cette partie. */
+  const su = { classe: null, prenom: null, nom: null };
   const repondre = async (niveau) => {
     for (const b of zone.querySelectorAll('button')) b.disabled = true;
     toucheEcran = null;
     await Session.repondre(niveau === 'sur' || niveau === 'hesitant', niveau);
     afficher();
   };
-  /** Le niveau d'après les parties retrouvées et la certitude. */
+  /** Le niveau d'après les parties sues et la certitude. */
   const niveau = (sur) => {
-    const n = Object.values(trouve).filter(Boolean).length;
+    const n = Object.values(su).filter((v) => v === true).length;
     if (n === 3) return sur ? 'sur' : 'hesitant';
-    if (trouve.prenom && trouve.nom) return 'hesitant';
+    if (su.prenom && su.nom) return 'hesitant';
     return n ? 'partiel' : 'echec';
   };
-  const puces = el('div', { class: 'puces parties', role: 'group', 'aria-label': 'Ce que vous aviez retrouvé' },
-    parties.map(([cle, libelle], i) => el('button', {
+  const choix = {};
+  const lignes = parties.map(([cle, libelle], i) => {
+    const bouton = (valeur, texte, classe) => el('button', {
       type: 'button',
-      class: 'puce',
+      class: `puce ${classe}`,
       'aria-pressed': 'false',
-      'data-partie': cle,
-      onclick: (e) => basculer(cle, e.currentTarget),
-    }, `${i + 1}. ${libelle}`)));
-  const basculer = (cle, bouton) => {
-    trouve[cle] = !trouve[cle];
-    bouton.setAttribute('aria-pressed', String(trouve[cle]));
+      onclick: () => fixer(cle, valeur),
+    }, texte);
+    choix[cle] = [bouton(true, '✓ Su', 'oui'), bouton(false, '✗ Pas su', 'non')];
+    return el('div', { class: 'partie', role: 'group', 'aria-label': libelle },
+      el('span', { class: 'partie-libelle', text: `${i + 1}. ${libelle}` }), ...choix[cle]);
+  });
+  const valider = [
+    el('button', { type: 'button', class: 'bouton', disabled: true, onclick: () => repondre(niveau(false)) }, 'Valider · j’hésitais'),
+    el('button', { type: 'button', class: 'bouton principal', disabled: true, onclick: () => repondre(niveau(true)) }, 'Valider · sûr'),
+  ];
+  const complet = () => Object.values(su).every((v) => v !== null);
+  const fixer = (cle, valeur) => {
+    su[cle] = valeur;
+    choix[cle][0].setAttribute('aria-pressed', String(valeur === true));
+    choix[cle][1].setAttribute('aria-pressed', String(valeur === false));
+    for (const b of valider) b.disabled = !complet();
   };
   const zone = el('div', { class: 'pile serree evaluation-etapes' },
-    el('p', { class: 'consigne', text: 'Touchez ce que vous aviez retrouvé :' }),
-    puces,
+    el('p', { class: 'consigne', text: 'Pour chaque partie, l’aviez-vous sue ?' }),
+    el('div', { class: 'parties' }, lignes),
     el('div', { class: 'rangee auto-evaluation' },
       el('button', { type: 'button', class: 'bouton accent', onclick: () => repondre('echec') }, 'Rien trouvé'),
-      el('button', { type: 'button', class: 'bouton', onclick: () => repondre(niveau(false)) }, 'Valider · j’hésitais'),
-      el('button', { type: 'button', class: 'bouton principal', onclick: () => repondre(niveau(true)) }, 'Valider · sûr')),
-    el('p', { class: 'discret petit', text: 'Tout et sûr : la carte monte. Tout en hésitant : elle reste. '
-      + 'Une partie : elle descend et revient demain. Rien : boîte 1. Touches 1, 2, 3 puis Entrée (sûr) ou H (hésitant).' }));
+      ...valider),
+    el('p', { class: 'discret petit', text: 'Tout su et sûr : la carte monte. Tout su en hésitant : elle reste. '
+      + 'Une partie : elle descend et revient demain. Rien : boîte 1. '
+      + 'Clavier : 1, 2, 3 alternent su / pas su, puis Entrée (sûr) ou H (hésitant) ; 0 = rien trouvé.' }));
   toucheEcran = (e) => {
     const rang = Number(e.key);
-    if (rang >= 1 && rang <= 3) basculer(parties[rang - 1][0], puces.children[rang - 1]);
-    else if (e.key === 'Enter') repondre(niveau(true));
-    else if (e.key === 'h' || e.key === 'H') repondre(niveau(false));
+    if (rang >= 1 && rang <= 3) {
+      const cle = parties[rang - 1][0];
+      fixer(cle, su[cle] !== true);
+    } else if (e.key === 'Enter' && complet()) repondre(niveau(true));
+    else if ((e.key === 'h' || e.key === 'H') && complet()) repondre(niveau(false));
     else if (e.key === '0') repondre('echec');
   };
   return zone;

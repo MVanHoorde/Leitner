@@ -403,9 +403,10 @@ const SessionContenu = {
         }
       }
     }
-    // Une carte ratée revient en fin de lot, sans nouvelle notation (pas pendant un test).
+    // Une carte ratée revient plus loin dans le lot, à une place tirée au hasard,
+    // sans nouvelle notation (pas pendant un test).
     if (!reussi && element.reprises < MAX_REPRISES && s.type !== 'test') {
-      s.file.push(this.preparer(element.id, false, element.reprises + 1));
+      s.file.splice(placeReprise(s.file, s.position), 0, this.preparer(element.id, false, element.reprises + 1));
     }
     s.position += 1;
   },
