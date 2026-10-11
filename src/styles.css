@@ -1036,3 +1036,7 @@ textarea:focus, input[type=search]:focus { border-color: var(--cyan); outline: n
 
 /* Vrai ou faux */
 .choix.vrai-faux .bouton { min-height: 72px; font-size: 22px; font-weight: 700; }
+
+/* Réimport d'une classe (75-import.js) */
+.vignette-absent { flex: none; width: 48px; height: 48px; object-fit: cover; border-radius: 8px; font-size: 10px; }
+.ligne-verif.connu:not(.incertaine) .remarque { color: var(--gris); font-weight: 500; }

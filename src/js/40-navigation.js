@@ -38,9 +38,16 @@ document.addEventListener('keydown', (evenement) => {
 });
 
 async function afficher() {
-  if (!Porte.courante) {
-    afficherChoixPorte();
-    return;
+  // Le choix d'entrée et le trombinoscope ne sont proposés qu'à un compte
+  // enseignant ; tout autre visiteur va directement aux flashcards.
+  if (!Porte.courante || (Porte.courante === 'prof' && !Porte.enseignant())) {
+    if (Porte.enseignant()) {
+      afficherChoixPorte();
+      return;
+    }
+    const etaitProf = Porte.courante === 'prof';
+    await Porte.choisir('eleve');
+    if (etaitProf) Verrou.verrouiller();
   }
   // La porte prof ne s'ouvre qu'avec le mot de passe ; la porte élève n'a rien
   // de personnel à protéger et n'obtient jamais la clé de déchiffrement.

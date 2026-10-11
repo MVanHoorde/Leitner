@@ -15,6 +15,12 @@ Elle a deux entrées, choisies au lancement :
   nom, prénom, classe), import de trombinoscopes PDF, tableau de bord. Protégé
   par mot de passe ; noms et photos sont chiffrés en AES-GCM et **ne quittent
   jamais l'appareil**. L'entrée flashcards n'obtient jamais la clé.
+  Cette entrée n'est proposée qu'à un compte enseignant (rôle vérifié par le
+  serveur) : sans lui, l'application s'ouvre directement sur les flashcards.
+  Réimporter une classe déjà enregistrée est détecté : liste identique →
+  « passer à un autre fichier » (ou écraser) ; liste modifiée → les élèves
+  connus gardent leur progression, les arrivées sont ajoutées, les absents du
+  fichier peuvent être retirés.
 
 ## Les données en ligne
 

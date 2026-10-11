@@ -8,6 +8,10 @@
  *
  * Le cloisonnement visible (le menu) n'est qu'un confort ; la garantie réelle
  * reste le chiffrement, qu'aucun écran élève ne peut lever.
+ *
+ * La porte « prof » n'est même proposée qu'à un compte enseignant (rôle vérifié
+ * par le serveur, est_enseignant) : sans lui, l'application s'ouvre directement
+ * sur les flashcards et ne montre aucune trace du trombinoscope.
  */
 
 const NIVEAUX = [
@@ -41,6 +45,12 @@ const Porte = {
 
   accueil() {
     return this.courante === 'eleve' ? 'accueil-eleve' : 'accueil';
+  },
+
+  /** Compte enseignant connecté : lui seul voit l'entrée du trombinoscope. */
+  enseignant() {
+    const compte = Nuage.compte();
+    return Boolean(compte && compte.prof);
   },
 
   /** Un écran sans mention de porte appartient au prof : tous les écrans

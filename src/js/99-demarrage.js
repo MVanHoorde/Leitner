@@ -24,7 +24,7 @@ async function demarrer() {
 
     window.addEventListener('hashchange', afficher);
     if (compte) synchroniserTout();
-    if (Porte.courante === 'prof') {
+    if (Porte.courante === 'prof' && Porte.enseignant()) {
       afficherVerrou((await Base.lireMeta('chiffrement')) ? 'deverrouiller' : 'creer');
     } else {
       afficher();

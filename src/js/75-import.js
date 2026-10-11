@@ -501,6 +501,43 @@ function libelleNom(n) {
   return `${n.nom} ${n.prenom}`.trim() || 'Sans nom';
 }
 
+/* ---------- Réimport d'une classe déjà enregistrée ---------- */
+
+/** Même élève, quelles que soient la casse, les accents et les espaces. */
+function cleEleve(e) {
+  return sansAccents(`${e.nom}|${e.prenom}`).toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/** Classe déjà enregistrée dont on retrouve au moins la moitié des noms du fichier, ou null. */
+function classeReconnue(noms) {
+  const cles = new Set(noms.map(cleEleve));
+  if (!cles.size) return null;
+  let meilleure = null;
+  for (const classe of Etat.classes()) {
+    const communs = Etat.listeEleves(classe).filter((e) => cles.has(cleEleve(e))).length;
+    if (communs && (!meilleure || communs > meilleure.communs)) meilleure = { classe, communs };
+  }
+  return meilleure && meilleure.communs >= Math.max(2, cles.size / 2) ? meilleure.classe : null;
+}
+
+/** Ce que le fichier change dans une classe : arrivées, élèves absents du fichier, élèves déjà connus. */
+function differenceClasse(classe, noms) {
+  const existants = Etat.listeEleves(classe);
+  const dansFichier = new Set(noms.map(cleEleve));
+  const connus = new Set(existants.map(cleEleve));
+  return {
+    nouveaux: noms.filter((n) => !connus.has(cleEleve(n))),
+    absents: existants.filter((e) => !dansFichier.has(cleEleve(e))),
+    communs: existants.filter((e) => dansFichier.has(cleEleve(e))),
+  };
+}
+
+/** L'élève déjà enregistré dans cette classe sous ce nom, ou null. */
+function eleveExistant(saisie) {
+  const cle = cleEleve(saisie);
+  return Etat.listeEleves(saisie.classe).find((e) => cleEleve(e) === cle) || null;
+}
+
 Ecrans.import = {
   titre: 'Importer un trombinoscope',
   titreCourt: 'Import',
@@ -659,6 +696,38 @@ function ecranClasse(zone) {
   }
   const avecNom = etat.photos.filter((p) => p.nomId).length;
   const incertaines = etat.photos.filter((p) => p.incertaine).length;
+  // Le fichier ressemble-t-il à une classe déjà enregistrée ?
+  if (etat.reconnue === undefined) etat.reconnue = classeReconnue(etat.noms);
+  const reconnue = etat.reconnue;
+  if (reconnue && !etat.classe) etat.classe = reconnue;
+  const ecart = reconnue ? differenceClasse(reconnue, etat.noms) : null;
+  if (ecart && !ecart.nouveaux.length && !ecart.absents.length && !etat.ecraser) {
+    definirTitre('Liste déjà importée');
+    zone.append(el('div', { class: 'pile' },
+      el('div', { class: 'alerte pile' },
+        el('p', {}, el('strong', { text: `Cette liste est déjà enregistrée : classe « ${reconnue} ».` })),
+        el('p', { text: `Les ${pluriel(ecart.communs.length, 'élève')} du fichier y sont tous, et aucun élève de la classe `
+          + 'n’en est absent. L’importer de nouveau n’apporte rien.' })),
+      el('button', {
+        type: 'button',
+        class: 'bouton principal bloc grand',
+        onclick: () => {
+          Import.reinitialiser();
+          afficher();
+        },
+      }, 'Passer à un autre fichier'),
+      el('button', {
+        type: 'button',
+        class: 'bouton bloc',
+        onclick: () => {
+          etat.ecraser = true;
+          afficher();
+        },
+      }, 'Continuer quand même et écraser'),
+      el('p', { class: 'discret', text: 'Écraser remplace les photos et les noms par ceux du fichier. '
+        + 'La progression de chaque élève est conservée.' })));
+    return;
+  }
   const entree = el('input', { type: 'text', value: etat.classe, autocomplete: 'off', list: 'classes-import', placeholder: 'Exemple : 2nde 4' });
   const listeClasses = el('datalist', { id: 'classes-import' }, Etat.classes().map((c) => el('option', { value: c })));
 
@@ -689,6 +758,11 @@ function ecranClasse(zone) {
   });
 
   zone.append(el('div', { class: 'pile' },
+    ecart && el('div', { class: 'panneau pile serree' },
+      el('p', {}, el('strong', { text: `Classe déjà enregistrée : « ${reconnue} ».` })),
+      el('p', { text: `Ce fichier apporte ${pluriel(ecart.nouveaux.length, 'nouvel élève', 'nouveaux élèves')}`
+        + ` ; ${pluriel(ecart.absents.length, 'élève', 'élèves')} de la classe n’y ${ecart.absents.length > 1 ? 'figurent' : 'figure'} plus. `
+        + 'L’import mettra la classe à jour : les élèves déjà connus gardent leur progression.' })),
     el('div', { class: 'chiffres' },
       chiffre(total, total > 1 ? 'photos trouvées' : 'photo trouvée'),
       chiffre(avecNom, 'avec un nom'),
@@ -811,8 +885,6 @@ function ecranAppariement(zone) {
 function ecranVerification(zone) {
   const etat = Import.etat;
   definirTitre('Vérification');
-  const cle = (e) => sansAccents(`${e.nom}|${e.prenom}|${e.classe}`).toLowerCase().replace(/\s+/g, ' ').trim();
-  const existants = new Set([...Etat.eleves.values()].map(cle));
 
   for (const photo of etat.photos) {
     if (photo.ignoree || photo.saisie) continue;
@@ -825,8 +897,10 @@ function ecranVerification(zone) {
   const retenues = () => etat.photos.filter((p) => !p.ignoree);
   const majCompteur = () => {
     const n = retenues().length;
-    compteur.textContent = `Enregistrer ${pluriel(n, 'élève')}`;
-    enregistrer.disabled = n === 0;
+    // aRetirer est déclaré plus bas : majCompteur n'est appelé qu'une fois l'écran construit.
+    const retraits = aRetirer.size;
+    compteur.textContent = `Enregistrer ${pluriel(n, 'élève')}${retraits ? ` · retirer ${retraits}` : ''}`;
+    enregistrer.disabled = n === 0 && !retraits;
   };
 
   for (const photo of retenues()) {
@@ -835,11 +909,13 @@ function ecranVerification(zone) {
     const remarque = el('p', { class: 'remarque' });
     const maj = () => {
       const manque = !s.nom.trim();
-      const doublon = existants.has(cle(s));
+      const connu = !manque && eleveExistant(s);
       ligne.classList.toggle('incertaine', photo.incertaine || manque);
+      ligne.classList.toggle('connu', Boolean(connu));
       remarque.textContent = manque ? 'Nom manquant'
         : photo.incertaine ? 'Association incertaine : vérifiez'
-          : doublon ? 'Déjà enregistré dans cette classe' : '';
+          : connu ? 'Déjà enregistré : photo mise à jour, progression conservée'
+            : Etat.classes().includes(s.classe) ? 'Nouvel élève dans cette classe' : '';
       remarque.hidden = !remarque.textContent;
     };
     const entree = (cleChamp, libelle) => {
@@ -867,6 +943,26 @@ function ecranVerification(zone) {
     liste.append(ligne);
   }
 
+  // Classe déjà enregistrée : les élèves absents du fichier, à retirer s'ils sont partis.
+  const aRetirer = new Set();
+  const absents = Etat.classes().includes(etat.classe)
+    ? differenceClasse(etat.classe, retenues().map((p) => p.saisie)).absents
+    : [];
+  const blocAbsents = absents.length && el('section', { class: 'panneau pile' },
+    el('h2', { text: `Absents de ce fichier (${absents.length})` }),
+    el('p', { class: 'discret', text: 'Ils sont dans la classe enregistrée mais pas dans le fichier. Cochez ceux qui sont partis : '
+      + 'ils seront retirés, avec leur progression. Les autres restent tels quels.' }),
+    ...absents.map((eleve) => {
+      const coche = el('input', { type: 'checkbox' });
+      coche.addEventListener('change', () => {
+        if (coche.checked) aRetirer.add(eleve.id);
+        else aRetirer.delete(eleve.id);
+        majCompteur();
+      });
+      return el('label', { class: 'case' }, coche, photoEleve(eleve, 'vignette-absent'),
+        el('span', { text: `Retirer ${nomComplet(eleve)}` }));
+    }));
+
   const enregistrer = el('button', { type: 'button', class: 'bouton principal grand' }, compteur);
   enregistrer.addEventListener('click', async () => {
     const photos = retenues();
@@ -878,12 +974,25 @@ function ecranVerification(zone) {
     }
     enregistrer.disabled = true;
     try {
-      const eleves = await Etat.ajouterEleves(photos.map((p) => ({
-        nom: p.saisie.nom, prenom: p.saisie.prenom, classe: p.saisie.classe || etat.classe, photo: p.image,
-      })));
+      // Un élève déjà connu est mis à jour, pas dupliqué : il garde son identifiant, donc sa carte Leitner.
+      const nouveaux = [];
+      const misAJour = [];
+      for (const p of photos) {
+        const saisie = { ...p.saisie, classe: p.saisie.classe || etat.classe };
+        const existant = eleveExistant(saisie);
+        if (existant) misAJour.push({ ...existant, nom: saisie.nom, prenom: saisie.prenom, photo: p.image });
+        else nouveaux.push({ ...saisie, photo: p.image });
+      }
+      if (nouveaux.length) await Etat.ajouterEleves(nouveaux);
+      for (const eleve of misAJour) await Etat.modifierEleve(eleve);
+      for (const id of aRetirer) await Etat.supprimerEleve(id);
       Etat.filtreClasse = etat.classe;
       Import.reinitialiser();
-      annoncer(`${pluriel(eleves.length, 'élève enregistré', 'élèves enregistrés')}.`);
+      annoncer([
+        nouveaux.length && pluriel(nouveaux.length, 'élève ajouté', 'élèves ajoutés'),
+        misAJour.length && pluriel(misAJour.length, 'élève mis à jour', 'élèves mis à jour'),
+        aRetirer.size && pluriel(aRetirer.size, 'élève retiré', 'élèves retirés'),
+      ].filter(Boolean).join(' · ') + '.');
       aller('eleves');
     } catch (erreur) {
       annoncer(`Échec de l’enregistrement : ${erreur.message}`);
@@ -905,6 +1014,7 @@ function ecranVerification(zone) {
       },
     }, 'Retour à l’appariement'),
     liste,
+    blocAbsents,
     el('div', { class: 'barre-enregistrement' }, enregistrer)));
   majCompteur();
 }

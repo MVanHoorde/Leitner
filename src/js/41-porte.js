@@ -25,8 +25,8 @@ function afficherChoixPorte() {
   };
 
   zone.append(el('div', { class: 'pile portes' },
-    el('p', { class: 'discret', text: 'Cette application sert à deux usages. Choisissez votre entrée ; '
-      + 'elle sera retenue pour les prochaines ouvertures.' }),
+    el('p', { class: 'discret', text: 'Compte enseignant : deux entrées. Choisissez la vôtre ; '
+      + 'elle sera retenue pour les prochaines ouvertures. Les élèves ne voient que les flashcards.' }),
 
     boutonMenu('Mes flashcards',
       'Élèves et enseignants · créer ses cartes, la bibliothèque du prof, la boîte de Leitner',
@@ -45,8 +45,9 @@ function afficherChoixPorte() {
         + 'trombinoscope, même sur la tablette de l’enseignant.' }))));
 }
 
-/** Bouton présent en bas des deux accueils, pour revenir au choix d'entrée. */
+/** Bouton présent en bas des deux accueils, pour revenir au choix d'entrée (compte enseignant seulement). */
 function boutonChangerPorte() {
+  if (!Porte.enseignant() && Porte.courante !== 'prof') return null;
   return el('button', {
     type: 'button',
     class: 'bouton bloc',

@@ -446,7 +446,9 @@ function lireListe(texte) {
   return { cartes, ignorees };
 }
 
-Ecrans.import = {
+// « import » est l'import de trombinoscopes PDF (75-import.js) : deux écrans du
+// même nom s'écraseraient, le dernier chargé gagnant.
+Ecrans['coller-liste'] = {
   titre: 'Coller une liste',
   titreCourt: 'Import',
   parent: 'paquet',

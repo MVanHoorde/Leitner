@@ -268,7 +268,7 @@ Ecrans.paquet = {
       gestion.append(
         el('div', { class: 'rangee' },
           el('button', { type: 'button', class: 'bouton accent', onclick: () => aller('carte', `${paquet.id}~nouvelle`) }, '+ Ajouter une carte'),
-          el('button', { type: 'button', class: 'bouton', onclick: () => aller('import', paquet.id) }, 'Coller une liste')),
+          el('button', { type: 'button', class: 'bouton', onclick: () => aller('coller-liste', paquet.id) }, 'Coller une liste')),
         el('div', { class: 'rangee' },
           el('button', { type: 'button', class: 'bouton', onclick: () => aller('cartes', paquet.id) },
             `Voir et modifier les cartes (${nombreCartesSources(paquet)})`),
@@ -800,7 +800,7 @@ Ecrans.cartes = {
     const pile = el('div', { class: 'pile' },
       el('div', { class: 'rangee' },
         el('button', { type: 'button', class: 'bouton accent', onclick: () => aller('carte', `${id}~nouvelle`) }, '+ Ajouter une carte'),
-        el('button', { type: 'button', class: 'bouton', onclick: () => aller('import', id) }, 'Coller une liste')));
+        el('button', { type: 'button', class: 'bouton', onclick: () => aller('coller-liste', id) }, 'Coller une liste')));
     if (!lignes.length) pile.append(el('p', { class: 'discret', text: 'Aucune carte pour l’instant.' }));
     const liste = el('div', { class: 'liste-cartes' });
     for (const l of lignes) {
