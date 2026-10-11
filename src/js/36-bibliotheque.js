@@ -223,6 +223,11 @@ function appliquerSM2(etat, note, jour, dateEvaluation) {
 function appliquerReglages(etat, reussi, jour, paquet, note = null) {
   const reglage = ReglagesPaquet.de(paquet);
   const evaluation = ReglagesPaquet.evaluation(paquet, jour);
+  // Paquet à niveaux : une carte nouvelle réussie du premier coup est déjà sue,
+  // inutile de la revoir demain ; elle saute en boîte 3.
+  if (reussi && etat.introduite === null && Niveaux.actif(paquet) && reglage.algorithme !== 'sm2') {
+    return Leitner.appliquer({ ...etat, compartiment: 2 }, true, jour, reglage.intervalles, evaluation);
+  }
   if (reglage.algorithme === 'sm2') return appliquerSM2(etat, note || (reussi ? 'bien' : 'revoir'), jour, evaluation);
   if (reglage.algorithme === 'progressif' && !reussi) {
     return {
@@ -292,6 +297,9 @@ function calendrierCarte(paquet, jour, dateEvaluation) {
 
 /* ---------- Bibliothèque personnelle ---------- */
 
+/** Paquets livrés retirés de l'application, et celui qui les remplace dans les bibliothèques. */
+const PAQUETS_REMPLACES = { 'chimie-bases': 'unites', reflexes: 'conversions', nomenclature: 'conversions' };
+
 const Bibliotheque = {
   /** Clés des paquets ajoutés (intégrés ou publiés par un enseignant). */
   adoptes: null,
@@ -299,6 +307,10 @@ const Bibliotheque = {
   async charger() {
     const stocke = await Depot.lire('bibliotheque');
     this.adoptes = stocke && Array.isArray(stocke.paquets) ? stocke.paquets : null;
+    // Un élève qui avait un ancien paquet livré trouve son remplaçant à sa place.
+    if (this.adoptes && this.adoptes.some((cle) => PAQUETS_REMPLACES[cle])) {
+      this.adoptes = [...new Set(this.adoptes.map((cle) => PAQUETS_REMPLACES[cle] || cle))];
+    }
   },
 
   /** Tant que l'élève n'a rien choisi : les paquets intégrés de son niveau. */

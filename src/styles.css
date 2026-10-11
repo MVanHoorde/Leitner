@@ -1013,3 +1013,26 @@ textarea:focus, input[type=search]:focus { border-color: var(--cyan); outline: n
 .exemple-algo li { margin: 4px 0; }
 .pastille-reponse { display: inline-block; padding: 0 8px; font-size: 14px; font-weight: 700; color: #fff; background: var(--marine); border-radius: 999px; }
 .pastille-reponse.ratee { background: var(--rouge); }
+
+/* Paquets à niveaux (37-niveaux.js) */
+.niveaux { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.niveau {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 4px 10px;
+  align-items: center;
+  padding: 10px 12px;
+  background: var(--blanc);
+  border: 1px solid var(--bord);
+  border-radius: var(--rayon);
+}
+.niveau-icone { grid-row: span 2; font-size: 20px; text-align: center; }
+.niveau-texte { display: flex; flex-direction: column; min-width: 0; }
+.niveau.en-cours { border-color: var(--cyan); box-shadow: inset 4px 0 0 var(--cyan); }
+.niveau.maitrise .niveau-icone { color: var(--cyan); font-weight: 700; }
+.niveau.ferme { background: #F1F4F9; color: var(--gris); }
+.niveau-jauge { grid-column: 2; height: 6px; background: #E4EAF3; border-radius: 3px; overflow: hidden; }
+.niveau-jauge > span { display: block; height: 100%; background: var(--cyan); }
+
+/* Vrai ou faux */
+.choix.vrai-faux .bouton { min-height: 72px; font-size: 22px; font-weight: 700; }

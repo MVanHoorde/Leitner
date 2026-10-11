@@ -20,7 +20,10 @@ function consigneDe(paquet, element) {
   const carte = Paquets.index.get(element.id);
   const section = Paquets.section(paquet, carte.section);
   if (carte.masque) return 'Que cache la zone orange ?';
-  if (paquet.origine !== 'integre') {
+  if (element.format === 'vraifaux') return 'Vrai ou faux ?';
+  if (carte.consigne) return carte.consigne;
+  // Paquets créés dans l'appli, et paquets livrés qui mêlent les formats dans une section.
+  if (paquet.origine !== 'integre' || paquet.consignesParFormat) {
     if (element.format === 'qcm') return 'Choisis la bonne réponse.';
     if (element.format === 'saisie') return 'Écris la réponse.';
     return 'Réponds de tête, puis retourne la carte.';
@@ -79,7 +82,7 @@ Ecrans['session-contenu'] = {
     }
     const element = SessionContenu.elementCourant();
     if (element) rendreCarteContenu(zone, element);
-    else rendreFinDeSerieContenu(zone);
+    else return rendreFinDeSerieContenu(zone);
   },
 };
 
@@ -96,7 +99,8 @@ function rendreCarteContenu(zone, element) {
   const entete = el('div', { class: 'revision-entete' },
     el('span', { text: `Carte ${s.position + 1} sur ${s.file.length}` }),
     element.reprise && el('span', { class: 'badge', text: 'À revoir' }),
-    !element.compte && !element.reprise && el('span', { class: 'badge', text: 'Hors barème' }),
+    s.type === 'test' && el('span', { class: 'badge accent', text: 'Test de positionnement' }),
+    !element.compte && !element.reprise && s.type !== 'test' && el('span', { class: 'badge', text: 'Hors barème' }),
     // Dans un objectif, on rappelle de quel paquet vient la carte.
     el('span', { text: s.paquets.length > 1 ? paquet.titre : etiquetteSection(paquet, carte.section) }));
 
@@ -112,6 +116,7 @@ function rendreCarteContenu(zone, element) {
 
   if (element.format === 'qcm') formatQcm(carte, enonce, element, panneau);
   else if (element.format === 'saisie') formatSaisie(carte, enonce, element, panneau);
+  else if (element.format === 'vraifaux') formatVraiFaux(carte, enonce, element, panneau);
   else formatRetournement(carte, enonce, panneau, element);
 }
 
@@ -129,10 +134,11 @@ function chronometre(debut) {
 }
 
 function blocReponse(carte, enonce) {
+  const aide = enonce.aide || carte.aide;
   return el('div', { class: 'pile serree apparition' },
     enonce.reponse && el('div', { class: 'reponse' }, texteCarte(enonce.reponse, 'reponse-texte')),
     carte.photoReponse && photoZoomable(carte.photoReponse),
-    carte.aide && el('p', { class: 'discret aide' }, texteCarte(carte.aide)));
+    aide && el('p', { class: 'discret aide' }, texteCarte(aide)));
 }
 
 /** Photo d'une carte ; un toucher l'agrandit en plein écran. */
@@ -223,7 +229,11 @@ function formatRetournement(carte, enonce, panneau, element) {
 /* Format 2 : quatre propositions, correction automatique. */
 function formatQcm(carte, enonce, element, panneau) {
   if (!element.options) {
-    element.options = melanger([carte.reponse, ...Paquets.distracteurs(carte)]);
+    // Carte tirée au hasard : ses pièges viennent du tirage ; on en montre trois, différents à chaque passage.
+    const pieges = element.tirage && element.tirage.distracteurs
+      ? melanger([...new Set(element.tirage.distracteurs)].filter((d) => d !== enonce.reponse)).slice(0, 3)
+      : Paquets.distracteurs(carte);
+    element.options = melanger([enonce.reponse, ...pieges]);
   }
   const suite = el('div', { class: 'pile' });
   const grille = el('div', { class: 'choix' });
@@ -232,17 +242,17 @@ function formatQcm(carte, enonce, element, panneau) {
   const choisir = async (texte, bouton) => {
     if (repondu) return;
     repondu = true;
-    const reussi = texte === carte.reponse;
+    const reussi = texte === enonce.reponse;
     for (const b of grille.children) {
       b.disabled = true;
-      if (b.dataset.reponse === carte.reponse) b.classList.add('juste');
+      if (b.dataset.reponse === enonce.reponse) b.classList.add('juste');
       else if (b === bouton) b.classList.add('faux');
     }
     toucheEcran = null;
     await SessionContenu.repondre(reussi);
     suite.replaceChildren(
       el('p', { class: 'verdict', text: reussi ? 'Bonne réponse' : 'Ce n’était pas la bonne' }),
-      carte.aide && el('p', { class: 'discret aide' }, texteCarte(carte.aide)),
+      (enonce.aide || carte.aide) && el('p', { class: 'discret aide' }, texteCarte(enonce.aide || carte.aide)),
       el('button', { type: 'button', class: 'bouton principal bloc grand', onclick: afficher }, 'Suivant'));
     toucheEcran = (e) => {
       if (e.key === ' ' || e.key === 'Enter') {
@@ -269,26 +279,43 @@ function formatQcm(carte, enonce, element, panneau) {
 function formatSaisie(carte, enonce, element, panneau) {
   const attenduNombre = enonce.nombre !== undefined ? enonce.nombre : carte.nombre;
   const attenduTexte = enonce.saisie || carte.saisie || [];
+  const tolerance = enonce.tolerance ?? carte.tolerance;
+  const scientifique = enonce.ecritureScientifique ?? carte.ecritureScientifique;
+  // Une unité attendue : toute écriture équivalente est juste (J·mol⁻¹·K⁻¹ = Pa·m³·mol⁻¹·K⁻¹).
+  const uniteAttendue = enonce.uniteAttendue ?? carte.uniteAttendue;
+  const basesSeules = enonce.basesSeules ?? carte.basesSeules;
+  // Le pavé décimal n'a ni « ^ » ni « × » : clavier complet dès qu'une puissance de dix est probable.
+  const puissance = scientifique || (attenduNombre !== undefined && attenduNombre !== 0
+    && (Math.abs(attenduNombre) < 1e-3 || Math.abs(attenduNombre) >= 1e6));
   const champSaisie = el('input', {
     type: 'text',
-    inputmode: attenduNombre !== undefined ? 'decimal' : 'text',
+    inputmode: attenduNombre !== undefined && !puissance ? 'decimal' : 'text',
     autocomplete: 'off',
     autocapitalize: 'off',
     spellcheck: 'false',
     'aria-label': 'Votre réponse',
   });
-  const unite = carte.unite ? el('span', { class: 'unite', text: carte.unite }) : null;
+  const unite = (enonce.unite || carte.unite) ? el('span', { class: 'unite', text: enonce.unite || carte.unite }) : null;
   const suite = el('div', { class: 'pile' });
 
   const verifier = async () => {
-    const saisie = champSaisie.value;
+    // « 2 500 m » quand l'unité est déjà affichée : on ne compte pas l'unité retapée.
+    const uniteAffichee = enonce.unite || carte.unite;
+    const saisie = uniteAffichee && champSaisie.value.trim().endsWith(uniteAffichee)
+      ? champSaisie.value.trim().slice(0, -uniteAffichee.length)
+      : champSaisie.value;
     if (!saisie.trim()) {
       champSaisie.focus();
       return;
     }
-    const reussi = attenduNombre !== undefined
-      ? memeNombre(nombreSaisi(saisie), attenduNombre)
-      : reponseAcceptee(saisie, [carte.reponse, ...attenduTexte]);
+    let reussi;
+    if (uniteAttendue) {
+      reussi = ([].concat(uniteAttendue).some((u) => memeUnite(saisie, u)) && (!basesSeules || enUnitesDeBase(saisie)))
+        || reponseAcceptee(saisie, attenduTexte);
+    }
+    else if (attenduNombre !== undefined) {
+      reussi = memeNombre(nombreSaisi(saisie), attenduNombre, tolerance) && (!scientifique || estEcritureScientifique(saisie));
+    } else reussi = reponseAcceptee(saisie, [enonce.reponse, ...attenduTexte]);
     champSaisie.disabled = true;
     champSaisie.classList.add(reussi ? 'juste' : 'faux');
     formulaire.querySelector('button').disabled = true;
@@ -308,8 +335,10 @@ function formatSaisie(carte, enonce, element, panneau) {
         },
       }, 'Ma réponse était juste'));
     }
+    const seulementForme = !reussi && scientifique && memeNombre(nombreSaisi(saisie), attenduNombre, tolerance);
     suite.replaceChildren(
-      el('p', { class: 'verdict', text: reussi ? 'Bonne réponse' : 'Réponse attendue' }),
+      el('p', { class: 'verdict', text: reussi ? 'Bonne réponse'
+        : seulementForme ? 'Valeur juste, mais pas en écriture scientifique (a × 10ⁿ, 1 ⩽ a < 10)' : 'Réponse attendue' }),
       blocReponse(carte, enonce),
       actions);
     toucheEcran = (e) => {
@@ -331,6 +360,42 @@ function formatSaisie(carte, enonce, element, panneau) {
   formulaire.append(barreSymboles(formulaire, { compacte: true }));
   panneau.append(formulaire, suite);
   champSaisie.focus();
+}
+
+/* Format 4 : une affirmation, vraie ou fausse. */
+function formatVraiFaux(carte, enonce, element, panneau) {
+  const suite = el('div', { class: 'pile' });
+  let repondu = false;
+  const choisir = async (choix) => {
+    if (repondu) return;
+    repondu = true;
+    const reussi = choix === Boolean(enonce.vrai);
+    for (const b of rangee.children) {
+      b.disabled = true;
+      if ((b.dataset.choix === 'vrai') === Boolean(enonce.vrai)) b.classList.add('juste');
+      else if ((b.dataset.choix === 'vrai') === choix) b.classList.add('faux');
+    }
+    toucheEcran = null;
+    await SessionContenu.repondre(reussi);
+    suite.replaceChildren(
+      el('p', { class: 'verdict', text: reussi ? 'Bonne réponse' : `Non : c’était ${enonce.vrai ? 'vrai' : 'faux'}` }),
+      blocReponse(carte, enonce),
+      el('button', { type: 'button', class: 'bouton principal bloc grand', onclick: afficher }, 'Suivant'));
+    toucheEcran = (e) => {
+      if (e.key === ' ' || e.key === 'Enter') {
+        e.preventDefault();
+        afficher();
+      }
+    };
+  };
+  const rangee = el('div', { class: 'choix vrai-faux' },
+    el('button', { type: 'button', class: 'bouton grand', 'data-choix': 'vrai', onclick: () => choisir(true) }, 'Vrai'),
+    el('button', { type: 'button', class: 'bouton grand', 'data-choix': 'faux', onclick: () => choisir(false) }, 'Faux'));
+  panneau.append(rangee, suite);
+  toucheEcran = (e) => {
+    if (e.key === 'v' || e.key === '1') choisir(true);
+    if (e.key === 'f' || e.key === '2') choisir(false);
+  };
 }
 
 /**
@@ -357,11 +422,41 @@ async function corrigerDerniereReponse() {
 
 /* ---------- Fin de série ---------- */
 
+/** Fin d'un test de positionnement : le niveau s'ouvre, ou on dit ce qui manque. */
+async function rendreFinDeTest(zone) {
+  const s = SessionContenu.active;
+  const paquet = s.paquets[0];
+  const index = paquet.sections.findIndex((section) => section.cle === s.section);
+  // Noté une seule fois, même si l'écran est redessiné.
+  if (!s.bilanTest) s.bilanTest = await Niveaux.terminerTest(paquet, index, s.resultats, s.jour);
+  const { reussies, total, ouvert } = s.bilanTest;
+  const niveau = paquet.sections[index];
+  definirTitre(ouvert ? 'Niveau débloqué' : 'Test terminé');
+  zone.append(el('div', { class: 'pile' },
+    el('div', { class: 'chiffres' }, chiffre(`${reussies} / ${total}`, 'bonnes réponses')),
+    el('div', { class: ouvert ? 'panneau pile' : 'alerte pile' },
+      el('p', {}, el('strong', { text: ouvert ? `${niveau.titre} est ouvert.` : `${niveau.titre} reste fermé.` })),
+      el('p', { text: ouvert
+        ? 'Les cartes réussies y entrent directement en boîte 3 ; les autres arriveront dans tes séances, '
+          + 'avec celles des niveaux précédents.'
+        : `Il fallait ${REUSSITE_TEST_NIVEAU} bonnes réponses sur ${TAILLE_TEST_NIVEAU}. Continue les séances : `
+          + 'le niveau s’ouvrira de lui-même quand le précédent sera maîtrisé. Nouvel essai possible demain.' })),
+    el('button', {
+      type: 'button',
+      class: 'bouton principal bloc grand',
+      onclick: () => {
+        SessionContenu.arreter();
+        aller('paquet', paquet.cle);
+      },
+    }, 'Retour au paquet')));
+}
+
 function rendreFinDeSerieContenu(zone) {
   const s = SessionContenu.active;
   document.body.classList.remove('plein');
-  definirTitre('Série terminée');
   toucheEcran = null;
+  if (s.type === 'test') return rendreFinDeTest(zone);
+  definirTitre('Série terminée');
 
   const reussies = s.resultats.filter((r) => r.reussi).length;
   const ratees = s.resultats.filter((r) => !r.reussi);

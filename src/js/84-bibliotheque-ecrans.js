@@ -48,8 +48,52 @@ function tuilePaquet(paquet) {
       el('span', { class: 'badges' },
         el('span', { class: 'badge', text: etiquetteOrigine(paquet) }),
         el('span', { class: 'badge', text: pluriel(paquet.cartes.length, 'carte') }),
+        Niveaux.actif(paquet) && el('span', { class: 'badge accent',
+          text: `Niveau ${Niveaux.ouvert(paquet) + 1} / ${paquet.sections.length}` }),
         badgeEvaluation(paquet))),
     paquet.cartes.length ? barreCompartiments(repartition) : null);
+}
+
+/** Les niveaux d'un paquet à niveaux : ouverts, en cours, fermés, et la part maîtrisée de chacun. */
+function barreNiveaux(paquet) {
+  const detail = Niveaux.detail(paquet);
+  const ouvert = Niveaux.ouvert(paquet, detail);
+  return el('ol', { class: 'niveaux' }, detail.map((niveau, i) => {
+    const etat = i > ouvert ? 'ferme' : niveau.maitrise >= SEUIL_NIVEAU ? 'maitrise' : 'en-cours';
+    const pourcent = Math.round(niveau.maitrise * 100);
+    return el('li', { class: `niveau ${etat}` },
+      el('span', { class: 'niveau-icone', 'aria-hidden': 'true', text: etat === 'ferme' ? '🔒' : etat === 'maitrise' ? '✓' : '▶' }),
+      el('span', { class: 'niveau-texte' },
+        el('strong', { text: niveau.section.titre }),
+        el('span', { class: 'discret petit', text: etat === 'ferme'
+          ? `${pluriel(niveau.total, 'carte')} · s’ouvre à ${Math.round(SEUIL_NIVEAU * 100)} % du niveau précédent, ou par le test`
+          : `${pourcent} % maîtrisé · ${niveau.vues} / ${pluriel(niveau.total, 'carte vue', 'cartes vues')}` })),
+      etat !== 'ferme' && el('span', { class: 'niveau-jauge', role: 'img', 'aria-label': `${pourcent} % maîtrisé` },
+        el('span', { style: `width:${pourcent}%` })));
+  }));
+}
+
+/** Bloc des niveaux sur l'écran d'un paquet : barre, garde-fou, test de positionnement. */
+function blocNiveaux(paquet) {
+  const bloc = el('section', { class: 'pile' }, el('h2', { text: 'Niveaux' }), barreNiveaux(paquet));
+  const consolider = Niveaux.aConsolider(paquet);
+  if (consolider) {
+    bloc.append(el('div', { class: 'alerte' }, el('strong', { text: `Consolide d’abord « ${consolider.section.titre} ». ` }),
+      'Trop de ses cartes sont retombées en boîte 1 : les nouvelles cartes du niveau suivant attendent qu’elles remontent.'));
+  }
+  const test = Niveaux.testPossible(paquet);
+  if (test !== null) {
+    bloc.append(el('div', { class: 'panneau pile serree' },
+      el('p', {}, el('strong', { text: `Déjà à l’aise ? Passe le test du ${paquet.sections[test].titre.split(' · ')[0].toLowerCase()}.` })),
+      el('p', { class: 'discret', text: `${TAILLE_TEST_NIVEAU} questions, sans effet sur tes boîtes. ${REUSSITE_TEST_NIVEAU} bonnes réponses `
+        + 'ouvrent le niveau tout de suite ; tes bases continuent d’arriver dans tes séances. Un essai par jour.' }),
+      el('button', {
+        type: 'button',
+        class: 'bouton accent',
+        onclick: () => lancerContenu({ paquet, section: paquet.sections[test].cle, format: paquet.formatFixe || Profil.donnees.format, type: 'test' }),
+      }, 'Passer le test de positionnement')));
+  }
+  return bloc;
 }
 
 /** Paquets regroupés par thème, thèmes dans l'ordre alphabétique. */
@@ -147,10 +191,12 @@ Ecrans.paquet = {
       const bilan = SessionContenu.bilan(paquet, section, jour);
       const repartition = Progression.repartition(cartes);
       const aFaire = bilan.dues.length + bilan.nouvellesDuJour;
-      const formats = Paquets.formatsCommuns(cartes);
+      // Un paquet qui impose son format (chaque carte dans le sien) n'en propose pas d'autre.
+      const formats = paquet.formatFixe ? [] : Paquets.formatsCommuns(cartes);
       if (formats.length && !formats.includes(Profil.donnees.format)) {
         Profil.enregistrer({ format: formats[0] });
       }
+      const format = () => paquet.formatFixe || Profil.donnees.format;
 
       if (!cartes.length) {
         infos.replaceChildren(el('div', { class: 'panneau pile vide' },
@@ -177,7 +223,7 @@ Ecrans.paquet = {
           el('button', {
             type: 'button',
             class: 'bouton principal bloc grand',
-            onclick: () => lancerContenu({ paquet, section, format: Profil.donnees.format, type: 'jour' }),
+            onclick: () => lancerContenu({ paquet, section, format: format(), type: 'jour' }),
           }, 'Commencer la séance du jour'));
       } else {
         infos.append(el('div', { class: 'panneau' },
@@ -188,7 +234,7 @@ Ecrans.paquet = {
         el('button', {
           type: 'button',
           class: `bouton bloc grand ${aFaire ? '' : 'principal'}`,
-          onclick: () => lancerContenu({ paquet, section, format: Profil.donnees.format, type: 'libre' }),
+          onclick: () => lancerContenu({ paquet, section, format: format(), type: 'libre' }),
         }, 'S’entraîner librement'));
     };
 
@@ -199,7 +245,8 @@ Ecrans.paquet = {
     pile.append(badges);
     if (paquet.resume) pile.append(el('p', { text: paquet.resume }));
 
-    if (paquet.sections.length > 1) {
+    // Paquet à niveaux : pas de choix de section, la barre des niveaux suit la séance.
+    if (!Niveaux.actif(paquet) && paquet.sections.length > 1) {
       const sections = [[null, 'Tout le paquet'], ...paquet.sections.map((s) => [s.cle, s.titre])];
       pile.append(
         el('h2', { text: 'Sélection' }),
@@ -210,6 +257,7 @@ Ecrans.paquet = {
     }
     pile.append(infos);
     majInfos();
+    if (Niveaux.actif(paquet)) pile.append(blocNiveaux(paquet));
 
     /* Gestion */
     const gestion = el('section', { class: 'panneau pile' }, el('h2', { text: 'Organiser' }));
@@ -296,7 +344,7 @@ function ligneCatalogue(paquet) {
                 : Paquets.get(cle).cartes;
               apercu.replaceChildren(el('dl', { class: 'rappel-cartes' }, cartes.slice(0, 8).flatMap((c) => [
                 el('dt', {}, texteCarte(c.question || (c.masque ? 'Photo à trous' : 'Photo'))),
-                el('dd', {}, texteCarte(c.reponse || '(photo)')),
+                el('dd', {}, texteCarte(c.reponse || (c.generer ? 'valeurs tirées au hasard à chaque passage' : '(photo)'))),
               ])), cartes.length > 8 && el('p', { class: 'discret', text: `… et ${cartes.length - 8} autres.` }));
             } catch (e) {
               apercu.replaceChildren(el('p', { class: 'erreur', text: messageNuage(e) }));

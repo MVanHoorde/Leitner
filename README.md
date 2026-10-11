@@ -64,18 +64,35 @@ jours avant.
 
 ## Les paquets intégrés
 
-Les cartes sont écrites dans le code (`src/js/33-*`, `src/js/34-*`), jamais en
-base : elles se mettent à jour avec l'application, et seule la progression est
-stockée. **Un identifiant de carte ne change jamais** — la progression des
-élèves y est attachée. Le contrat d'une carte est documenté en tête de
-`src/js/32-paquets.js`.
+Les cartes sont écrites dans le code (`src/js/33-*`), jamais en base : elles se
+mettent à jour avec l'application, et seule la progression est stockée. **Un
+identifiant de carte ne change jamais** — la progression des élèves y est
+attachée. Le contrat d'une carte est documenté en tête de `src/js/32-paquets.js`.
 
-Trois formats se partagent la même carte, et le mode « défis variés » en tire un
-au hasard à chaque passage : carte retournée avec auto-évaluation, QCM à quatre
-propositions, réponse écrite (comparaison tolérante aux accents, à la casse et
-aux tirets ; comparaison numérique avec marge pour les valeurs). Les conversions
-sont des cartes *génératives* : les valeurs sont retirées à chaque apparition,
-pour apprendre le geste et non le résultat.
+Deux paquets livrés, chacun en cinq niveaux :
+
+- « Conversions et puissances de dix » (`src/js/33-contenu-conversions.js`,
+  120 cartes) : des préfixes de seconde au logarithme de terminale.
+- « Grandeurs et unités » (`src/js/34-contenu-unites.js`, 134 cartes) : les
+  grandeurs des programmes de seconde, de première et de terminale (BO 2019),
+  les unités de base du SI, puis l'analyse dimensionnelle (retrouver l'unité
+  de R, de λ de Kohlrausch, de ε…). Le lecteur d'unités de
+  `src/js/05-formules.js` accepte toute écriture équivalente (J·mol⁻¹·K⁻¹ =
+  J/(mol.K) = Pa·m³·mol⁻¹·K⁻¹) et refuse un préfixe de travers.
+ Quatre formats : carte retournée, QCM
+(trois pièges tirés parmi cinq à sept), réponse écrite (comparaison numérique
+avec tolérance réglable, écriture scientifique exigée au besoin), vrai ou faux.
+La plupart des cartes sont *génératives* : valeurs et pièges sont retirés à
+chaque passage, pour apprendre le geste et non le résultat.
+
+**Progression par niveaux** (`src/js/37-niveaux.js`) : tout le monde commence au
+niveau 1 ; un niveau s'ouvre quand 80 % des cartes du précédent sont en boîte 3,
+ou par un test de positionnement (8 bonnes réponses sur 10, un essai par jour).
+Une carte nouvelle réussie du premier coup saute en boîte 3, et le quota de
+nouvelles double tant que l'élève réussit plus de 90 % ; si un niveau franchi
+s'effondre (plus d'un tiers des cartes vues en boîte 1), les nouvelles du niveau
+en cours attendent. Les anciens paquets livrés (chimie, réflexes, nomenclature)
+sont remplacés par ceux-ci dans les bibliothèques des élèves.
 
 ## Développement
 

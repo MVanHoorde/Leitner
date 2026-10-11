@@ -1029,6 +1029,29 @@ textarea:focus, input[type=search]:focus { border-color: var(--cyan); outline: n
 .exemple-algo li { margin: 4px 0; }
 .pastille-reponse { display: inline-block; padding: 0 8px; font-size: 14px; font-weight: 700; color: #fff; background: var(--marine); border-radius: 999px; }
 .pastille-reponse.ratee { background: var(--rouge); }
+
+/* Paquets à niveaux (37-niveaux.js) */
+.niveaux { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.niveau {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: 4px 10px;
+  align-items: center;
+  padding: 10px 12px;
+  background: var(--blanc);
+  border: 1px solid var(--bord);
+  border-radius: var(--rayon);
+}
+.niveau-icone { grid-row: span 2; font-size: 20px; text-align: center; }
+.niveau-texte { display: flex; flex-direction: column; min-width: 0; }
+.niveau.en-cours { border-color: var(--cyan); box-shadow: inset 4px 0 0 var(--cyan); }
+.niveau.maitrise .niveau-icone { color: var(--cyan); font-weight: 700; }
+.niveau.ferme { background: #F1F4F9; color: var(--gris); }
+.niveau-jauge { grid-column: 2; height: 6px; background: #E4EAF3; border-radius: 3px; overflow: hidden; }
+.niveau-jauge > span { display: block; height: 100%; background: var(--cyan); }
+
+/* Vrai ou faux */
+.choix.vrai-faux .bouton { min-height: 72px; font-size: 22px; font-weight: 700; }
 </style>
 </head>
 <body>
@@ -1533,6 +1556,8 @@ function normaliserReponse(texte) {
   return String(texte ?? '')
     // « \alpha » vaut « α » ; « \frac{1}{2} » se compare comme « 1/2 ».
     .replace(/\\([A-Za-z]+)/g, (tout, nom) => COMMANDES_SYMBOLES[nom] || '')
+    // Le signe micro du clavier (µ) et la lettre grecque (μ) sont le même préfixe.
+    .replace(/µ/g, 'μ')
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
@@ -1547,31 +1572,153 @@ function reponseAcceptee(saisie, acceptees) {
   return acceptees.some((attendue) => normaliserReponse(attendue) === propre);
 }
 
+const EXPOSANTS_UNICODE = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', '⁻': '-', '⁺': '+' };
+
 /**
- * Lit un nombre écrit à la française : virgule décimale, espaces d'affichage,
- * puissances de dix notées « e-3 », « ×10^-3 » ou « 10^-3 ».
+ * Ramène une saisie numérique à la forme « 6.2e4 » : virgule décimale,
+ * espaces d'affichage, puissances de dix notées « e-3 », « ×10^-3 »,
+ * « 10^{-3} » (barre de formules), « 10⁻³ » ou « 2,5.10^3 » (point des copies).
  */
-function nombreSaisi(texte) {
+function nettoyerNombre(texte) {
   let propre = String(texte ?? '')
     .trim()
     .toLowerCase()
     .replace(/\s/g, '')
+    .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+/g, (exposant) => `^${[...exposant].map((c) => EXPOSANTS_UNICODE[c]).join('')}`)
+    .replace(/[{}()]/g, '')
     .replace(/−/g, '-')
+    .replace(/[.·]10\^/g, 'e')
     .replace(/,/g, '.')
     // « ×10 » et « 10^ » marquent une puissance de dix ; « 100 » reste un nombre.
     .replace(/[x×*]10\^?/g, 'e')
     .replace(/10\^/g, 'e')
     .replace(/\^/g, '');
   if (propre.startsWith('e')) propre = `1${propre}`;
+  return propre;
+}
+
+function nombreSaisi(texte) {
+  const propre = nettoyerNombre(texte);
   if (!/^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/.test(propre)) return null;
   const valeur = Number(propre);
   return Number.isFinite(valeur) ? valeur : null;
 }
 
-/** Égalité numérique tolérante : la saisie peut être arrondie à la marge. */
-function memeNombre(saisi, attendu) {
+/** Vrai si la saisie est en écriture scientifique : a × 10ⁿ avec 1 ⩽ a < 10. */
+function estEcritureScientifique(texte) {
+  return /^[-+]?[1-9](\.\d+)?e[-+]?\d+$/.test(nettoyerNombre(texte));
+}
+
+/**
+ * Égalité numérique tolérante : la saisie peut être arrondie à la marge.
+ * tolerance : écart relatif admis, plus large pour un ordre de grandeur ou un
+ * calcul de tête approché. Pas de marge absolue, sauf pour zéro : à 10⁻¹⁹ J,
+ * elle accepterait n'importe quoi.
+ */
+function memeNombre(saisi, attendu, tolerance = 1e-6) {
   if (saisi === null) return false;
-  return Math.abs(saisi - attendu) <= Math.max(Math.abs(attendu) * 1e-6, 1e-12);
+  if (attendu === 0) return Math.abs(saisi) <= 1e-12;
+  return Math.abs(saisi - attendu) <= Math.abs(attendu) * tolerance;
+}
+
+/* ---------- Unités : « J·mol⁻¹·K⁻¹ » et « kg.m^2/(s^2.mol.K) » sont la même ---------- */
+
+/** Unités connues : [facteur vers le SI, { unité de base: exposant }]. */
+const UNITES_SI = {
+  m: [1, { m: 1 }], g: [1e-3, { kg: 1 }], s: [1, { s: 1 }], A: [1, { A: 1 }], K: [1, { K: 1 }],
+  mol: [1, { mol: 1 }], cd: [1, { cd: 1 }],
+  N: [1, { kg: 1, m: 1, s: -2 }], J: [1, { kg: 1, m: 2, s: -2 }], W: [1, { kg: 1, m: 2, s: -3 }],
+  Pa: [1, { kg: 1, m: -1, s: -2 }], C: [1, { A: 1, s: 1 }], V: [1, { kg: 1, m: 2, s: -3, A: -1 }],
+  'Ω': [1, { kg: 1, m: 2, s: -3, A: -2 }], ohm: [1, { kg: 1, m: 2, s: -3, A: -2 }],
+  S: [1, { kg: -1, m: -2, s: 3, A: 2 }], F: [1, { kg: -1, m: -2, s: 4, A: 2 }], T: [1, { kg: 1, s: -2, A: -1 }],
+  Hz: [1, { s: -1 }], Bq: [1, { s: -1 }], L: [1e-3, { m: 3 }], l: [1e-3, { m: 3 }],
+  min: [60, { s: 1 }], h: [3600, { s: 1 }], t: [1e3, { kg: 1 }], bar: [1e5, { kg: 1, m: -1, s: -2 }],
+  eV: [1.602176634e-19, { kg: 1, m: 2, s: -2 }], Wh: [3600, { kg: 1, m: 2, s: -2 }],
+  // Une différence de températures vaut autant en °C qu'en K.
+  '°C': [1, { K: 1 }], degC: [1, { K: 1 }], rad: [1, {}], sr: [1, {}],
+};
+
+const PREFIXES_UNITES = { G: 1e9, M: 1e6, k: 1e3, h: 1e2, da: 1e1, d: 1e-1, c: 1e-2, m: 1e-3, 'µ': 1e-6, 'μ': 1e-6, u: 1e-6, n: 1e-9, p: 1e-12 };
+
+/** Un symbole, avec ou sans préfixe : « mol », « kJ », « µm », « hPa ». */
+function symboleUnite(symbole) {
+  if (UNITES_SI[symbole]) return UNITES_SI[symbole];
+  for (const longueur of [2, 1]) {
+    const prefixe = symbole.slice(0, longueur);
+    const base = UNITES_SI[symbole.slice(longueur)];
+    if (PREFIXES_UNITES[prefixe] && base && symbole.length > longueur) return [PREFIXES_UNITES[prefixe] * base[0], base[1]];
+  }
+  return null;
+}
+
+/**
+ * Lit une unité composée : séparateurs « · . * × » ou espaces, « / » pour
+ * diviser le facteur suivant (ou un groupe entre parenthèses), exposants
+ * « ^-2 », « -2 », « ⁻² » ou « ^{-2} ». Renvoie { facteur, dims } ou null.
+ */
+function lireUnite(texte) {
+  const source = String(texte ?? '')
+    .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+/g, (exposant) => `^${[...exposant].map((c) => EXPOSANTS_UNICODE[c]).join('')}`)
+    .replace(/[{}]/g, '')
+    .replace(/−/g, '-')
+    .trim();
+  let i = 0;
+  const exposant = () => {
+    const m = /^\^?\s*([-+]?\d+)/.exec(source.slice(i));
+    if (!m) return 1;
+    i += m[0].length;
+    return Number(m[1]);
+  };
+  const produit = () => {
+    const resultat = { facteur: 1, dims: {} };
+    let signe = 1;
+    while (i < source.length && source[i] !== ')') {
+      const c = source[i];
+      if (/[\s·.*×]/.test(c)) { i += 1; continue; }
+      if (c === '/') { signe = -1; i += 1; continue; }
+      let terme;
+      if (c === '(') {
+        i += 1;
+        terme = produit();
+        if (!terme || source[i] !== ')') return null;
+        i += 1;
+      } else if (c === '1' && !/^\d/.test(source.slice(i + 1))) {
+        i += 1;
+        terme = { facteur: 1, dims: {} };
+      } else {
+        const m = /^(°C|[A-Za-zµμΩ]+)/.exec(source.slice(i));
+        if (!m) return null;
+        const connu = symboleUnite(m[0]);
+        if (!connu) return null;
+        i += m[0].length;
+        terme = { facteur: connu[0], dims: connu[1] };
+      }
+      const puissance = exposant() * signe;
+      resultat.facteur *= terme.facteur ** puissance;
+      for (const [base, n] of Object.entries(terme.dims)) resultat.dims[base] = (resultat.dims[base] || 0) + n * puissance;
+      signe = 1;
+    }
+    return resultat;
+  };
+  const resultat = produit();
+  if (!resultat || i < source.length || !source) return null;
+  return resultat;
+}
+
+/** Vrai si les deux écritures désignent la même unité (préfixes compris). */
+function memeUnite(saisie, attendue) {
+  const a = lireUnite(saisie);
+  const b = lireUnite(attendue);
+  if (!a || !b) return false;
+  const bases = new Set([...Object.keys(a.dims), ...Object.keys(b.dims)]);
+  for (const base of bases) if ((a.dims[base] || 0) !== (b.dims[base] || 0)) return false;
+  return Math.abs(a.facteur / b.facteur - 1) < 1e-9;
+}
+
+/** Vrai si l'écriture n'emploie que les sept unités de base du SI (kg et non g, pas de N ni de J). */
+function enUnitesDeBase(texte) {
+  const symboles = String(texte ?? '').match(/[A-Za-zµμΩ°]+/g) || [];
+  return symboles.length > 0 && symboles.every((s) => ['kg', 'm', 's', 'A', 'K', 'mol', 'cd'].includes(s));
 }
 
 /** Écriture française d'un nombre, sans notation scientifique parasite. */
@@ -3151,7 +3298,21 @@ function demoDejaChargee() {
  *   unite         unité rappelée à côté du champ de saisie
  *   distracteurs  [] fausses réponses du QCM ; sinon, prises dans la section
  *   qcm: false    interdit le QCM pour cette carte
- *   generer()     carte générative : renvoie { question, reponse, nombre|saisie }
+ *   generer()     carte générative : renvoie { question, reponse, nombre|saisie },
+ *                 et selon son format distracteurs (QCM), vrai (vrai/faux), aide
+ *   vrai          vrai/faux : l'énoncé est une affirmation, reponse l'explique
+ *   tolerance     écart relatif admis pour une réponse numérique approchée
+ *   ecritureScientifique  la réponse doit être écrite a × 10ⁿ, pas seulement juste
+ *   uniteAttendue une unité (« J·mol^{-1}·K^{-1} ») : toute écriture équivalente est
+ *                 acceptée, préfixes compris (ou une liste d'unités) ; saisie[] ajoute
+ *                 des réponses en toutes lettres
+ *   basesSeules   avec uniteAttendue : la réponse n'emploie que kg, m, s, A, K, mol, cd
+ *   consigne      consigne propre à la carte
+ *
+ * Une carte peut aussi fixer ses formats (formats: ['vraifaux']…) ; un paquet
+ * qui déclare formatFixe impose ce format de séance (« mixte » : chaque carte
+ * dans le sien). Un paquet « progression: 'niveaux' » ouvre ses sections une
+ * à une (37-niveaux.js).
  *
  * Les cartes créées dans l'application (36-bibliotheque.js) ajoutent :
  *   formats       [] formats permis, à la place de la déduction ci-dessous
@@ -3165,6 +3326,7 @@ const FORMATS = {
   retournement: 'Carte retournée',
   qcm: 'QCM',
   saisie: 'À écrire',
+  vraifaux: 'Vrai ou faux',
 };
 
 /** Rythme par défaut des paquets de contenu : plus étalé que le trombinoscope,
@@ -3382,6 +3544,8 @@ const SessionContenu = {
 
   /** Situation du jour pour une sélection de cartes. */
   bilan(paquet, section, jour = Dates.aujourdhui()) {
+    // Paquet à niveaux : seulement les niveaux ouverts, nouvelles dosées par niveau.
+    if (Niveaux.actif(paquet) && !section) return Niveaux.bilan(paquet, jour);
     const cartes = Paquets.cartesDe(paquet, section);
     return Leitner.bilanListe(Progression.etats(cartes), jour, SuiviContenu.quotaNouvelles(paquet, jour));
   },
@@ -3422,6 +3586,16 @@ const SessionContenu = {
     const aNoter = new Set([...bilan.dues, ...bilan.nouvelles.slice(0, bilan.nouvellesDuJour)].map((c) => c.id));
 
     let ids;
+    if (s.type === 'test') {
+      // Test de positionnement : un tirage dans le niveau visé, sans effet sur Leitner.
+      if (s.lot > 0) return 0;
+      ids = melanger(Paquets.cartesDe(s.paquets[0], s.section).map((c) => c.id)).slice(0, TAILLE_TEST_NIVEAU);
+      s.file = ids.map((id) => this.preparer(id, false));
+      s.position = 0;
+      s.resultats = [];
+      s.lot += 1;
+      return ids.length;
+    }
     if (s.type === 'jour') {
       ids = [...aNoter].filter((id) => !s.vues.has(id)).slice(0, taille);
     } else {
@@ -3448,9 +3622,10 @@ const SessionContenu = {
   preparer(id, compte, reprises = 0) {
     const carte = Paquets.index.get(id);
     const formats = Paquets.formatsDe(carte);
-    const format = this.active.format === 'mixte'
+    const voulu = Paquets.get(carte.paquet).formatFixe || this.active.format;
+    const format = voulu === 'mixte'
       ? formats[Math.floor(Math.random() * formats.length)]
-      : (formats.includes(this.active.format) ? this.active.format : 'retournement');
+      : (formats.includes(voulu) ? voulu : 'retournement');
     return {
       id,
       compte,
@@ -3471,6 +3646,7 @@ const SessionContenu = {
     const s = this.active;
     if (!s) return 0;
     const bilan = this.bilanActif();
+    if (s.type === 'test') return 0;
     if (s.type === 'jour') {
       const aNoter = [...bilan.dues, ...bilan.nouvelles.slice(0, bilan.nouvellesDuJour)];
       return aNoter.filter((c) => !s.vues.has(c.id)).length;
@@ -3500,10 +3676,14 @@ const SessionContenu = {
         const paquet = Paquets.get(carte.paquet);
         await Progression.enregistrer(appliquerReglages(etat, reussi, s.jour, paquet, note));
         if (nouvelle) await SuiviContenu.noterNouvelles(paquet.cle, s.jour);
+        if (Niveaux.actif(paquet)) {
+          const ouvert = await Niveaux.verifier(paquet);
+          if (ouvert) annoncer(`Bravo : ${ouvert.titre} débloqué !`);
+        }
       }
     }
-    // Une carte ratée revient en fin de lot, sans nouvelle notation.
-    if (!reussi && element.reprises < MAX_REPRISES) {
+    // Une carte ratée revient en fin de lot, sans nouvelle notation (pas pendant un test).
+    if (!reussi && element.reprises < MAX_REPRISES && s.type !== 'test') {
       s.file.push(this.preparer(element.id, false, element.reprises + 1));
     }
     s.position += 1;
@@ -3514,558 +3694,2014 @@ const SessionContenu = {
   },
 };
 
-// ---- 33-contenu-chimie.js ----
-/* Paquets de chimie : les bases de seconde, et les réflexes de calcul.
+// ---- 33-contenu-conversions.js ----
+/* Paquet « Conversions et puissances de dix » : cinq niveaux, de la seconde à
+ * la terminale, ouverts un à un (37-niveaux.js).
  *
- * Chaque carte porte un identifiant définitif (voir 32-paquets.js). Le texte
- * peut être corrigé librement ; l'identifiant, jamais.
+ * Les explications reprennent les formulations des outils de seconde (O1
+ * « Puissances de dix et écriture scientifique », O6 « Présenter un calcul »)
+ * pour que l'élève retrouve le vocabulaire du cours.
+ *
+ * La plupart des cartes sont des familles : generer() tire de nouvelles
+ * valeurs à chaque passage, l'élève ne peut pas retenir la réponse par cœur.
+ * Pour Leitner, une famille reste une seule carte.
+ *
+ * RÈGLE ABSOLUE (32-paquets.js) : un identifiant de carte ne change jamais.
  */
 
-function tirerEntier(min, max) {
+/* ---------- Outils de tirage et d'écriture ---------- */
+
+/** [nom, symbole, exposant] : le tableau des préfixes de l'outil O1. */
+const PREFIXES_SI = [
+  ['giga', 'G', 9], ['méga', 'M', 6], ['kilo', 'k', 3], ['hecto', 'h', 2], ['déca', 'da', 1],
+  ['déci', 'd', -1], ['centi', 'c', -2], ['milli', 'm', -3], ['micro', 'µ', -6], ['nano', 'n', -9],
+  ['pico', 'p', -12], ['femto', 'f', -15],
+];
+
+function auHasard(liste) {
+  return liste[Math.floor(Math.random() * liste.length)];
+}
+
+function entierEntre(min, max) {
   return min + Math.floor(Math.random() * (max - min + 1));
 }
 
-/** Valeur « d'énoncé » : un ou deux chiffres significatifs, jamais un nombre rond. */
-function tirerMesure(min, max, decimales = 1) {
-  const facteur = 10 ** decimales;
-  return tirerEntier(min * facteur, max * facteur) / facteur;
+/** Un entier non nul entre min et max. */
+function exposantNonNul(min, max) {
+  let n = 0;
+  while (n === 0) n = entierEntre(min, max);
+  return n;
 }
 
-/* ---------- Grandeurs, unités et formules (seconde) ---------- */
+function pileOuFace() {
+  return Math.random() < 0.5;
+}
 
-const GRANDEURS = [
-  ['masse', 'La masse', 'm', 'le kilogramme (kg)', ['kg', 'kilogramme', 'le kilogramme'],
-    'En chimie on travaille le plus souvent en grammes (g).'],
-  ['volume', 'Le volume', 'V', 'le mètre cube (m³)', ['m3', 'm³', 'metre cube', 'le metre cube'],
-    'En chimie on utilise surtout le litre (L) : 1 m³ = 1000 L.'],
-  ['masse-volumique', 'La masse volumique', 'ρ (rhô)', 'le kilogramme par mètre cube (kg·m⁻³)',
-    ['kg/m3', 'kg·m-3', 'kg m-3', 'kilogramme par metre cube'],
-    'Souvent exprimée en g·L⁻¹ ou en g·cm⁻³. L’eau vaut 1,0 g·cm⁻³.'],
-  ['quantite-matiere', 'La quantité de matière', 'n', 'la mole (mol)', ['mol', 'mole', 'la mole'],
-    'Une mole contient 6,02 × 10²³ entités.'],
-  ['masse-molaire', 'La masse molaire', 'M', 'le gramme par mole (g·mol⁻¹)',
-    ['g/mol', 'g·mol-1', 'g mol-1', 'gramme par mole'],
-    'Elle se lit dans le tableau périodique.'],
-  ['concentration', 'La concentration en quantité de matière', 'C', 'la mole par litre (mol·L⁻¹)',
-    ['mol/l', 'mol·l-1', 'mol l-1', 'mole par litre'],
-    'Anciennement appelée concentration molaire.'],
-  ['concentration-masse', 'La concentration en masse', 'Cm', 'le gramme par litre (g·L⁻¹)',
-    ['g/l', 'g·l-1', 'g l-1', 'gramme par litre'],
-    'Anciennement appelée concentration massique, notée parfois t.'],
-  ['temperature', 'La température', 'T', 'le kelvin (K)', ['k', 'kelvin', 'le kelvin'],
-    'T(K) = θ(°C) + 273,15.'],
-  ['pression', 'La pression', 'P', 'le pascal (Pa)', ['pa', 'pascal', 'le pascal'],
-    '1 bar = 10⁵ Pa ; la pression atmosphérique vaut environ 1013 hPa.'],
-  ['temps', 'La durée', 't', 'la seconde (s)', ['s', 'seconde', 'la seconde'], null],
-  ['longueur', 'La longueur', 'L', 'le mètre (m)', ['m', 'metre', 'le metre'], null],
-  ['energie', 'L’énergie', 'E', 'le joule (J)', ['j', 'joule', 'le joule'], null],
+/** Retire le bruit des flottants : 0,1 × 3 = 0,30000000000000004. */
+function net(x) {
+  return Number(x.toPrecision(12));
+}
+
+/** Écriture française : virgule, espaces des milliers, vrai signe moins. */
+function nombreFr(x) {
+  return net(x).toLocaleString('fr-FR', { maximumFractionDigits: 12 }).replace('-', '−');
+}
+
+function p10(n) {
+  return `10^{${n}}`;
+}
+
+function sci(m, n) {
+  return `${nombreFr(m)} × 10^{${n}}`;
+}
+
+/** Écriture scientifique a × 10ⁿ, 1 ⩽ a < 10 ; « 10ⁿ » quand a = 1. */
+function enScientifique(x) {
+  if (x === 0) return '0';
+  let n = Math.floor(Math.log10(Math.abs(x)));
+  let m = net(x / 10 ** n);
+  if (Math.abs(m) >= 10) {
+    m = net(m / 10);
+    n += 1;
+  }
+  if (Math.abs(m) < 1) {
+    m = net(m * 10);
+    n -= 1;
+  }
+  if (n === 0) return nombreFr(m);
+  return Math.abs(m) === 1 ? `${m < 0 ? '−' : ''}${p10(n)}` : sci(m, n);
+}
+
+/** Résultat lisible : décimal entre 10⁻³ et 10⁶, écriture scientifique ailleurs. */
+function valeurFr(x) {
+  const a = Math.abs(x);
+  return x === 0 || (a >= 1e-3 && a < 1e6) ? nombreFr(x) : enScientifique(x);
+}
+
+/** Valeurs d'énoncé : un ou deux chiffres significatifs, rarement un nombre rond. */
+function mesure() {
+  return auHasard([1.2, 1.5, 2.5, 3, 3.6, 4.2, 4.5, 6, 6.4, 7.5, 8, 9.6, 12, 15, 25, 36, 45, 64, 75, 120, 250, 350, 480]);
+}
+
+/**
+ * Famille de conversions : paires = [[[départ, exposant], [arrivée, exposant]], …],
+ * l'exposant étant celui de la puissance de dix par rapport à une même unité
+ * (déjà doublé ou triplé pour les surfaces et les volumes).
+ */
+function familleConversion(id, question, paires, aide) {
+  return {
+    id,
+    question,
+    formats: ['saisie'],
+    aide,
+    generer() {
+      const [[de, eDe], [vers, eVers]] = auHasard(paires);
+      const v = mesure();
+      const resultat = net(v * 10 ** (eDe - eVers));
+      return { question: `${nombreFr(v)} ${de} = ? ${vers}`, reponse: `${valeurFr(resultat)} ${vers}`, nombre: resultat, unite: vers };
+    },
+  };
+}
+
+/** Toutes les paires ordonnées d'une liste d'unités : [[a, b], [b, a], …]. */
+function toutesPaires(unites) {
+  return unites.flatMap((a) => unites.filter((b) => b !== a).map((b) => [a, b]));
+}
+
+/** Famille de conversions d'unités composées : [départ, arrivée, facteur]. */
+function familleComposee(id, question, specs, aide) {
+  return {
+    id,
+    question,
+    formats: ['saisie'],
+    aide,
+    generer() {
+      const [de, vers, facteur] = auHasard(specs);
+      const v = mesure();
+      const resultat = net(v * facteur);
+      return { question: `${nombreFr(v)} ${de} = ? ${vers}`, reponse: `${valeurFr(resultat)} ${vers}`, nombre: resultat, unite: vers };
+    },
+  };
+}
+
+const AIDE_SENS = 'Vers une unité plus petite, le nombre grossit ; vers une unité plus grande, il rétrécit. '
+  + 'Si ton résultat va dans l’autre sens, tu as inversé le signe.';
+const AIDE_EXPOSANTS = 'Produit : les exposants s’ajoutent. Quotient : ils se soustraient. '
+  + 'Puissance : ils se multiplient. Ce qui passe sous la barre de fraction change de signe.';
+const AIDE_SCIENTIFIQUE = 'Écriture scientifique : a × 10ⁿ avec 1 ⩽ a < 10 et n entier. '
+  + 'L’exposant dit de combien de rangs la virgule s’est déplacée, son signe dit dans quel sens.';
+const AIDE_ORDRE = 'a < 5 → 10ⁿ ; a ⩾ 5 → 10ⁿ⁺¹ (« 5 monte »). Un ordre de grandeur ne porte jamais de chiffre devant.';
+const AIDE_SURFACES = '×1 longueur · ×2 surface · ×3 volume : pour les m², on double l’exposant du préfixe ; pour les m³, on le triple.';
+
+/* ---------- Niveau 1 : préfixes et puissances de dix ---------- */
+
+const UNITES_SIMPLES = ['m', 'g', 'L', 's', 'Hz', 'W'];
+
+const NIVEAU_1 = [
+  {
+    id: 'conversions.n1.prefixe-valeur',
+    question: 'Que vaut un préfixe ?',
+    formats: ['qcm'],
+    generer() {
+      const [nom, symbole, e] = auHasard(PREFIXES_SI);
+      return {
+        question: `Que vaut le préfixe ${nom} (${symbole}) ?`,
+        reponse: p10(e),
+        distracteurs: pieges(p10(e), [-e, e + 1, e - 1, e + 3, e - 3, 2 * e, e === 1 ? 2 : -e * 2].map(p10)),
+        aide: 'Un préfixe n’est rien d’autre qu’une puissance de dix qu’on a baptisée.',
+      };
+    },
+  },
+  {
+    id: 'conversions.n1.prefixe-nom',
+    question: 'Quel préfixe pour cette puissance de dix ?',
+    formats: ['saisie'],
+    generer() {
+      const [nom, symbole, e] = auHasard(PREFIXES_SI);
+      const sansAccent = nom.normalize('NFD').replace(/[̀-ͯ]/g, '');
+      return {
+        question: `Quel préfixe correspond à ${p10(e)} ?`,
+        reponse: `${nom} (${symbole})`,
+        saisie: [nom, sansAccent, symbole, `${nom} ${symbole}`],
+      };
+    },
+  },
+  {
+    id: 'conversions.n1.prefixe-symbole',
+    question: 'Quel est le symbole de ce préfixe ?',
+    formats: ['qcm'],
+    generer() {
+      const [nom, symbole] = auHasard(PREFIXES_SI);
+      const casse = symbole === symbole.toLowerCase() ? symbole.toUpperCase() : symbole.toLowerCase();
+      const autres = melanger(PREFIXES_SI.map((p) => p[1]).filter((s) => s !== symbole));
+      return {
+        question: `Quel est le symbole du préfixe ${nom} ?`,
+        reponse: symbole,
+        distracteurs: pieges(symbole, [casse, nom.slice(0, 2), ...autres.slice(0, 4)]),
+        aide: 'Attention à la casse : M est le méga, m le milli.',
+      };
+    },
+  },
+  {
+    id: 'conversions.n1.prefixe-vrai-faux',
+    question: 'Préfixe et puissance de dix : vrai ou faux ?',
+    formats: ['vraifaux'],
+    generer() {
+      const [, symbole, e] = auHasard(PREFIXES_SI);
+      const unite = auHasard(UNITES_SIMPLES);
+      const vrai = pileOuFace();
+      const annonce = vrai ? e : auHasard([-e, e + 3, e - 3, e + 1, e - 1].filter((x) => x !== e));
+      return {
+        question: `« 1 ${symbole}${unite} = ${p10(annonce)} ${unite} »`,
+        vrai,
+        reponse: `${vrai ? 'Vrai' : 'Faux'} : 1 ${symbole}${unite} = ${p10(e)} ${unite}`,
+      };
+    },
+  },
+  {
+    id: 'conversions.n1.casse-m',
+    question: '« M et m désignent le même préfixe, en majuscule ou non »',
+    formats: ['vraifaux'],
+    vrai: false,
+    reponse: 'Faux : M est le méga (10^{6}), m le milli (10^{-3}).',
+    aide: 'Un mW est un milliard de fois plus petit qu’un MW.',
+  },
+  {
+    id: 'conversions.n1.mw-dans-mw',
+    question: 'Combien de mW dans 1 MW ?',
+    formats: ['qcm'],
+    reponse: '10^{9}',
+    distracteurs: ['10^{6}', '10^{3}', '10^{12}', '1', '10^{-9}', '10^{-3}'],
+    aide: 'De 10^{6} à 10^{-3} : 6 − (−3) = 9 rangs.',
+  },
+  {
+    id: 'conversions.n1.rapport-prefixes',
+    question: 'Combien de fois une unité est-elle plus grande qu’une autre ?',
+    formats: ['qcm'],
+    generer() {
+      const usuels = PREFIXES_SI.filter((p) => ['G', 'M', 'k', 'c', 'm', 'µ', 'n'].includes(p[1]));
+      let a;
+      let b;
+      do {
+        a = auHasard(usuels);
+        b = auHasard(usuels);
+      } while (a[2] <= b[2]);
+      const unite = auHasard(UNITES_SIMPLES);
+      const d = a[2] - b[2];
+      return {
+        question: `Combien de fois 1 ${a[1]}${unite} est-il plus grand que 1 ${b[1]}${unite} ?`,
+        reponse: p10(d),
+        distracteurs: pieges(p10(d), [-d, d - 3, d + 3, a[2] + b[2], d - 1, d + 1].map(p10)),
+        aide: `On soustrait les exposants : ${a[2]} − (${b[2]}) = ${d}.`,
+      };
+    },
+  },
+  {
+    id: 'conversions.n1.pas-de-prefixe-10-4',
+    question: '« Il existe un préfixe pour 10^{4} »',
+    formats: ['vraifaux'],
+    vrai: false,
+    reponse: 'Faux : il n’y a pas de préfixe pour 10^{4} ni pour 10^{5}.',
+  },
+  {
+    id: 'conversions.n1.produit-puissances',
+    question: 'Produit de deux puissances de dix',
+    formats: ['saisie'],
+    aide: AIDE_EXPOSANTS,
+    generer() {
+      const a = exposantNonNul(-9, 9);
+      const b = exposantNonNul(-9, 9);
+      return { question: `${p10(a)} × ${p10(b)} = ?`, reponse: p10(a + b), nombre: 10 ** (a + b) };
+    },
+  },
+  {
+    id: 'conversions.n1.quotient-puissances',
+    question: 'Quotient de deux puissances de dix',
+    formats: ['saisie'],
+    aide: AIDE_EXPOSANTS,
+    generer() {
+      const a = exposantNonNul(-9, 9);
+      const b = exposantNonNul(-9, 9);
+      return { question: `${p10(a)} / ${p10(b)} = ?`, reponse: p10(a - b), nombre: 10 ** (a - b) };
+    },
+  },
+  {
+    id: 'conversions.n1.puissance-de-puissance',
+    question: 'Puissance d’une puissance de dix',
+    formats: ['qcm'],
+    aide: AIDE_EXPOSANTS,
+    generer() {
+      const a = exposantNonNul(-5, 5);
+      const b = auHasard([-3, -2, 2, 3]);
+      const bonne = p10(a * b);
+      return {
+        question: `(${p10(a)})^{${b}} = ?`,
+        reponse: bonne,
+        distracteurs: pieges(bonne, [a + b, a - b, -a * b, a, b, a * b + 1].map(p10)),
+      };
+    },
+  },
+  {
+    id: 'conversions.n1.inverse-puissance',
+    question: 'Inverse d’une puissance de dix',
+    formats: ['saisie'],
+    aide: 'Ce qui passe sous la barre de fraction change de signe : 1 / 10ⁿ = 10⁻ⁿ.',
+    generer() {
+      const a = exposantNonNul(-9, 9);
+      return { question: `1 / ${p10(a)} = ?`, reponse: p10(-a), nombre: 10 ** -a };
+    },
+  },
+  {
+    id: 'conversions.n1.trois-puissances',
+    question: 'Produit et quotient de puissances de dix',
+    formats: ['saisie'],
+    aide: AIDE_EXPOSANTS,
+    generer() {
+      const a = exposantNonNul(-8, 8);
+      const b = exposantNonNul(-8, 8);
+      const c = exposantNonNul(-8, 8);
+      return { question: `${p10(a)} × ${p10(b)} / ${p10(c)} = ?`, reponse: p10(a + b - c), nombre: 10 ** (a + b - c) };
+    },
+  },
+  {
+    id: 'conversions.n1.dix-puissance-zero',
+    question: '10^{0} = ?',
+    formats: ['qcm'],
+    reponse: '1',
+    distracteurs: ['0', '10', '0,1', 'n’existe pas'],
+    aide: '10^{3} / 10^{3} = 10^{0}, et c’est aussi 1000 / 1000 = 1.',
+  },
+  {
+    id: 'conversions.n1.scientifique-petit',
+    question: 'Écriture scientifique d’un petit nombre',
+    formats: ['qcm'],
+    aide: AIDE_SCIENTIFIQUE,
+    generer() {
+      const m = auHasard([4.7, 9.2, 1.2, 8.2, 4.8, 5.6, 2.5, 3.1, 6.3]);
+      const n = entierEntre(-7, -2);
+      const ecrit = net(m * 10 ** n).toLocaleString('fr-FR', { maximumFractionDigits: 12 });
+      const bonne = sci(m, n);
+      return {
+        question: `Écriture scientifique de ${ecrit} ?`,
+        reponse: bonne,
+        distracteurs: pieges(bonne, [sci(m, n + 1), sci(m, n - 1), sci(m, -n), `${nombreFr(m * 10)} × 10^{${n - 1}}`,
+          `${nombreFr(m / 10)} × 10^{${n + 1}}`, sci(m, n - 2)]),
+      };
+    },
+  },
+  {
+    id: 'conversions.n1.scientifique-grand',
+    question: 'Écriture scientifique d’un grand nombre',
+    formats: ['saisie'],
+    ecritureScientifique: true,
+    aide: AIDE_SCIENTIFIQUE,
+    generer() {
+      const m = auHasard([6.2, 1.25, 5.25, 9.6, 3.8, 1.5, 7.2, 2.4]);
+      const n = entierEntre(3, 8);
+      const x = net(m * 10 ** n);
+      return { question: `Écris ${nombreFr(x)} en écriture scientifique.`, reponse: sci(m, n), nombre: x };
+    },
+  },
+  {
+    id: 'conversions.n1.normaliser',
+    question: 'Remettre en écriture scientifique',
+    formats: ['qcm'],
+    aide: AIDE_SCIENTIFIQUE,
+    generer() {
+      const m = auHasard([1.2, 1.04, 4.75, 3.6, 2.5, 8.4]);
+      const n = entierEntre(-8, 8);
+      const bonne = sci(m, n);
+      // Mantisse trop petite (0,12 × 10⁻⁶) ou trop grande (10,4 × 10²).
+      const tropPetite = pileOuFace();
+      const ecrit = tropPetite ? `${nombreFr(m / 10)} × 10^{${n + 1}}` : `${nombreFr(m * 10)} × 10^{${n - 1}}`;
+      return {
+        question: `${ecrit} en écriture scientifique ?`,
+        reponse: bonne,
+        distracteurs: pieges(bonne, [tropPetite ? sci(m, n + 2) : sci(m, n - 2), sci(m, n + 1), sci(m, n - 1), ecrit, sci(m, -n)]),
+      };
+    },
+  },
+  {
+    id: 'conversions.n1.est-scientifique',
+    question: 'Est-ce une écriture scientifique ?',
+    formats: ['vraifaux'],
+    aide: AIDE_SCIENTIFIQUE,
+    generer() {
+      const cas = auHasard([
+        [sci(4.5, 3), true, 'Vrai : 1 ⩽ 4,5 < 10 et l’exposant est entier.'],
+        [sci(1.6, -19), true, 'Vrai : 1 ⩽ 1,6 < 10 et l’exposant est entier.'],
+        [sci(10.4, 2), false, 'Faux : 10,4 n’est pas inférieur à 10 ; on écrit 1,04 × 10^{3}.'],
+        [sci(0.12, -6), false, 'Faux : 0,12 est inférieur à 1 ; on écrit 1,2 × 10^{-7}.'],
+        [`${nombreFr(4.5)} × 10^{2,3}`, false, 'Faux : l’exposant doit être entier. On ne la corrige pas, on la refuse.'],
+        [sci(47.5, 3), false, 'Faux : 47,5 dépasse 10 ; on écrit 4,75 × 10^{4}.'],
+        [sci(9.99, 8), true, 'Vrai : 9,99 est bien inférieur à 10.'],
+      ]);
+      return { question: `« ${cas[0]} est une écriture scientifique »`, vrai: cas[1], reponse: cas[2] };
+    },
+  },
+  {
+    id: 'conversions.n1.exposant-non-entier',
+    question: 'Pourquoi 4,5 × 10^{2,3} n’est-elle pas une écriture scientifique ?',
+    formats: ['retournement'],
+    reponse: 'L’exposant doit être un entier.',
+    aide: 'On ne la corrige pas, on la refuse.',
+  },
+  {
+    id: 'conversions.n1.virgule',
+    question: 'De combien de rangs se déplace la virgule ?',
+    formats: ['qcm'],
+    aide: 'L’exposant porte l’échelle : il dit de combien de rangs la virgule s’est déplacée, et son signe dit dans quel sens.',
+    generer() {
+      const m = auHasard([3.2, 5.6, 1.8, 7.4]);
+      const n = exposantNonNul(-6, 6);
+      const k = Math.abs(n);
+      const sens = n < 0 ? 'gauche' : 'droite';
+      const autre = n < 0 ? 'droite' : 'gauche';
+      const rangs = (r, s) => `${pluriel(r, 'rang')} vers la ${s}`;
+      const bonne = rangs(k, sens);
+      return {
+        question: `Pour passer de ${nombreFr(m)} à ${sci(m, n)}, la virgule se déplace de…`,
+        reponse: bonne,
+        distracteurs: pieges(bonne, [rangs(k, autre), rangs(k + 1, sens), rangs(k + 1, autre), k > 1 ? rangs(k - 1, sens) : rangs(k + 2, sens)]),
+      };
+    },
+  },
+  {
+    id: 'conversions.n1.ordre-de-grandeur',
+    question: 'Ordre de grandeur d’un nombre',
+    formats: ['qcm'],
+    aide: AIDE_ORDRE,
+    generer() {
+      const a = auHasard([1.6, 2.5, 3.8, 4.2, 6.0, 6.4, 9.1, 7.5, 1.2, 8.3]);
+      const n = entierEntre(-30, 30);
+      const k = a < 5 ? n : n + 1;
+      const bonne = p10(k);
+      return {
+        question: `Ordre de grandeur de ${sci(a, n)} ?`,
+        reponse: bonne,
+        distracteurs: pieges(bonne, [p10(a < 5 ? n + 1 : n), sci(a, n), p10(k - 1), p10(k + 1), p10(-k)]),
+      };
+    },
+  },
+  {
+    id: 'conversions.n1.ordre-de-grandeur-vrai-faux',
+    question: 'Ordre de grandeur : vrai ou faux ?',
+    formats: ['vraifaux'],
+    aide: AIDE_ORDRE,
+    generer() {
+      const [a, n, unite] = auHasard([[9.1, -31, 'kg'], [6.0, 23, ''], [1.6, -19, 'C'], [2.5, 3, 'm'], [3.8, 8, 'm'], [4.2, 5, 'Hz'], [6.4, 6, 'm']]);
+      const k = a < 5 ? n : n + 1;
+      const vrai = pileOuFace();
+      const annonce = vrai ? k : (a < 5 ? n + 1 : n);
+      const u = unite ? ` ${unite}` : '';
+      return {
+        question: `« L’ordre de grandeur de ${sci(a, n)}${u} est ${p10(annonce)}${u} »`,
+        vrai,
+        reponse: `${vrai ? 'Vrai' : 'Faux'} : ${p10(k)}${u}, car ${nombreFr(a)} ${a < 5 ? '<' : '⩾'} 5.`,
+      };
+    },
+  },
+  {
+    id: 'conversions.n1.produit-scientifique',
+    question: 'Produit en écriture scientifique',
+    formats: ['saisie'],
+    aide: 'On multiplie les nombres entre eux, puis les puissances de dix entre elles.',
+    generer() {
+      const [a, b] = auHasard([[2, 3], [2, 4], [3, 3], [2, 2], [1.5, 4], [4, 2], [1.2, 5], [2.5, 2]]);
+      const m = exposantNonNul(-8, 8);
+      const n = exposantNonNul(-8, 8);
+      return { question: `(${sci(a, m)}) × (${sci(b, n)}) = ?`, reponse: sci(a * b, m + n), nombre: net(a * b * 10 ** (m + n)) };
+    },
+  },
+  {
+    id: 'conversions.n1.quotient-scientifique',
+    question: 'Quotient en écriture scientifique',
+    formats: ['saisie'],
+    aide: 'On divise les nombres entre eux, puis les puissances de dix entre elles.',
+    generer() {
+      const [a, b] = auHasard([[8, 4], [6, 3], [9, 3], [6, 2], [8, 2], [4, 2], [9, 1.5]]);
+      const m = exposantNonNul(-8, 8);
+      const n = exposantNonNul(-8, 8);
+      return { question: `(${sci(a, m)}) / (${sci(b, n)}) = ?`, reponse: sci(a / b, m - n), nombre: net((a / b) * 10 ** (m - n)) };
+    },
+  },
+  {
+    id: 'conversions.n1.carre-scientifique',
+    question: 'Carré en écriture scientifique',
+    formats: ['qcm'],
+    aide: 'Le nombre est élevé au carré, et l’exposant multiplié par 2.',
+    generer() {
+      const a = auHasard([2, 3]);
+      const n = exposantNonNul(-6, 6);
+      const bonne = sci(a * a, 2 * n);
+      return {
+        question: `(${sci(a, n)})^{2} = ?`,
+        reponse: bonne,
+        distracteurs: pieges(bonne, [sci(a, 2 * n), sci(a * a, n), sci(2 * a, 2 * n), sci(2 * a, n), sci(a * a, 2 * n + 1),
+          sci(a * a, 2 * n - 1), sci(a, n + 2)]),
+      };
+    },
+  },
+  {
+    id: 'conversions.n1.calculatrice',
+    question: 'Sur la calculatrice, quelle saisie donne 1 ÷ 6,02 × 10^{23} ?',
+    formats: ['retournement'],
+    reponse: '1 ÷ 6,02 ×10ˣ 23, avec la touche ×10ˣ (ou EXP) : 1,66 × 10^{-24}',
+    aide: 'Avec ^ sans parenthèses, la calculatrice fait (1 ÷ 6,02) × 10^{23} = 1,66 × 10^{22} : '
+      + '46 ordres de grandeur d’erreur. Toujours la touche ×10ˣ.',
+  },
 ];
 
-/** Une relation et ses variantes fautives, pour le QCM. */
-function carteFormule(cle, question, reponse, distracteurs, aide) {
-  return {
-    id: `chimie-bases.formules.${cle}`,
-    question,
-    reponse,
+/* ---------- Niveau 2 : conversions simples ---------- */
+
+const MASSES = [['kg', 3], ['g', 0], ['mg', -3], ['µg', -6]];
+const VOLUMES = [['L', 0], ['dL', -1], ['cL', -2], ['mL', -3], ['µL', -6]];
+const DUREES = [['s', 0], ['ms', -3], ['µs', -6], ['ns', -9]];
+
+const NIVEAU_2 = [
+  familleConversion('conversions.n2.multiple-vers-base', 'D’un multiple vers l’unité', [
+    [['km', 3], ['m', 0]], [['hm', 2], ['m', 0]], [['dam', 1], ['m', 0]], [['kg', 3], ['g', 0]], [['hL', 2], ['L', 0]],
+    [['kW', 3], ['W', 0]], [['MW', 6], ['W', 0]], [['GHz', 9], ['Hz', 0]], [['kJ', 3], ['J', 0]], [['kV', 3], ['V', 0]],
+  ], AIDE_SENS),
+  familleConversion('conversions.n2.sous-multiple-vers-base', 'D’un sous-multiple vers l’unité', [
+    [['cm', -2], ['m', 0]], [['mm', -3], ['m', 0]], [['µm', -6], ['m', 0]], [['nm', -9], ['m', 0]], [['dm', -1], ['m', 0]],
+    [['mg', -3], ['g', 0]], [['µg', -6], ['g', 0]], [['mL', -3], ['L', 0]], [['cL', -2], ['L', 0]], [['dL', -1], ['L', 0]],
+  ], AIDE_SENS),
+  familleConversion('conversions.n2.base-vers-prefixe', 'De l’unité vers un préfixe', [
+    [['m', 0], ['cm', -2]], [['m', 0], ['mm', -3]], [['m', 0], ['µm', -6]], [['m', 0], ['km', 3]], [['g', 0], ['mg', -3]],
+    [['g', 0], ['kg', 3]], [['L', 0], ['mL', -3]], [['L', 0], ['cL', -2]], [['s', 0], ['ms', -3]], [['W', 0], ['kW', 3]],
+  ], AIDE_SENS),
+  familleConversion('conversions.n2.masses', 'Conversions de masses', toutesPaires(MASSES), AIDE_SENS),
+  familleConversion('conversions.n2.volumes-litres', 'Conversions de litres', toutesPaires(VOLUMES), AIDE_SENS),
+  familleConversion('conversions.n2.electricite', 'Intensités, tensions, puissances, fréquences', [
+    ...toutesPaires([['A', 0], ['mA', -3], ['µA', -6]]), ...toutesPaires([['V', 0], ['mV', -3], ['kV', 3]]),
+    ...toutesPaires([['W', 0], ['kW', 3], ['MW', 6]]), ...toutesPaires([['Hz', 0], ['kHz', 3], ['MHz', 6], ['GHz', 9]]),
+  ], AIDE_SENS),
+  familleConversion('conversions.n2.durees-prefixes', 'Millisecondes, microsecondes, nanosecondes', toutesPaires(DUREES), AIDE_SENS),
+  familleConversion('conversions.n2.entre-prefixes', 'D’un préfixe à un autre', [
+    [['mm', -3], ['µm', -6]], [['km', 3], ['cm', -2]], [['cm', -2], ['mm', -3]], [['mg', -3], ['µg', -6]], [['kg', 3], ['mg', -3]],
+    [['mL', -3], ['µL', -6]], [['km', 3], ['mm', -3]], [['nm', -9], ['µm', -6]], [['ms', -3], ['µs', -6]], [['GHz', 9], ['MHz', 6]],
+  ], 'On passe par la différence des exposants des deux préfixes.'),
+  {
+    id: 'conversions.n2.vers-unite-scientifique',
+    question: 'Conversion, résultat en écriture scientifique',
+    formats: ['qcm'],
+    aide: AIDE_SENS,
+    generer() {
+      const v = auHasard([56, 37, 3.49, 964, 0.63, 4.5, 72, 250, 358]);
+      const [[de, eDe], [vers, eVers]] = auHasard([
+        [['mm', -3], ['m', 0]], [['g', 0], ['kg', 3]], [['g', 0], ['mg', -3]], [['GHz', 9], ['Hz', 0]],
+        [['cm', -2], ['km', 3]], [['mV', -3], ['kV', 3]], [['µm', -6], ['m', 0]], [['kW', 3], ['W', 0]],
+      ]);
+      const d = eDe - eVers;
+      const r = net(v * 10 ** d);
+      const bonne = enScientifique(r);
+      return {
+        question: `${nombreFr(v)} ${de} = ? ${vers}`,
+        reponse: bonne,
+        distracteurs: pieges(bonne, [enScientifique(v * 10 ** -d), enScientifique(r * 10), enScientifique(r / 10),
+          enScientifique(r * 1000), `${nombreFr(v)} × 10^{${-d}}`, enScientifique(r / 100)]),
+      };
+    },
+  },
+  {
+    id: 'conversions.n2.conversion-vrai-faux',
+    question: 'Une conversion : vraie ou fausse ?',
+    formats: ['vraifaux'],
+    aide: AIDE_SENS,
+    generer() {
+      const v = auHasard([3.49, 56, 2.5, 450, 0.8, 12]);
+      const [[de, eDe], [vers, eVers]] = auHasard([
+        [['g', 0], ['mg', -3]], [['mm', -3], ['m', 0]], [['kg', 3], ['g', 0]], [['mL', -3], ['L', 0]],
+        [['km', 3], ['m', 0]], [['ms', -3], ['s', 0]], [['m', 0], ['µm', -6]],
+      ]);
+      const d = eDe - eVers;
+      const vrai = pileOuFace();
+      const juste = enScientifique(v * 10 ** d);
+      return {
+        question: `« ${nombreFr(v)} ${de} = ${vrai ? juste : enScientifique(v * 10 ** -d)} ${vers} »`,
+        vrai,
+        reponse: `${vrai ? 'Vrai' : 'Faux'} : ${nombreFr(v)} ${de} = ${juste} ${vers}`,
+      };
+    },
+  },
+  {
+    id: 'conversions.n2.sens-du-nombre',
+    question: 'Vers une unité plus petite, le nombre…',
+    formats: ['qcm'],
+    reponse: 'grossit',
+    distracteurs: ['rétrécit', 'ne change pas', 'change de signe'],
+    aide: 'Il faut plus de petites unités pour mesurer la même chose : 1 m = 100 cm.',
+  },
+  {
+    id: 'conversions.n2.verifier-le-sens',
+    question: 'En passant de grammes en kilogrammes, ton nombre a grandi. Est-ce normal ?',
+    formats: ['retournement'],
+    reponse: 'Non : le kilogramme est plus grand que le gramme, le nombre doit rétrécir. Tu as multiplié au lieu de diviser.',
+    aide: 'Réflexe : le nombre a-t-il grandi ou rétréci — et est-ce normal ?',
+  },
+  {
+    id: 'conversions.n2.litre-dm3',
+    question: '1 L = ?',
+    formats: ['qcm'],
+    reponse: '1 dm³',
+    distracteurs: ['1 m³', '1 cm³', '10 cm³', '100 cm³', '1 mm³', '10 dm³'],
+    aide: '1 dm³ = 1 L · 1 m³ = 1000 L · 1 cm³ = 1 mL.',
+  },
+  {
+    id: 'conversions.n2.equivalences-volumes',
+    question: 'Litres et mètres cubes : vrai ou faux ?',
+    formats: ['vraifaux'],
+    aide: '1 dm³ = 1 L · 1 m³ = 1000 L · 1 cm³ = 1 mL.',
+    generer() {
+      const cas = auHasard([
+        ['1 mL = 1 cm³', true, 'Vrai'], ['1 L = 1 dm³', true, 'Vrai'], ['1 m³ = 1 000 L', true, 'Vrai'],
+        ['1 cL = 10 cm³', true, 'Vrai : 1 cL = 10 mL = 10 cm³'], ['1 L = 1 m³', false, 'Faux : 1 m³ = 1 000 L'],
+        ['1 mL = 1 dm³', false, 'Faux : 1 mL = 1 cm³'], ['1 cm³ = 1 L', false, 'Faux : 1 cm³ = 1 mL'],
+        ['1 L = 100 cm³', false, 'Faux : 1 L = 1 000 cm³'], ['1 m³ = 100 L', false, 'Faux : 1 m³ = 1 000 L'],
+      ]);
+      return { question: `« ${cas[0]} »`, vrai: cas[1], reponse: cas[2] };
+    },
+  },
+  familleConversion('conversions.n2.cm3-et-ml', 'cm³, dm³, mL et L', [
+    [['cm³', -3], ['mL', -3]], [['dm³', 0], ['L', 0]], [['mL', -3], ['cm³', -3]], [['L', 0], ['dm³', 0]],
+    [['cm³', -3], ['L', 0]], [['L', 0], ['cm³', -3]], [['dm³', 0], ['mL', -3]], [['mL', -3], ['dm³', 0]],
+  ], '1 dm³ = 1 L et 1 cm³ = 1 mL.'),
+  {
+    id: 'conversions.n2.minutes-en-heures',
+    question: 'Des minutes en heures',
+    formats: ['saisie'],
+    aide: 'Une heure compte 60 minutes, pas 100 : on divise par 60.',
+    generer() {
+      const m = auHasard([6, 12, 15, 18, 24, 30, 36, 42, 45, 48, 54, 75, 90, 150]);
+      return { question: `${m} min = ? h`, reponse: `${nombreFr(m / 60)} h`, nombre: net(m / 60), unite: 'h' };
+    },
+  },
+  {
+    id: 'conversions.n2.heures-minutes-decimal',
+    question: 'Des heures et minutes en heures décimales',
+    formats: ['qcm'],
+    aide: '2 h 30 ne vaut pas 2,30 h : 30 min, c’est une demi-heure, donc 2,5 h.',
+    generer() {
+      const h = entierEntre(1, 5);
+      const m = auHasard([15, 30, 45, 6, 12, 18, 24, 36, 48, 54]);
+      const bonne = `${nombreFr(h + m / 60)} h`;
+      return {
+        question: `${h} h ${m} min = ? h`,
+        reponse: bonne,
+        distracteurs: pieges(bonne, [`${h},${String(m).padStart(2, '0')} h`, `${nombreFr(h * 60 + m)} h`,
+          `${nombreFr((h * 60 + m) / 100)} h`, `${h}${String(m).padStart(2, '0')} h`, `${nombreFr(h + m / 600)} h`]),
+      };
+    },
+  },
+  {
+    id: 'conversions.n2.heures-minutes-secondes',
+    question: 'Des heures et minutes en secondes',
+    formats: ['saisie'],
+    aide: '1 h = 3 600 s ; 2 h 30 = 2,5 × 3 600 = 9 000 s.',
+    generer() {
+      const h = entierEntre(1, 3);
+      const m = auHasard([10, 15, 20, 30, 40, 45]);
+      const s = (h * 60 + m) * 60;
+      return { question: `${h} h ${m} min = ? s`, reponse: `${nombreFr(s)} s`, nombre: s, unite: 's' };
+    },
+  },
+  {
+    id: 'conversions.n2.heures-minutes',
+    question: 'Heures, minutes, secondes',
+    formats: ['saisie'],
+    aide: '1 h = 60 min ; 1 min = 60 s.',
+    generer() {
+      if (pileOuFace()) {
+        const h = auHasard([1.5, 2.5, 0.5, 0.25, 0.75, 1.2, 3.5]);
+        return { question: `${nombreFr(h)} h = ? min`, reponse: `${nombreFr(h * 60)} min`, nombre: net(h * 60), unite: 'min' };
+      }
+      const m = auHasard([2.5, 1.5, 0.5, 10, 12, 4, 0.25]);
+      return { question: `${nombreFr(m)} min = ? s`, reponse: `${nombreFr(m * 60)} s`, nombre: net(m * 60), unite: 's' };
+    },
+  },
+  {
+    id: 'conversions.n2.secondes-par-jour',
+    question: 'Combien de secondes dans une journée ?',
+    formats: ['qcm'],
+    reponse: '86 400',
+    distracteurs: ['3 600', '1 440', '8 640', '864 000', '24 000'],
+    aide: '24 × 3 600 = 86 400 s.',
+  },
+  familleConversion('conversions.n2.tonnes', 'Tonnes et kilogrammes', [[['t', 3], ['kg', 0]], [['kg', 0], ['t', 3]], [['t', 6], ['g', 0]]],
+    '1 t = 1 000 kg.'),
+  {
+    id: 'conversions.n2.unites-si',
+    question: 'Unité du Système international',
+    formats: ['qcm'],
+    aide: 'Pour un calcul, on convertit d’abord en unités SI : mètre, kilogramme, seconde…',
+    generer() {
+      const [grandeur, bonne, autres] = auHasard([
+        ['de la masse', 'kg', ['g', 'mg', 't', 'N', 'lb']],
+        ['de la longueur', 'm', ['km', 'cm', 'mm', 'pouce', 'L']],
+        ['de la durée', 's', ['min', 'h', 'ms', 'Hz', 'j']],
+        ['de la température', 'K', ['°C', '°F', 'J', 'k']],
+        ['de l’intensité électrique', 'A', ['mA', 'V', 'W', 'Ω', 'C']],
+        ['de la quantité de matière', 'mol', ['g', 'mol/L', 'L', 'g/mol', 'M']],
+      ]);
+      return { question: `Unité SI ${grandeur} ?`, reponse: bonne, distracteurs: autres };
+    },
+  },
+  {
+    id: 'conversions.n2.celsius-kelvin',
+    question: 'Degrés Celsius et kelvins',
+    formats: ['saisie'],
+    tolerance: 0.01,
+    aide: 'T (K) = θ (°C) + 273 (273,15 pour être précis).',
+    generer() {
+      if (pileOuFace()) {
+        const c = auHasard([25, 20, 37, 100, -10, 0, -196, 15]);
+        return { question: `${nombreFr(c)} °C = ? K`, reponse: `${nombreFr(c + 273)} K`, nombre: c + 273, unite: 'K' };
+      }
+      const k = auHasard([300, 310, 373, 250, 77, 293]);
+      return { question: `${k} K = ? °C`, reponse: `${nombreFr(k - 273)} °C`, nombre: k - 273, unite: '°C' };
+    },
+  },
+  {
+    id: 'conversions.n2.zero-kelvin',
+    question: '« 0 K = 0 °C »',
+    formats: ['vraifaux'],
+    vrai: false,
+    reponse: 'Faux : 0 K = −273 °C, le zéro absolu.',
+  },
+  familleConversion('conversions.n2.pressions', 'Pascals, hectopascals, bars', [
+    [['hPa', 2], ['Pa', 0]], [['kPa', 3], ['Pa', 0]], [['Pa', 0], ['hPa', 2]], [['bar', 5], ['Pa', 0]],
+    [['bar', 5], ['hPa', 2]], [['MPa', 6], ['Pa', 0]], [['Pa', 0], ['kPa', 3]],
+  ], '1 hPa = 10^{2} Pa ; 1 bar = 10^{5} Pa = 1 000 hPa.'),
+];
+
+/* ---------- Niveau 3 : conversions piégeuses ---------- */
+
+const NIVEAU_3 = [
+  {
+    id: 'conversions.n3.ms-vers-kmh-facteur',
+    question: 'Pour passer de m/s à km/h, on…',
+    formats: ['qcm'],
+    reponse: 'multiplie par 3,6',
+    distracteurs: ['divise par 3,6', 'multiplie par 1 000', 'multiplie par 60', 'multiplie par 3 600', 'divise par 1 000', 'multiplie par 36'],
+    aide: '1 m/s = 3 600 m/h = 3,6 km/h. Un résultat en km/h est toujours plus grand.',
+  },
+  {
+    id: 'conversions.n3.kmh-vers-ms-facteur',
+    question: 'Pour passer de km/h à m/s, on…',
+    formats: ['qcm'],
+    reponse: 'divise par 3,6',
+    distracteurs: ['multiplie par 3,6', 'divise par 1 000', 'divise par 60', 'divise par 3 600', 'multiplie par 1 000'],
+    aide: '90 km/h = 90 000 m / 3 600 s = 25 m/s. Un résultat en m/s est toujours plus petit.',
+  },
+  {
+    id: 'conversions.n3.ms-vers-kmh',
+    question: 'Des m/s en km/h',
+    formats: ['saisie'],
+    aide: 'On multiplie par 3,6.',
+    generer() {
+      const v = auHasard([5, 10, 15, 20, 25, 30, 40, 50, 2.5, 100, 340]);
+      return { question: `${nombreFr(v)} m/s = ? km/h`, reponse: `${nombreFr(v * 3.6)} km/h`, nombre: net(v * 3.6), unite: 'km/h' };
+    },
+  },
+  {
+    id: 'conversions.n3.kmh-vers-ms',
+    question: 'Des km/h en m/s',
+    formats: ['saisie'],
+    aide: 'On divise par 3,6.',
+    generer() {
+      const v = auHasard([18, 36, 54, 72, 90, 108, 126, 144, 180, 360, 900]);
+      return { question: `${v} km/h = ? m/s`, reponse: `${nombreFr(v / 3.6)} m/s`, nombre: net(v / 3.6), unite: 'm/s' };
+    },
+  },
+  {
+    id: 'conversions.n3.origine-3-6',
+    question: 'D’où vient le facteur 3,6 entre m/s et km/h ?',
+    formats: ['retournement'],
+    reponse: '1 km/h = 1 000 m / 3 600 s, et 3 600 / 1 000 = 3,6.',
+  },
+  {
+    id: 'conversions.n3.vraisemblance-vitesses',
+    question: 'Cette vitesse est-elle vraisemblable ?',
+    formats: ['vraifaux'],
+    aide: 'Une valeur absurde vient presque toujours d’une conversion : des km/h pris pour des m/s.',
+    generer() {
+      const cas = auHasard([
+        ['Un piéton marche à 5 000 m/s', false, 'Faux : un piéton marche à environ 1,4 m/s (5 km/h).'],
+        ['Un piéton marche à 1,4 m/s', true, 'Vrai : 1,4 × 3,6 ≈ 5 km/h.'],
+        ['Un TGV roule à 300 m/s', false, 'Faux : 300 km/h ≈ 83 m/s.'],
+        ['Un TGV roule à 83 m/s', true, 'Vrai : 83 × 3,6 ≈ 300 km/h.'],
+        ['Le son se propage dans l’air à 340 m/s', true, 'Vrai : environ 1 200 km/h.'],
+        ['Le son se propage dans l’air à 340 km/h', false, 'Faux : 340 m/s, soit environ 1 200 km/h.'],
+        ['Un cycliste roule à 6 m/s', true, 'Vrai : environ 22 km/h.'],
+        ['Une voiture sur autoroute roule à 130 m/s', false, 'Faux : 130 km/h ≈ 36 m/s.'],
+      ]);
+      return { question: `« ${cas[0]} »`, vrai: cas[1], reponse: cas[2] };
+    },
+  },
+  {
+    id: 'conversions.n3.m2-en-cm2',
+    question: '1 m² = ? cm²',
+    formats: ['qcm'],
+    reponse: '10^{4}',
+    distracteurs: ['10^{2}', '10^{3}', '10^{6}', '10^{-4}', '10^{-2}', '200'],
+    aide: `1 m² = 100 cm × 100 cm = 10^{4} cm². ${AIDE_SURFACES}`,
+  },
+  familleConversion('conversions.n3.surfaces-m2', 'Surfaces : du m² vers plus petit', [
+    [['m²', 0], ['cm²', -4]], [['m²', 0], ['dm²', -2]], [['m²', 0], ['mm²', -6]], [['dm²', -2], ['cm²', -4]],
+  ], AIDE_SURFACES),
+  familleConversion('conversions.n3.surfaces-km2', 'Surfaces : km², hectares et m²', [
+    [['km²', 6], ['m²', 0]], [['m²', 0], ['km²', 6]], [['hm²', 4], ['m²', 0]], [['km²', 6], ['hm²', 4]],
+  ], `${AIDE_SURFACES} Un hm² est un hectare.`),
+  familleConversion('conversions.n3.surfaces-vers-m2', 'Surfaces : vers le m²', [
+    [['cm²', -4], ['m²', 0]], [['mm²', -6], ['m²', 0]], [['dm²', -2], ['m²', 0]], [['mm²', -6], ['cm²', -4]],
+  ], AIDE_SURFACES),
+  {
+    id: 'conversions.n3.m3-en-cm3',
+    question: '1 m³ = ? cm³',
+    formats: ['qcm'],
+    reponse: '10^{6}',
+    distracteurs: ['10^{3}', '10^{2}', '10^{9}', '10^{4}', '10^{-6}', '300'],
+    aide: `Les exposants se multiplient par 3 : 1 m³ = (10^{2} cm)³ = 10^{6} cm³. ${AIDE_SURFACES}`,
+  },
+  {
+    id: 'conversions.n3.regle-1-2-3',
+    question: 'Longueurs, surfaces, volumes : que devient l’exposant du préfixe ?',
+    formats: ['retournement'],
+    reponse: '×1 pour une longueur · ×2 pour une surface · ×3 pour un volume',
+    aide: '1 km = 10^{3} m ; 1 km² = 10^{6} m² ; 1 km³ = 10^{9} m³.',
+  },
+  familleConversion('conversions.n3.m3-vers-litres', 'Des m³ vers les litres', [
+    [['m³', 3], ['L', 0]], [['m³', 3], ['dm³', 0]], [['m³', 3], ['hL', 2]],
+  ], '1 m³ = 1 000 L. Ne jamais mélanger les litres et les m³ dans un même calcul.'),
+  familleConversion('conversions.n3.litres-vers-m3', 'Des litres vers les m³', [
+    [['L', 0], ['m³', 3]], [['mL', -3], ['m³', 3]], [['cm³', -3], ['m³', 3]], [['dm³', 0], ['m³', 3]],
+  ], 'La conversion la plus oubliée de l’année : 1,2 L = 1,2 × 10^{-3} m³.'),
+  familleConversion('conversions.n3.m3-et-ml', 'm³, mL et cm³', [
+    [['m³', 3], ['mL', -3]], [['m³', 3], ['cm³', -3]], [['mm³', -6], ['mL', -3]], [['mL', -3], ['mm³', -6]],
+  ], '1 m³ = 10^{6} cm³ = 10^{6} mL.'),
+  {
+    id: 'conversions.n3.g-cm3-en-kg-m3',
+    question: '1 g/cm³ = ? kg/m³',
+    formats: ['qcm'],
+    reponse: '1 000',
+    distracteurs: ['1', '0,001', '100', '10^{6}', '10', '10^{-6}'],
+    aide: '1 g/cm³ = 10^{-3} kg / 10^{-6} m³ = 10^{3} kg/m³. L’eau : 1,0 g/cm³ = 1 000 kg/m³.',
+  },
+  {
+    id: 'conversions.n3.g-ml-en-g-l',
+    question: '1 g/mL = ? g/L',
+    formats: ['qcm'],
+    reponse: '1 000',
+    distracteurs: ['1', '0,001', '100', '10', '10^{6}'],
+    aide: 'Il y a 1 000 mL dans un litre : 1 000 fois plus de grammes.',
+  },
+  familleComposee('conversions.n3.composees-g-kg', 'Unités composées : g, kg, L, cL, m³', [
+    ['g/L', 'kg/L', 1e-3], ['kg/L', 'g/L', 1e3], ['g/L', 'g/mL', 1e-3], ['g/cL', 'kg/L', 1e-1],
+    ['kg/m³', 'g/L', 1], ['g/L', 'kg/m³', 1], ['g/cm³', 'kg/L', 1], ['kg/L', 'g/cL', 10],
+  ], 'On convertit le haut et le bas séparément, puis on contrôle : le nombre doit-il grandir ou rétrécir ?'),
+  familleComposee('conversions.n3.composees-mg', 'Unités composées : mg, µg, mL', [
+    ['mg/L', 'g/mL', 1e-6], ['mg/L', 'g/L', 1e-3], ['µg/mL', 'mg/L', 1], ['g/L', 'mg/mL', 1],
+    ['mg/mL', 'g/L', 1], ['µg/L', 'mg/L', 1e-3], ['g/L', 'µg/mL', 1e3],
+  ], '2,5 mg/L = 2,5 × 10^{-3} g / 10^{3} mL = 2,5 × 10^{-6} g/mL.'),
+  {
+    id: 'conversions.n3.eau-equivalences',
+    question: '« Pour l’eau, 1,0 g/mL = 1,0 kg/L = 1 000 g/L »',
+    formats: ['vraifaux'],
+    vrai: true,
+    reponse: 'Vrai : trois écritures de la même masse volumique.',
+    aide: 'Pour l’eau, 1 g ↔ 1 mL : bien pratique pour vérifier un résultat.',
+  },
+  {
+    id: 'conversions.n3.masse-eau',
+    question: 'Masse d’un volume d’eau',
+    formats: ['qcm'],
+    aide: 'L’eau a une masse volumique de 1,0 g/mL : 1 mL d’eau pèse 1 g.',
+    generer() {
+      const v = auHasard([250, 500, 150, 330, 750, 1500, 20]);
+      const bonne = `${nombreFr(v)} g`;
+      return {
+        question: `Masse de ${nombreFr(v)} mL d’eau ?`,
+        reponse: bonne,
+        distracteurs: pieges(bonne, [`${nombreFr(v / 1000)} g`, `${nombreFr(v / 10)} g`, `${nombreFr(v)} kg`,
+          `${nombreFr(v * 1000)} g`, `${nombreFr(v / 100)} g`]),
+      };
+    },
+  },
+  {
+    id: 'conversions.n3.masse-dissoute',
+    question: 'Masse dissoute dans une solution',
+    formats: ['saisie'],
+    aide: 'm = C_{m} × V, avec V en litres : on convertit les mL d’abord.',
+    generer() {
+      const c = auHasard([10, 20, 40, 50, 5, 2.5, 100]);
+      const v = auHasard([50, 100, 200, 250, 20, 500]);
+      const m = net((c * v) / 1000);
+      return { question: `Une solution à ${nombreFr(c)} g/L. Masse dissoute dans ${v} mL ?`, reponse: `${nombreFr(m)} g`, nombre: m, unite: 'g' };
+    },
+  },
+  {
+    id: 'conversions.n3.mol-l-mmol-ml',
+    question: '« 1 mol/L = 1 mmol/mL »',
+    formats: ['vraifaux'],
+    vrai: true,
+    reponse: 'Vrai : on divise le haut et le bas par 1 000.',
+  },
+  {
+    id: 'conversions.n3.debits',
+    question: 'Des L/min en m³/h',
+    formats: ['saisie'],
+    aide: '1 L/min = 10^{-3} m³ / (1/60) h = 0,06 m³/h.',
+    generer() {
+      const q = auHasard([5, 10, 15, 20, 25, 50, 100]);
+      return { question: `${q} L/min = ? m³/h`, reponse: `${nombreFr(q * 0.06)} m³/h`, nombre: net(q * 0.06), unite: 'm³/h' };
+    },
+  },
+  {
+    id: 'conversions.n3.kwh-en-joules',
+    question: '1 kWh = ? J',
+    formats: ['qcm'],
+    reponse: '3,6 × 10^{6}',
+    distracteurs: ['1 000', '3 600', '3,6 × 10^{3}', '10^{6}', '3,6 × 10^{9}'],
+    aide: '1 kWh = 1 000 W × 3 600 s = 3,6 × 10^{6} J.',
+  },
+  familleComposee('conversions.n3.energies-massiques', 'Énergies massiques et molaires', [
+    ['kJ/kg', 'J/kg', 1e3], ['MJ/kg', 'J/kg', 1e6], ['kJ/mol', 'J/mol', 1e3], ['J/kg', 'kJ/kg', 1e-3], ['MJ/kg', 'kJ/kg', 1e3],
+  ], 'L = −270 kJ/kg = −270 000 J/kg : une masse laissée en g donnerait un résultat mille fois trop grand.'),
+  {
+    id: 'conversions.n3.bar-en-pa',
+    question: '1 bar = ? Pa',
+    formats: ['qcm'],
+    reponse: '10^{5}',
+    distracteurs: ['10^{3}', '1 013', '10^{6}', '760', '10^{2}'],
+    aide: 'La pression atmosphérique vaut environ 1 013 hPa ≈ 1 bar.',
+  },
+];
+
+/* ---------- Niveau 4 : calcul de tête (terminale) ---------- */
+
+const NIVEAU_4 = [
+  {
+    id: 'conversions.n4.quotient',
+    question: 'Quotient de tête',
+    formats: ['saisie'],
+    aide: 'On sépare les chiffres des puissances de dix, on calcule chaque partie, puis on réassemble.',
+    generer() {
+      const [a, b] = auHasard([[6, 3], [8, 4], [9, 3], [8, 2], [6, 2], [4, 2], [9, 4.5]]);
+      const m = exposantNonNul(-12, 12);
+      const n = exposantNonNul(-12, 12);
+      const x = net((a / b) * 10 ** (m - n));
+      return { question: `\\frac{${sci(a, m)}}{${sci(b, n)}} = ?`, reponse: enScientifique(x), nombre: x };
+    },
+  },
+  {
+    id: 'conversions.n4.fraction-trois-termes',
+    question: 'Fraction à trois termes',
+    formats: ['saisie'],
+    aide: 'Chiffres d’un côté, puissances de dix de l’autre : ce qui passe sous la barre change de signe.',
+    generer() {
+      const [a, b, c] = auHasard([[4, 3, 6], [2, 6, 4], [3, 8, 6], [5, 6, 3], [2, 9, 6], [4, 5, 2], [6, 6, 4], [8, 3, 6], [2, 4, 8]]);
+      const m = exposantNonNul(-8, 8);
+      const n = exposantNonNul(-8, 8);
+      const p = exposantNonNul(-8, 8);
+      const x = net(((a * b) / c) * 10 ** (m + n - p));
+      return { question: `\\frac{${sci(a, m)} × ${sci(b, n)}}{${sci(c, p)}} = ?`, reponse: enScientifique(x), nombre: x };
+    },
+  },
+  {
+    id: 'conversions.n4.fraction-quatre-termes',
+    question: 'Fraction à quatre termes',
+    formats: ['saisie'],
+    aide: 'Chiffres d’un côté, puissances de dix de l’autre : ce qui passe sous la barre change de signe.',
+    generer() {
+      const [a, b, c, d] = auHasard([[2, 9, 3, 2], [4, 6, 3, 2], [6, 5, 3, 2], [8, 3, 4, 2], [3, 8, 2, 6], [9, 4, 6, 2], [5, 8, 4, 5]]);
+      const [m, n, p, q] = [exposantNonNul(-8, 8), exposantNonNul(-8, 8), exposantNonNul(-8, 8), exposantNonNul(-8, 8)];
+      const x = net(((a * b) / (c * d)) * 10 ** (m + n - p - q));
+      return { question: `\\frac{${sci(a, m)} × ${sci(b, n)}}{${sci(c, p)} × ${sci(d, q)}} = ?`, reponse: enScientifique(x), nombre: x };
+    },
+  },
+  {
+    id: 'conversions.n4.puissance-negative',
+    question: 'Puissance d’une puissance de dix négative',
+    formats: ['qcm'],
+    aide: AIDE_EXPOSANTS,
+    generer() {
+      const a = entierEntre(-9, -1);
+      const b = auHasard([2, 3, -2]);
+      const bonne = p10(a * b);
+      return {
+        question: `(${p10(a)})^{${b}} = ?`,
+        reponse: bonne,
+        distracteurs: pieges(bonne, [a + b, a - b, -a * b, a * b - 1, b - a].map(p10)),
+      };
+    },
+  },
+  {
+    id: 'conversions.n4.regles-vrai-faux',
+    question: 'Règles des puissances : vrai ou faux ?',
+    formats: ['vraifaux'],
+    aide: AIDE_EXPOSANTS,
+    generer() {
+      const a = exposantNonNul(-6, 6);
+      const b = exposantNonNul(-6, 6);
+      const cas = auHasard([
+        [`${p10(a)} / ${p10(b)} = ${p10(a - b)}`, true],
+        [`${p10(a)} / ${p10(b)} = ${p10(a + b)}`, a + b === a - b],
+        [`${p10(a)} × ${p10(b)} = ${p10(a * b)}`, a * b === a + b],
+        [`${p10(a)} × ${p10(b)} = ${p10(a + b)}`, true],
+        [`1 / ${p10(a)} = ${p10(-a)}`, true],
+        [`(${p10(a)})^{2} = ${p10(a + 2)}`, a === 2],
+      ]);
+      return { question: `« ${cas[0]} »`, vrai: cas[1], reponse: cas[1] ? 'Vrai' : 'Faux' };
+    },
+  },
+  {
+    id: 'conversions.n4.sommes-vrai-faux',
+    question: 'Sommes et produits de puissances : vrai ou faux ?',
+    formats: ['vraifaux'],
+    aide: 'On n’additionne les exposants que pour un produit. Une somme se calcule en revenant au même exposant.',
+    generer() {
+      const a = exposantNonNul(-6, 6);
+      const cas = auHasard([
+        [`${p10(a)} + ${p10(a)} = ${p10(2 * a)}`, false, `Faux : ${p10(a)} + ${p10(a)} = 2 × ${p10(a)}`],
+        [`${p10(a)} + ${p10(a)} = 2 × ${p10(a)}`, true, 'Vrai'],
+        [`${p10(a)} × ${p10(a)} = ${p10(2 * a)}`, true, 'Vrai'],
+        [`${p10(a)} × ${p10(a)} = 2 × ${p10(a)}`, false, `Faux : ${p10(a)} × ${p10(a)} = ${p10(2 * a)}`],
+      ]);
+      return { question: `« ${cas[0]} »`, vrai: cas[1], reponse: cas[2] };
+    },
+  },
+  {
+    id: 'conversions.n4.somme-scientifique',
+    question: 'Somme de deux nombres en écriture scientifique',
+    formats: ['qcm'],
+    aide: 'On écrit les deux termes avec la même puissance de dix, puis on additionne les nombres.',
+    generer() {
+      const a = entierEntre(1, 8);
+      const b = entierEntre(1, 9);
+      const m = exposantNonNul(-6, 6);
+      const bonne = sci(net(a + b / 10), m);
+      return {
+        question: `${sci(a, m)} + ${sci(b, m - 1)} = ?`,
+        reponse: bonne,
+        distracteurs: pieges(bonne, [`${nombreFr(a + b)} × 10^{${2 * m - 1}}`, `${nombreFr(a + b)} × 10^{${m}}`,
+          `${nombreFr(a * b)} × 10^{${2 * m - 1}}`, sci(net(a + b / 10), m - 1), `${nombreFr(a + b)} × 10^{${m - 1}}`]),
+      };
+    },
+  },
+  {
+    id: 'conversions.n4.carre',
+    question: 'Carré d’un nombre en écriture scientifique',
+    formats: ['qcm'],
+    aide: 'Le nombre est élevé au carré, l’exposant multiplié par 2.',
+    generer() {
+      const a = auHasard([2, 3, 1.5, 1.2]);
+      const n = exposantNonNul(-9, 9);
+      const bonne = enScientifique(a * a * 10 ** (2 * n));
+      return {
+        question: `(${sci(a, n)})^{2} = ?`,
+        reponse: bonne,
+        distracteurs: pieges(bonne, [sci(a, 2 * n), sci(net(a * a), n), sci(2 * a, 2 * n), sci(net(a * a), n * n), sci(2 * a, n),
+          sci(net(a * a), 2 * n + 1), sci(a, n + 2)]),
+      };
+    },
+  },
+  {
+    id: 'conversions.n4.inverse',
+    question: 'Inverse d’un nombre en écriture scientifique',
+    formats: ['saisie'],
+    aide: '1 / (a × 10ⁿ) = (1/a) × 10⁻ⁿ : l’exposant change de signe.',
+    generer() {
+      const a = auHasard([2, 4, 5, 8, 2.5]);
+      const n = exposantNonNul(-9, 9);
+      const x = net((1 / a) * 10 ** -n);
+      return { question: `\\frac{1}{${sci(a, n)}} = ?`, reponse: enScientifique(x), nombre: x };
+    },
+  },
+  {
+    id: 'conversions.n4.racine',
+    question: 'Racine carrée de tête',
+    formats: ['saisie'],
+    aide: '√(a × 10^{2n}) = √a × 10ⁿ : l’exposant doit être pair pour se diviser par 2.',
+    generer() {
+      const a = entierEntre(2, 9);
+      const n = exposantNonNul(-8, 8);
+      const x = net(a * 10 ** n);
+      return { question: `\\sqrt{${sci(a * a, 2 * n)}} = ?`, reponse: enScientifique(x), nombre: x };
+    },
+  },
+  {
+    id: 'conversions.n4.racine-exposant-impair',
+    question: '\\sqrt{10^{7}} ≈ ?',
+    formats: ['qcm'],
+    reponse: '3,2 × 10^{3}',
+    distracteurs: ['10^{3}', '3,5 × 10^{3}', '10^{4}', '5 × 10^{3}', '10^{3,5}'],
+    aide: 'On rend l’exposant pair : 10^{7} = 10 × 10^{6}, donc √ = √10 × 10^{3} ≈ 3,2 × 10^{3}.',
+  },
+  {
+    id: 'conversions.n4.rapport-echelles',
+    question: 'Combien de fois plus grand ?',
+    formats: ['saisie'],
+    aide: 'Un rapport de deux puissances de dix : on soustrait les exposants.',
+    generer() {
+      const [grand, eg, petit, ep] = auHasard([
+        ['un atome (10^{-10} m)', -10, 'son noyau (10^{-15} m)', -15],
+        ['la Terre (10^{7} m)', 7, 'un humain (1 m)', 0],
+        ['une cellule (10^{-5} m)', -5, 'un atome (10^{-10} m)', -10],
+        ['le Soleil (10^{9} m)', 9, 'la Terre (10^{7} m)', 7],
+        ['un virus (10^{-7} m)', -7, 'un atome (10^{-10} m)', -10],
+        ['un cheveu d’épaisseur (10^{-4} m)', -4, 'une bactérie (10^{-6} m)', -6],
+      ]);
+      return { question: `Combien de fois ${grand} est-il plus grand que ${petit} ?`, reponse: p10(eg - ep), nombre: 10 ** (eg - ep) };
+    },
+  },
+  {
+    id: 'conversions.n4.photon',
+    question: 'Énergie d’un photon, de tête',
+    formats: ['saisie'],
+    tolerance: 0.12,
+    aide: 'E = hc/λ : on calcule 6,6 × 3 / … d’un côté, les puissances de dix de l’autre. Un ordre de grandeur juste suffit.',
+    generer() {
+      const l = auHasard([300, 400, 500, 600]);
+      const e = net((6.6e-34 * 3e8) / (l * 1e-9));
+      return {
+        question: `E = hc/λ avec h = 6,6 × 10^{-34} J·s, c = 3 × 10^{8} m/s, λ = ${l} nm. E ≈ ?`,
+        reponse: `≈ ${enScientifique(Number(e.toPrecision(2)))} J`,
+        nombre: e,
+        unite: 'J',
+      };
+    },
+  },
+  {
+    id: 'conversions.n4.frequence',
+    question: 'Fréquence d’une radiation',
+    formats: ['saisie'],
+    aide: 'f = c/λ, avec λ en mètres : 1 nm = 10^{-9} m.',
+    generer() {
+      const l = auHasard([300, 600, 500, 400, 750, 200]);
+      const f = net(3e8 / (l * 1e-9));
+      return { question: `f = c/λ avec c = 3 × 10^{8} m/s et λ = ${l} nm. f = ?`, reponse: `${enScientifique(f)} Hz`, nombre: f, unite: 'Hz' };
+    },
+  },
+  {
+    id: 'conversions.n4.duree-lumiere',
+    question: 'Durée de trajet de la lumière',
+    formats: ['saisie'],
+    tolerance: 0.05,
+    aide: 'Δt = d/c, avec c = 3 × 10^{8} m/s.',
+    generer() {
+      const [objet, d] = auHasard([['du Soleil à la Terre', 1.5e11], ['de la Lune à la Terre', 3.6e8], ['sur 3 × 10^{8} m', 3e8],
+        ['sur 9 × 10^{8} m', 9e8], ['de Neptune au Soleil', 4.5e12]]);
+      const t = net(d / 3e8);
+      return { question: `Durée du trajet de la lumière ${objet} (d = ${enScientifique(d)} m) ?`, reponse: `${valeurFr(t)} s`, nombre: t, unite: 's' };
+    },
+  },
+  {
+    id: 'conversions.n4.nombre-entites',
+    question: 'Nombre d’entités',
+    formats: ['saisie'],
+    aide: 'N = n × N_{A}, avec N_{A} = 6 × 10^{23} mol^{-1}.',
+    generer() {
+      const [a, e] = auHasard([[2, -3], [5, -2], [5, -1], [3, -4], [1.5, -1], [2, -2]]);
+      const n = net(a * 10 ** e);
+      const x = net(n * 6e23);
+      return { question: `Nombre d’entités dans ${sci(a, e)} mol (N_{A} = 6 × 10^{23} mol^{-1}) ?`, reponse: enScientifique(x), nombre: x };
+    },
+  },
+  {
+    id: 'conversions.n4.mc2',
+    question: 'E = mc²',
+    formats: ['saisie'],
+    aide: 'La masse en kg, c = 3 × 10^{8} m/s, donc c² = 9 × 10^{16} m²/s².',
+    generer() {
+      const [texte, m] = auHasard([['1 g', 1e-3], ['1 kg', 1], ['2 g', 2e-3], ['1 mg', 1e-6], ['10 g', 1e-2]]);
+      const e = net(m * 9e16);
+      return { question: `E = mc² pour m = ${texte} (c = 3 × 10^{8} m/s). E = ?`, reponse: `${enScientifique(e)} J`, nombre: e, unite: 'J' };
+    },
+  },
+  {
+    id: 'conversions.n4.electronvolts',
+    question: 'Des électronvolts en joules',
+    formats: ['saisie'],
+    aide: '1 eV = 1,6 × 10^{-19} J.',
+    generer() {
+      const e = auHasard([2, 1.5, 3, 5, 10, 0.5]);
+      const j = net(e * 1.6e-19);
+      return { question: `${nombreFr(e)} eV = ? J (1 eV = 1,6 × 10^{-19} J)`, reponse: `${enScientifique(j)} J`, nombre: j, unite: 'J' };
+    },
+  },
+  {
+    id: 'conversions.n4.produit-ionique',
+    question: '[HO⁻] à partir de [H₃O⁺]',
+    formats: ['saisie'],
+    aide: 'À 25 °C, [H₃O⁺] × [HO⁻] = 10^{-14} : on soustrait les exposants.',
+    generer() {
+      const k = entierEntre(1, 13);
+      return {
+        question: `[H_{3}O^{+}] = 10^{-${k}} mol/L. [HO^{-}] = 10^{-14} / [H_{3}O^{+}] = ?`,
+        reponse: `${p10(k - 14)} mol/L`,
+        nombre: 10 ** (k - 14),
+        unite: 'mol/L',
+      };
+    },
+  },
+  {
+    id: 'conversions.n4.produit-a-renormaliser',
+    question: 'Produit à remettre en écriture scientifique',
+    formats: ['qcm'],
+    aide: '15 × 10ⁿ = 1,5 × 10ⁿ⁺¹ : la virgule recule d’un rang, l’exposant monte d’un.',
+    generer() {
+      const [a, b] = auHasard([[3, 5], [4, 5], [2, 6], [5, 5], [4, 4], [8, 2], [6, 5]]);
+      const m = exposantNonNul(-9, 9);
+      const n = exposantNonNul(-9, 9);
+      const bonne = sci(net((a * b) / 10), m + n + 1);
+      return {
+        question: `(${sci(a, m)}) × (${sci(b, n)}) = ?`,
+        reponse: bonne,
+        distracteurs: pieges(bonne, [`${a * b} × 10^{${m * n}}`, sci(net((a * b) / 10), m + n), `${a + b} × 10^{${m + n}}`,
+          sci(net((a * b) / 10), m + n - 1), `${a * b} × 10^{${m + n + 1}}`]),
+      };
+    },
+  },
+  {
+    id: 'conversions.n4.calculatrice-erreur',
+    question: 'La calculatrice affiche 1,66 × 10^{22} pour 1 ÷ 6,02 ^ 23. Pourquoi est-ce faux ?',
+    formats: ['retournement'],
+    reponse: 'Elle a calculé (1 ÷ 6,02) × 10^{23}. Il fallait la touche ×10ˣ : 1,66 × 10^{-24}.',
+    aide: 'L’écart : 46 ordres de grandeur. Un ordre de grandeur estimé de tête avant de taper l’aurait signalé.',
+  },
+];
+
+/* ---------- Niveau 5 : logarithme décimal et premières équations ---------- */
+
+const FORMULES_A_ISOLER = [
+  ['v = d / t', 't', 't = d / v', ['t = v / d', 't = d × v', 't = v − d', 't = 1 / (d × v)']],
+  ['v = d / t', 'd', 'd = v × t', ['d = v / t', 'd = t / v', 'd = v + t', 'd = v − t']],
+  ['n = m / M', 'm', 'm = n × M', ['m = n / M', 'm = M / n', 'm = n + M', 'm = n − M']],
+  ['n = m / M', 'M', 'M = m / n', ['M = n / m', 'M = m × n', 'M = n − m', 'M = 1 / (m n)']],
+  ['C = n / V', 'V', 'V = n / C', ['V = C / n', 'V = n × C', 'V = C − n', 'V = 1 / (n C)']],
+  ['U = R × I', 'I', 'I = U / R', ['I = R / U', 'I = U × R', 'I = U − R', 'I = R − U']],
+  ['U = R × I', 'R', 'R = U / I', ['R = I / U', 'R = U × I', 'R = U − I', 'R = I − U']],
+  ['P = U × I', 'I', 'I = P / U', ['I = U / P', 'I = P × U', 'I = P − U', 'I = U − P']],
+  ['ρ = m / V', 'V', 'V = m / ρ', ['V = ρ / m', 'V = m × ρ', 'V = m − ρ', 'V = 1 / (m ρ)']],
+  ['E = P × Δt', 'Δt', 'Δt = E / P', ['Δt = P / E', 'Δt = E × P', 'Δt = E − P', 'Δt = P − E']],
+  ['λ = c / f', 'f', 'f = c / λ', ['f = λ / c', 'f = c × λ', 'f = c − λ', 'f = 1 / (c λ)']],
+];
+
+const NIVEAU_5 = [
+  {
+    id: 'conversions.n5.log-puissance',
+    question: 'Logarithme d’une puissance de dix',
+    formats: ['saisie'],
+    aide: 'log(10ⁿ) = n : le logarithme décimal rend l’exposant.',
+    generer() {
+      const n = entierEntre(-12, 12);
+      return { question: `log(${p10(n)}) = ?`, reponse: nombreFr(n), nombre: n };
+    },
+  },
+  {
+    id: 'conversions.n5.log-decimal',
+    question: 'Logarithme d’un nombre décimal',
+    formats: ['saisie'],
+    aide: 'On écrit d’abord le nombre comme une puissance de dix : 0,01 = 10^{-2}.',
+    generer() {
+      const n = auHasard([-4, -3, -2, -1, 1, 2, 3, 4, 6]);
+      return { question: `log(${nombreFr(10 ** n)}) = ?`, reponse: nombreFr(n), nombre: n };
+    },
+  },
+  {
+    id: 'conversions.n5.exposant-inconnu',
+    question: '10^{x} = … : que vaut x ?',
+    formats: ['saisie'],
+    aide: 'x = log(…) : c’est le nombre de rangs dont la virgule s’est déplacée.',
+    generer() {
+      const n = auHasard([-6, -4, -3, -2, -1, 2, 3, 5]);
+      return { question: `10^{x} = ${nombreFr(10 ** n)}. Que vaut x ?`, reponse: nombreFr(n), nombre: n };
+    },
+  },
+  {
+    id: 'conversions.n5.log-de-1',
+    question: 'log(1) = ?',
+    formats: ['qcm'],
+    reponse: '0',
+    distracteurs: ['1', '10', '−1', 'n’existe pas'],
+    aide: '1 = 10^{0}, donc log(1) = 0.',
+  },
+  {
+    id: 'conversions.n5.signe-du-log',
+    question: 'Signe d’un logarithme : vrai ou faux ?',
+    formats: ['vraifaux'],
+    aide: 'log(x) < 0 pour 0 < x < 1 ; log(x) > 0 pour x > 1.',
+    generer() {
+      const x = auHasard([0.5, 0.02, 2, 50, 0.9, 1.5, 300]);
+      const vrai = x > 1;
+      return { question: `« log(${nombreFr(x)}) > 0 »`, vrai, reponse: `${vrai ? 'Vrai' : 'Faux'} : ${nombreFr(x)} est ${vrai ? 'supérieur' : 'inférieur'} à 1.` };
+    },
+  },
+  {
+    id: 'conversions.n5.log-negatif',
+    question: '« log(−2) existe »',
+    formats: ['vraifaux'],
+    vrai: false,
+    reponse: 'Faux : le logarithme n’est défini que pour un nombre strictement positif.',
+  },
+  {
+    id: 'conversions.n5.log-somme',
+    question: '« log(a + b) = log a + log b »',
+    formats: ['vraifaux'],
+    vrai: false,
+    reponse: 'Faux : c’est log(a × b) = log a + log b.',
+  },
+  {
+    id: 'conversions.n5.log-2-et-5',
+    question: 'Logarithme avec log 2 ≈ 0,3',
+    formats: ['saisie'],
+    tolerance: 0.02,
+    aide: 'log(a × 10ⁿ) = log a + n ; log 2 ≈ 0,3 et log 5 = 1 − log 2 ≈ 0,7.',
+    generer() {
+      const a = auHasard([2, 5]);
+      const n = entierEntre(-3, 3);
+      const l = net((a === 2 ? 0.3 : 0.7) + n);
+      return { question: `Sachant log 2 ≈ 0,3, que vaut log(${nombreFr(a * 10 ** n)}) ?`, reponse: `≈ ${nombreFr(l)}`, nombre: l };
+    },
+  },
+  {
+    id: 'conversions.n5.ph-vers-concentration',
+    question: 'Du pH à la concentration',
+    formats: ['qcm'],
+    aide: '[H₃O⁺] = 10^{−pH} mol/L.',
+    generer() {
+      const k = entierEntre(1, 13);
+      const bonne = `${p10(-k)} mol/L`;
+      return {
+        question: `pH = ${k}. Que vaut [H_{3}O^{+}] ?`,
+        reponse: bonne,
+        distracteurs: pieges(bonne, [`${k} mol/L`, `${p10(k)} mol/L`, `${p10(k - 14)} mol/L`, `−${k} mol/L`, `${nombreFr(k / 10)} mol/L`]),
+      };
+    },
+  },
+  {
+    id: 'conversions.n5.concentration-vers-ph',
+    question: 'De la concentration au pH',
+    formats: ['saisie'],
+    aide: 'pH = −log [H₃O⁺].',
+    generer() {
+      const k = entierEntre(1, 13);
+      return { question: `[H_{3}O^{+}] = 10^{-${k}} mol/L. pH = ?`, reponse: nombreFr(k), nombre: k };
+    },
+  },
+  {
+    id: 'conversions.n5.ph-approche',
+    question: 'pH avec log 2 ≈ 0,3',
+    formats: ['saisie'],
+    tolerance: 0.02,
+    aide: 'pH = −log(a × 10^{−k}) = k − log a.',
+    generer() {
+      const a = auHasard([2, 5]);
+      const k = entierEntre(2, 11);
+      const ph = net(k - (a === 2 ? 0.3 : 0.7));
+      return { question: `[H_{3}O^{+}] = ${sci(a, -k)} mol/L. pH ≈ ? (log 2 ≈ 0,3)`, reponse: `≈ ${nombreFr(ph)}`, nombre: ph };
+    },
+  },
+  {
+    id: 'conversions.n5.ph-dilution-10',
+    question: 'Si [H₃O⁺] est divisée par 10, le pH…',
+    formats: ['qcm'],
+    reponse: 'augmente de 1',
+    distracteurs: ['diminue de 1', 'est multiplié par 10', 'est divisé par 10', 'augmente de 10'],
+    aide: 'Diviser par 10, c’est retirer 1 à l’exposant ; et pH = −exposant.',
+  },
+  {
+    id: 'conversions.n5.dilution-acide-fort',
+    question: 'Dilution d’un acide fort',
+    formats: ['qcm'],
+    aide: 'Diluer 10ᵈ fois divise [H₃O⁺] par 10ᵈ : le pH augmente de d.',
+    generer() {
+      const [texte, d] = auHasard([['10', 1], ['100', 2], ['1 000', 3]]);
+      const bonne = `augmente de ${d}`;
+      return {
+        question: `On dilue ${texte} fois une solution d’acide fort. Le pH…`,
+        reponse: bonne,
+        distracteurs: pieges(bonne, [`augmente de ${texte}`, `diminue de ${d}`, `est multiplié par ${texte}`, 'ne change pas', `est divisé par ${texte}`]),
+      };
+    },
+  },
+  {
+    id: 'conversions.n5.niveau-sonore',
+    question: 'Niveau sonore',
+    formats: ['saisie'],
+    aide: 'L = 10 log(I / I₀) : I / I₀ est une puissance de dix, son log est l’exposant.',
+    generer() {
+      const k = entierEntre(2, 12);
+      return {
+        question: `L = 10 log(I / I_{0}) avec I = 10^{-${k}} W/m² et I_{0} = 10^{-12} W/m². L = ?`,
+        reponse: `${10 * (12 - k)} dB`,
+        nombre: 10 * (12 - k),
+        unite: 'dB',
+      };
+    },
+  },
+  {
+    id: 'conversions.n5.intensite-fois-10',
+    question: 'L’intensité sonore est multipliée par 10. Le niveau…',
+    formats: ['qcm'],
+    reponse: 'augmente de 10 dB',
+    distracteurs: ['est multiplié par 10', 'augmente de 1 dB', 'augmente de 3 dB', 'double'],
+    aide: '10 log(10 × I / I₀) = 10 log(I / I₀) + 10.',
+  },
+  {
+    id: 'conversions.n5.intensite-double',
+    question: 'L’intensité sonore double. Le niveau…',
+    formats: ['qcm'],
+    reponse: 'augmente de 3 dB',
+    distracteurs: ['double', 'augmente de 2 dB', 'augmente de 6 dB', 'augmente de 10 dB'],
+    aide: '10 × log 2 ≈ 10 × 0,3 = 3 dB.',
+  },
+  {
+    id: 'conversions.n5.intensite-depuis-niveau',
+    question: 'Intensité sonore à partir du niveau',
+    formats: ['saisie'],
+    aide: 'I = I₀ × 10^{L/10}.',
+    generer() {
+      const l = auHasard([20, 30, 40, 50, 60, 70, 80, 90, 100, 120]);
+      return {
+        question: `L = ${l} dB. I = ? (I_{0} = 10^{-12} W/m²)`,
+        reponse: `${p10(l / 10 - 12)} W/m²`,
+        nombre: 10 ** (l / 10 - 12),
+        unite: 'W/m²',
+      };
+    },
+  },
+  {
+    id: 'conversions.n5.isoler',
+    question: 'Isoler une grandeur dans une formule',
+    formats: ['qcm'],
+    aide: 'Ce qui divise d’un côté multiplie de l’autre, et inversement.',
+    generer() {
+      const [formule, grandeur, bonne, autres] = auHasard(FORMULES_A_ISOLER);
+      return { question: `Isoler ${grandeur} dans ${formule}`, reponse: bonne, distracteurs: autres };
+    },
+  },
+  {
+    id: 'conversions.n5.isoler-vitesse-ec',
+    question: 'Isoler v dans E_{c} = \\frac{1}{2} m v^{2}',
+    formats: ['retournement'],
+    reponse: 'v = \\sqrt{\\frac{2E_{c}}{m}}',
+    aide: 'On multiplie par 2, on divise par m, puis on prend la racine carrée.',
+  },
+  {
+    id: 'conversions.n5.isoler-temperature',
+    question: 'Isoler T dans PV = nRT',
+    formats: ['qcm'],
+    reponse: 'T = \\frac{PV}{nR}',
+    distracteurs: ['T = \\frac{nR}{PV}', 'T = PVnR', 'T = PV − nR', 'T = \\frac{P}{VnR}'],
+  },
+  {
+    id: 'conversions.n5.equation-puissances',
+    question: 'Résoudre une équation avec des puissances de dix',
+    formats: ['saisie'],
+    aide: 'x = (b × 10ⁿ) / (a × 10ᵐ) : on divise les nombres, on soustrait les exposants.',
+    generer() {
+      const [a, b] = auHasard([[3, 6], [2, 8], [4, 8], [3, 9], [5, 5], [2, 6]]);
+      const m = exposantNonNul(-8, 8);
+      const n = exposantNonNul(-8, 8);
+      const x = net((b / a) * 10 ** (n - m));
+      return { question: `${sci(a, m)} × x = ${sci(b, n)}. x = ?`, reponse: enScientifique(x), nombre: x };
+    },
+  },
+];
+
+/** Pièges distincts de la bonne réponse et entre eux. */
+function pieges(bonne, liste) {
+  return [...new Set(liste)].filter((p) => p !== bonne);
+}
+
+Paquets.inscrire({
+  cle: 'conversions',
+  theme: 'Calcul',
+  titre: 'Conversions et puissances de dix',
+  resume: 'Cinq niveaux, des préfixes de seconde au logarithme de terminale. Chaque niveau s’ouvre quand le précédent est '
+    + 'maîtrisé, ou par un test de positionnement. Les valeurs changent à chaque passage.',
+  niveaux: ['seconde', 'premiere', 'terminale'],
+  progression: 'niveaux',
+  formatFixe: 'mixte',
+  consignesParFormat: true,
+  sections: [
+    { cle: 'n1', titre: 'Niveau 1 · Préfixes et puissances de dix', consigne: null, cartes: NIVEAU_1 },
+    { cle: 'n2', titre: 'Niveau 2 · Conversions simples', consigne: null, cartes: NIVEAU_2 },
+    { cle: 'n3', titre: 'Niveau 3 · Conversions piégeuses', consigne: null, cartes: NIVEAU_3 },
+    { cle: 'n4', titre: 'Niveau 4 · Calcul de tête (terminale)', consigne: null, cartes: NIVEAU_4 },
+    { cle: 'n5', titre: 'Niveau 5 · Logarithme et premières équations', consigne: null, cartes: NIVEAU_5 },
+  ],
+});
+
+// ---- 34-contenu-unites.js ----
+/* Paquet « Grandeurs et unités » : cinq niveaux ouverts un à un (37-niveaux.js).
+ *
+ * Niveaux 1 à 3 : les grandeurs des programmes de physique-chimie de seconde
+ * (2019), de spécialité de première (2019) et de terminale (2019, en vigueur
+ * depuis 2020), avec quelques-unes de l'enseignement scientifique (2023).
+ * Niveau 4 : les unités dérivées en unités de base, et les grandeurs sans unité.
+ * Niveau 5 : l'analyse dimensionnelle — retrouver l'unité d'une constante
+ * (R, λ de Kohlrausch, ε, G…) à partir de la relation qui la définit, et
+ * juger de l'homogénéité d'une expression.
+ *
+ * Une carte par grandeur : Leitner suit ainsi chacune séparément. L'élève tape
+ * l'unité (toute écriture équivalente est acceptée : J·mol⁻¹·K⁻¹ ou
+ * Pa·m³·mol⁻¹·K⁻¹) ou la choisit parmi des pièges.
+ *
+ * Outils de tirage partagés avec 33-contenu-conversions.js.
+ * RÈGLE ABSOLUE (32-paquets.js) : un identifiant de carte ne change jamais.
+ */
+
+/** Ce que l'élève peut taper pour une grandeur sans unité. */
+const SANS_UNITE = ['sans unité', 'sans unite', 'aucune', 'aucune unité', 'sans', 'adimensionné', 'adimensionnel',
+  'sans dimension', 'pas d’unité', 'pas d unite', 'rien', '1'];
+
+/** « la masse » → « de la masse » ; « le poids » → « du poids ». */
+function de(nom) {
+  if (nom.startsWith('le ')) return `du ${nom.slice(3)}`;
+  if (nom.startsWith('les ')) return `des ${nom.slice(4)}`;
+  return `de ${nom}`;
+}
+
+function majuscule(texte) {
+  return texte.charAt(0).toUpperCase() + texte.slice(1);
+}
+
+/**
+ * Une grandeur : [clé, nom avec article, symbole, unités, pièges, aide].
+ * unités : une unité ou une liste d'unités acceptées (la première est affichée),
+ * null pour une grandeur sans unité, ou { affiche, accepte } pour une unité que
+ * le lecteur d'unités ne connaît pas (dB, rad) ou ne doit pas confondre (K et °C).
+ */
+function uniteAffichee(unites) {
+  if (!unites) return 'sans unité';
+  if (Array.isArray(unites)) return unites[0];
+  return typeof unites === 'string' ? unites : unites.affiche;
+}
+
+function carteGrandeur(niveau, [cle, nom, symbole, unites, distracteurs, aide]) {
+  const carte = {
+    id: `unites.${niveau}.${cle}`,
+    question: `Unité ${de(nom)} (${symbole}) ?`,
+    reponse: uniteAffichee(unites),
+    formats: ['saisie', 'qcm'],
     distracteurs,
     aide,
   };
+  if (!unites) carte.saisie = SANS_UNITE;
+  else if (typeof unites === 'object' && !Array.isArray(unites)) carte.saisie = unites.accepte;
+  else carte.uniteAttendue = unites;
+  return carte;
 }
 
-const MASSES_MOLAIRES = [
-  ['hydrogene', 'l’hydrogène H', 1.0],
-  ['carbone', 'le carbone C', 12.0],
-  ['azote', 'l’azote N', 14.0],
-  ['oxygene', 'l’oxygène O', 16.0],
-  ['sodium', 'le sodium Na', 23.0],
-  ['soufre', 'le soufre S', 32.1],
-  ['chlore', 'le chlore Cl', 35.5],
-  ['potassium', 'le potassium K', 39.1],
-  ['calcium', 'le calcium Ca', 40.1],
-  ['fer', 'le fer Fe', 55.8],
-  ['cuivre', 'le cuivre Cu', 63.5],
+/** Trois familles par niveau : le symbole, la grandeur derrière une unité, vrai ou faux. */
+function famillesGrandeurs(niveau, donnees) {
+  return [
+    {
+      id: `unites.${niveau}.symboles`,
+      question: 'Symbole usuel d’une grandeur',
+      formats: ['qcm'],
+      generer() {
+        const [, nom, symbole] = auHasard(donnees);
+        const autres = melanger([...new Set(donnees.map((d) => d[2]))].filter((s) => s !== symbole));
+        return { question: `Symbole usuel ${de(nom)} ?`, reponse: symbole, distracteurs: autres.slice(0, 6) };
+      },
+    },
+    {
+      id: `unites.${niveau}.grandeur-depuis-unite`,
+      question: 'Quelle grandeur s’exprime dans cette unité ?',
+      formats: ['qcm'],
+      generer() {
+        const avecUnite = donnees.filter((d) => d[3]);
+        const [, nom, symbole, unites] = auHasard(avecUnite);
+        const affichee = uniteAffichee(unites);
+        // Pas de piège qui s'exprime dans la même unité : il serait juste aussi.
+        const autres = avecUnite.filter((d) => d[1] !== nom && !memeUnite(uniteAffichee(d[3]), affichee)
+          && uniteAffichee(d[3]) !== affichee);
+        return {
+          question: `Quelle grandeur s’exprime en ${affichee} ?`,
+          reponse: `${majuscule(nom)} (${symbole})`,
+          distracteurs: melanger(autres).slice(0, 6).map((d) => `${majuscule(d[1])} (${d[2]})`),
+        };
+      },
+    },
+    {
+      id: `unites.${niveau}.vrai-faux`,
+      question: 'Une grandeur et son unité : vrai ou faux ?',
+      formats: ['vraifaux'],
+      generer() {
+        const [, nom, symbole, unites, distracteurs] = auHasard(donnees);
+        const juste = uniteAffichee(unites);
+        const vrai = pileOuFace();
+        const annonce = vrai ? juste : auHasard(distracteurs);
+        const texte = (u) => (u === 'sans unité' ? 'est sans unité' : `s’exprime en ${u}`);
+        return {
+          question: `« ${majuscule(nom)} (${symbole}) ${texte(annonce)} »`,
+          vrai,
+          reponse: `${vrai ? 'Vrai' : 'Faux'} : ${nom} ${texte(juste)}.`,
+        };
+      },
+    },
+  ];
+}
+
+/* ---------- Niveau 1 : seconde ---------- */
+
+const GRANDEURS_SECONDE = [
+  ['masse', 'la masse', 'm', 'kg', ['g', 'N', 'kg·m^{-3}', 'mol'], 'Le kilogramme est l’unité SI ; le gramme en est un sous-multiple.'],
+  ['volume', 'le volume', 'V', 'm^{3}', ['L', 'm^{2}', 'kg', 'm'], 'Unité SI : le m³. Le litre est usuel : 1 m³ = 1 000 L.'],
+  ['masse-volumique', 'la masse volumique', 'ρ', ['kg·m^{-3}', 'g·L^{-1}'], ['kg·m^{3}', 'g', 'm^{3}·kg^{-1}', 'kg·L'],
+    'ρ = m / V. Usuelles : g·L⁻¹ ou g·cm⁻³ ; l’eau vaut 1,0 g·cm⁻³ = 1 000 kg·m⁻³.'],
+  ['concentration-masse', 'la concentration en masse', 'C_{m}', ['g·L^{-1}', 'kg·m^{-3}'], ['mol·L^{-1}', 'g', 'L·g^{-1}', 'g·mol^{-1}'],
+    'C_{m} = m / V, « essentiellement exprimée en g·L⁻¹ ».'],
+  ['quantite-matiere', 'la quantité de matière', 'n', 'mol', ['g', 'mol·L^{-1}', 'g·mol^{-1}', 'sans unité'],
+    'Une mole contient exactement 6,022 140 76 × 10^{23} entités.'],
+  ['nombre-entites', 'le nombre d’entités', 'N', null, ['mol', 'mol^{-1}', 'kg', 'g'], 'N = n × N_{A} : un nombre, sans unité.'],
+  ['charge-elementaire', 'la charge élémentaire', 'e', 'C', ['V', 'A', 'eV', 'J'], 'e = 1,6 × 10^{-19} C.'],
+  ['energie-transferee', 'l’énergie transférée', 'Q', 'J', ['W', '°C', 'N', 'J·kg^{-1}'], 'Toute énergie s’exprime en joules.'],
+  ['energie-massique-changement', 'l’énergie massique de changement d’état', 'L', 'J·kg^{-1}', ['J', 'J·kg', 'W·kg^{-1}', 'J·mol^{-1}'],
+    'Q = m × L : L = Q / m s’exprime en J·kg⁻¹.'],
+  ['vitesse', 'la vitesse', 'v', 'm·s^{-1}', ['m·s', 'km', 'm·s^{-2}', 's·m^{-1}'], 'v = d / Δt. Usuelle : km·h⁻¹.'],
+  ['force', 'la force', 'F', 'N', ['kg', 'J', 'Pa', 'W'], 'Le newton : 1 N = 1 kg·m·s⁻².'],
+  ['constante-gravitation', 'la constante de gravitation universelle', 'G', 'N·m^{2}·kg^{-2}', ['N·m·kg^{-1}', 'N·kg^{-2}', 'N·m^{2}·kg^{2}', 'sans unité'],
+    'F = G m m′ / d² donc G = F d² / (m m′) : N·m²·kg⁻² (= m³·kg⁻¹·s⁻²).'],
+  ['intensite-pesanteur', 'l’intensité de la pesanteur', 'g', ['N·kg^{-1}', 'm·s^{-2}'], ['kg·N^{-1}', 'N', 'm·s^{-1}', 'N·kg'],
+    'P = m g donc g = P / m : N·kg⁻¹, qui vaut aussi m·s⁻².'],
+  ['poids', 'le poids', 'P', 'N', ['kg', 'N·kg^{-1}', 'J', 'g'], 'Le poids est une force : il s’exprime en newtons, la masse en kilogrammes.'],
+  ['periode', 'la période', 'T', 's', ['Hz', 's^{-1}', 'm', 'm·s^{-1}'], 'Une durée : en secondes.'],
+  ['frequence', 'la fréquence', 'f', ['Hz', 's^{-1}'], ['s', 'm', 'Hz·s', 'm·s^{-1}'], 'f = 1 / T : le hertz est l’inverse de la seconde.'],
+  ['longueur-onde', 'la longueur d’onde', 'λ', 'm', ['Hz', 'm·s^{-1}', 's', 'm^{-1}'], 'Une longueur, souvent donnée en nm pour la lumière.'],
+  ['intensite-sonore', 'l’intensité sonore', 'I', 'W·m^{-2}', ['dB', 'W', 'W·m^{2}', 'Pa'], 'Une puissance par unité de surface.'],
+  ['niveau-sonore', 'le niveau d’intensité sonore', 'L', { affiche: 'dB', accepte: ['dB', 'décibel', 'décibels', 'decibel'] },
+    ['W·m^{-2}', 'Hz', 'W', 'sans unité'], 'Le décibel (dB). À ne pas confondre avec l’intensité sonore, en W·m⁻².'],
+  ['indice-refraction', 'l’indice de réfraction', 'n', null, ['m·s^{-1}', 'rad', 'm', 's'], 'n = c / v : un quotient de deux vitesses, sans unité.'],
+  ['distance-focale', 'la distance focale', 'f′', 'm', ['m^{-1}', 'Hz', 'rad', 'sans unité'], 'Une distance, en mètres.'],
+  ['grandissement', 'le grandissement', 'γ', null, ['m', 'm^{-1}', 'rad', 'Hz'], 'γ = A′B′ / AB : un quotient de deux longueurs, sans unité.'],
+  ['tension', 'la tension électrique', 'U', 'V', ['A', 'Ω', 'W', 'J'], 'Le volt.'],
+  ['intensite', 'l’intensité du courant', 'I', 'A', ['V', 'Ω', 'C', 'W'], 'L’ampère, une des sept unités de base du SI.'],
+  ['resistance', 'la résistance électrique', 'R', ['Ω', 'V·A^{-1}'], ['V', 'A', 'S', 'W'], 'U = R I donc R = U / I : V·A⁻¹ = Ω.'],
 ];
 
-Paquets.inscrire({
-  cle: 'chimie-bases',
-  theme: 'Chimie',
-  titre: 'Les bases : grandeurs, unités, formules',
-  resume: 'Ce qu’il faut savoir sans réfléchir avant tout calcul de chimie.',
-  niveaux: ['seconde', 'premiere', 'terminale'],
-  sections: [
-    {
-      cle: 'symboles',
-      titre: 'Grandeur → symbole',
-      consigne: 'Quel symbole note cette grandeur ?',
-      // Pas de saisie : m et M ne se distinguent pas une fois la casse enlevée.
-      cartes: GRANDEURS.map(([cle, nom, symbole, , , aide]) => ({
-        id: `chimie-bases.symboles.${cle}`,
-        question: nom,
-        reponse: symbole,
-        aide,
-      })),
-    },
-    {
-      cle: 'unites',
-      titre: 'Grandeur → unité',
-      consigne: 'Quelle est son unité dans le système international ?',
-      cartes: GRANDEURS.map(([cle, nom, , unite, saisie, aide]) => ({
-        id: `chimie-bases.unites.${cle}`,
-        question: nom,
-        reponse: unite,
-        saisie,
-        aide,
-      })),
-    },
-    {
-      cle: 'formules',
-      titre: 'Les relations, dans les trois sens',
-      consigne: 'Quelle relation utiliser ?',
-      cartes: [
-        carteFormule('n-de-m-M', 'Quantité de matière n à partir de la masse m et de la masse molaire M',
-          'n = m / M', ['n = m × M', 'n = M / m', 'n = M × m'],
-          'Vérification par les unités : g / (g·mol⁻¹) = mol.'),
-        carteFormule('m-de-n-M', 'Masse m à partir de la quantité de matière n et de la masse molaire M',
-          'm = n × M', ['m = n / M', 'm = M / n', 'm = n + M'],
-          'Vérification par les unités : mol × g·mol⁻¹ = g.'),
-        carteFormule('M-de-m-n', 'Masse molaire M à partir de la masse m et de la quantité de matière n',
-          'M = m / n', ['M = n / m', 'M = m × n', 'M = n × m'], null),
-        carteFormule('C-de-n-V', 'Concentration C à partir de la quantité de matière n et du volume V',
-          'C = n / V', ['C = V / n', 'C = n × V', 'C = V × n'],
-          'Vérification par les unités : mol / L = mol·L⁻¹.'),
-        carteFormule('n-de-C-V', 'Quantité de matière n à partir de la concentration C et du volume V',
-          'n = C × V', ['n = C / V', 'n = V / C', 'n = C + V'], null),
-        carteFormule('V-de-n-C', 'Volume V à partir de la quantité de matière n et de la concentration C',
-          'V = n / C', ['V = C / n', 'V = n × C', 'V = C × n'], null),
-        carteFormule('Cm-de-m-V', 'Concentration en masse Cm à partir de la masse m et du volume V',
-          'Cm = m / V', ['Cm = V / m', 'Cm = m × V', 'Cm = V × m'], null),
-        carteFormule('m-de-Cm-V', 'Masse m à partir de la concentration en masse Cm et du volume V',
-          'm = Cm × V', ['m = Cm / V', 'm = V / Cm', 'm = Cm + V'], null),
-        carteFormule('Cm-de-C-M', 'Lien entre concentration en masse Cm, concentration C et masse molaire M',
-          'Cm = C × M', ['Cm = C / M', 'Cm = M / C', 'Cm = C + M'],
-          'Vérification par les unités : mol·L⁻¹ × g·mol⁻¹ = g·L⁻¹.'),
-        carteFormule('C-de-Cm-M', 'Concentration C à partir de la concentration en masse Cm et de la masse molaire M',
-          'C = Cm / M', ['C = Cm × M', 'C = M / Cm', 'C = M × Cm'], null),
-        carteFormule('rho-de-m-V', 'Masse volumique ρ à partir de la masse m et du volume V',
-          'ρ = m / V', ['ρ = V / m', 'ρ = m × V', 'ρ = V × m'], null),
-        carteFormule('m-de-rho-V', 'Masse m à partir de la masse volumique ρ et du volume V',
-          'm = ρ × V', ['m = ρ / V', 'm = V / ρ', 'm = ρ + V'], null),
-        carteFormule('V-de-m-rho', 'Volume V à partir de la masse m et de la masse volumique ρ',
-          'V = m / ρ', ['V = ρ / m', 'V = m × ρ', 'V = ρ × m'], null),
-      ],
-    },
-    {
-      cle: 'masses-molaires',
-      titre: 'Masses molaires atomiques usuelles',
-      consigne: 'Quelle masse molaire atomique, en g·mol⁻¹ ?',
-      cartes: MASSES_MOLAIRES.map(([cle, nom, valeur]) => ({
-        id: `chimie-bases.masses-molaires.${cle}`,
-        question: `Masse molaire atomique de ${nom}`,
-        reponse: `${valeur.toLocaleString('fr-FR', { minimumFractionDigits: 1 })} g·mol⁻¹`,
-        nombre: valeur,
-        unite: 'g·mol⁻¹',
-        aide: 'Valeur du tableau périodique, arrondie au dixième.',
-      })),
-    },
-  ],
-});
+/* ---------- Niveau 2 : première ---------- */
 
-/* ---------- Préfixes, conversions et écriture scientifique ---------- */
-
-const PREFIXES = [
-  ['tera', 'téra', 'T', 12],
-  ['giga', 'giga', 'G', 9],
-  ['mega', 'méga', 'M', 6],
-  ['kilo', 'kilo', 'k', 3],
-  ['hecto', 'hecto', 'h', 2],
-  ['deca', 'déca', 'da', 1],
-  ['deci', 'déci', 'd', -1],
-  ['centi', 'centi', 'c', -2],
-  ['milli', 'milli', 'm', -3],
-  ['micro', 'micro', 'µ', -6],
-  ['nano', 'nano', 'n', -9],
-  ['pico', 'pico', 'p', -12],
+const GRANDEURS_PREMIERE = [
+  ['masse-molaire', 'la masse molaire', 'M', ['g·mol^{-1}', 'kg·mol^{-1}'], ['mol·g^{-1}', 'g', 'mol', 'g·L^{-1}'],
+    'M = m / n. Unité SI : kg·mol⁻¹ ; usuelle : g·mol⁻¹.'],
+  ['avogadro', 'la constante d’Avogadro', 'N_{A}', 'mol^{-1}', ['mol', 'sans unité', 'g·mol^{-1}', 'mol·L^{-1}'],
+    'N = n × N_{A} : N est sans unité, n en mol, donc N_{A} en mol⁻¹.'],
+  ['volume-molaire', 'le volume molaire d’un gaz', 'V_{m}', ['L·mol^{-1}', 'm^{3}·mol^{-1}'], ['mol·L^{-1}', 'L', 'mol', 'L·mol'],
+    'n = V / V_{m} donc V_{m} = V / n.'],
+  ['concentration', 'la concentration en quantité de matière', 'c', ['mol·L^{-1}', 'mol·m^{-3}'], ['g·L^{-1}', 'mol', 'L·mol^{-1}', 'mol·L'],
+    'c = n / V, le plus souvent en mol·L⁻¹.'],
+  ['absorbance', 'l’absorbance', 'A', null, ['L·mol^{-1}·cm^{-1}', 'mol·L^{-1}', 'cm', 'nm'],
+    'L’absorbance est un logarithme de rapport d’intensités lumineuses : sans unité.'],
+  ['epsilon', 'le coefficient d’absorption molaire', 'ε', ['L·mol^{-1}·cm^{-1}', 'm^{2}·mol^{-1}'],
+    ['mol·L^{-1}·cm^{-1}', 'sans unité', 'L·mol^{-1}', 'cm^{-1}'], 'A = ε ℓ c, A sans unité : ε = A / (ℓ c) en L·mol⁻¹·cm⁻¹.'],
+  ['avancement', 'l’avancement', 'x', 'mol', ['sans unité', 'mol·L^{-1}', 'g', 's'], 'L’avancement se compte en moles.'],
+  ['rendement-synthese', 'le rendement d’une synthèse', 'η', null, ['mol', 'g', 'J', 'mol·L^{-1}'],
+    'η = n obtenue / n maximale : un rapport, sans unité (souvent en %).'],
+  ['energie-molaire-reaction', 'l’énergie molaire de réaction', 'E_{r}', ['J·mol^{-1}', 'kJ·mol^{-1}'], ['J', 'J·kg^{-1}', 'mol·J^{-1}', 'W·mol^{-1}'],
+    'Une énergie par mole de réaction, usuellement en kJ·mol⁻¹.'],
+  ['pouvoir-calorifique', 'le pouvoir calorifique massique', 'PC', ['J·kg^{-1}', 'MJ·kg^{-1}', 'kJ·g^{-1}'], ['J', 'J·mol^{-1}', 'W·kg^{-1}', 'kg·J^{-1}'],
+    'Une énergie libérée par kilogramme de combustible.'],
+  ['charge', 'la charge électrique', 'q', 'C', ['A', 'V', 'F', 'eV'], 'Le coulomb : 1 C = 1 A·s.'],
+  ['constante-coulomb', 'la constante de la loi de Coulomb', 'k', 'N·m^{2}·C^{-2}', ['N·C^{-2}', 'N·m·C^{-1}', 'C^{2}·N^{-1}·m^{-2}', 'sans unité'],
+    'F = k q q′ / d² donc k = F d² / (q q′) : N·m²·C⁻².'],
+  ['champ-electrostatique', 'le champ électrostatique', 'E', ['V·m^{-1}', 'N·C^{-1}'], ['V', 'N', 'V·m', 'C·N^{-1}'],
+    'F = q E donc E = F / q en N·C⁻¹, qui vaut aussi V·m⁻¹.'],
+  ['pression', 'la pression', 'P', 'Pa', ['N', 'N·m', 'J', 'bar'], 'P = F / S : N·m⁻² = Pa. Usuelles : bar, hPa.'],
+  ['temperature', 'la température thermodynamique', 'T', { affiche: 'K', accepte: ['K', 'kelvin', 'kelvins'] }, ['°C', '°F', 'J', 'sans unité'],
+    'Le kelvin, unité de base du SI : T (K) = θ (°C) + 273,15.'],
+  ['puissance', 'la puissance', 'P', ['W', 'J·s^{-1}'], ['J', 'Wh', 'N', 'V'], 'P = E / Δt : J·s⁻¹ = W.'],
+  ['energie', 'l’énergie', 'E', 'J', ['W', 'N', 'kWh', 'W·s^{-1}'], 'Le joule ; le kWh est une unité usuelle (3,6 × 10^{6} J), pas l’unité SI.'],
+  ['travail', 'le travail d’une force', 'W', 'J', ['N', 'W', 'N·m^{-1}', 'Pa'], 'W = F × AB : N·m = J.'],
+  ['energie-cinetique', 'l’énergie cinétique', 'E_{c}', 'J', ['kg·m·s^{-1}', 'W', 'N', 'kg·m^{2}·s^{-1}'], 'E_{c} = ½ m v² : kg·m²·s⁻² = J.'],
+  ['celerite', 'la célérité d’une onde', 'v', 'm·s^{-1}', ['Hz', 'm', 's', 'm·s^{-2}'], 'λ = v T donc v = λ / T.'],
+  ['retard', 'le retard d’une onde', 'τ', 's', ['m', 'Hz', 'm·s^{-1}', 'sans unité'], 'Une durée : τ = d / v.'],
+  ['planck', 'la constante de Planck', 'h', 'J·s', ['J·s^{-1}', 'J', 'W', 'Hz'], 'ΔE = h ν donc h = ΔE / ν : J / Hz = J·s.'],
+  ['energie-photon', 'l’énergie d’un photon', 'E', ['J', 'eV'], ['Hz', 'J·s', 'W', 'm'], 'E = h ν ; souvent en eV : 1 eV = 1,6 × 10^{-19} J.'],
+  ['electronegativite', 'l’électronégativité', 'χ', null, ['C', 'eV', 'V', 'J'], 'Un nombre de l’échelle de Pauling, sans unité.'],
 ];
 
-/** Une conversion s'apprend comme un geste, pas comme un résultat : les valeurs
- *  sont retirées à chaque passage. */
-function carteConversion(cle, depart, arrivee, facteur, tirage) {
-  return {
-    id: `reflexes.conversions.${cle}`,
-    question: `Convertir des ${depart} en ${arrivee}`,
-    unite: arrivee,
+/* ---------- Niveau 3 : terminale ---------- */
+
+const GRANDEURS_TERMINALE = [
+  ['ph', 'le pH', 'pH', null, ['mol·L^{-1}', 'L·mol^{-1}', 'mol', 'V'], 'pH = −log([H₃O⁺] / c°) : le logarithme d’un nombre sans unité.'],
+  ['conductance', 'la conductance', 'G', ['S', 'Ω^{-1}'], ['Ω', 'S·m^{-1}', 'A', 'V'], 'G = 1 / R : le siemens est l’inverse de l’ohm.'],
+  ['conductivite', 'la conductivité', 'σ', 'S·m^{-1}', ['S', 'S·m', 'S·m^{2}·mol^{-1}', 'Ω·m'], 'Une conductance ramenée à la géométrie de la cellule.'],
+  ['conductivite-molaire-ionique', 'la conductivité molaire ionique', 'λ', 'S·m^{2}·mol^{-1}',
+    ['S·m^{-1}', 'S·mol^{-1}', 'S·m^{-2}·mol', 'S·m^{2}'], 'σ = Σ λᵢ [Xᵢ], [Xᵢ] en mol·m⁻³ : λ = σ / [X] en S·m²·mol⁻¹.'],
+  ['constante-gaz-parfaits', 'la constante des gaz parfaits', 'R', 'J·mol^{-1}·K^{-1}', ['J·K^{-1}', 'Pa·m^{3}', 'J·mol·K', 'mol·K·J^{-1}'],
+    'PV = nRT donc R = PV / (nT) : Pa·m³ = J, d’où J·mol⁻¹·K⁻¹.'],
+  ['vitesse-volumique', 'la vitesse volumique de réaction', 'v', ['mol·L^{-1}·s^{-1}', 'mol·m^{-3}·s^{-1}'], ['mol·s^{-1}', 'mol·L^{-1}', 's^{-1}', 'm·s^{-1}'],
+    'v = d[A] / dt : une concentration par unité de temps.'],
+  ['demi-reaction', 'le temps de demi-réaction', 't_{1/2}', 's', ['s^{-1}', 'mol·s^{-1}', 'sans unité', 'mol'], 'Une durée.'],
+  ['constante-vitesse', 'la constante de vitesse d’une réaction d’ordre 1', 'k', 's^{-1}', ['s', 'mol·L^{-1}·s^{-1}', 'sans unité', 'mol·s^{-1}'],
+    'v = k [A] : k = v / [A] en s⁻¹.'],
+  ['constante-radioactive', 'la constante radioactive', 'λ', 's^{-1}', ['s', 'Bq·s', 'sans unité', 'm'],
+    'N = N₀ e^{−λt} : λt est sans unité, donc λ s’exprime en s⁻¹.'],
+  ['activite', 'l’activité d’un échantillon radioactif', 'A', ['Bq', 's^{-1}'], ['s', 'Gy', 'J', 'sans unité'],
+    'A = λ N : le becquerel, une désintégration par seconde.'],
+  ['constante-equilibre', 'la constante d’équilibre', 'K', null, ['mol·L^{-1}', 'mol^{2}·L^{-2}', 's^{-1}', 'L·mol^{-1}'],
+    '« Le quotient de réaction est adimensionné » : chaque concentration est divisée par c° = 1 mol·L⁻¹.'],
+  ['constante-acidite', 'la constante d’acidité', 'K_{A}', null, ['mol·L^{-1}', 'L·mol^{-1}', 'mol', 'pH'],
+    'Comme toute constante d’équilibre : sans unité.'],
+  ['taux-avancement', 'le taux d’avancement final', 'τ', null, ['mol', 's', 'mol·L^{-1}', 's^{-1}'], 'τ = x_{f} / x_{max} : sans unité.'],
+  ['capacite-pile', 'la capacité électrique d’une pile', 'Q', ['C', 'A·h'], ['V', 'W', 'F', 'A'],
+    'Q = I Δt = n(e⁻) F : en coulombs, souvent en A·h (1 A·h = 3 600 C).'],
+  ['acceleration', 'l’accélération', 'a', ['m·s^{-2}', 'N·kg^{-1}'], ['m·s^{-1}', 'N', 'm·s^{2}', 'N·kg'], 'a = dv / dt : (m·s⁻¹) / s = m·s⁻².'],
+  ['quantite-mouvement', 'la quantité de mouvement', 'p', 'kg·m·s^{-1}', ['kg·m·s^{-2}', 'N', 'J', 'kg·m^{2}·s^{-1}'], 'p = m v.'],
+  ['debit-volumique', 'le débit volumique', 'D_{v}', 'm^{3}·s^{-1}', ['m^{3}', 'm·s^{-1}', 'L', 'kg·s^{-1}'], 'D_{v} = S v : m² × m·s⁻¹ = m³·s⁻¹.'],
+  ['energie-interne', 'l’énergie interne', 'U', 'J', ['W', 'K', 'J·K^{-1}', 'V'], 'Une énergie : ΔU = W + Q.'],
+  ['capacite-thermique', 'la capacité thermique', 'C', 'J·K^{-1}', ['J', 'J·kg^{-1}·K^{-1}', 'K·J^{-1}', 'W·K^{-1}'], 'ΔU = C ΔT donc C = ΔU / ΔT.'],
+  ['capacite-thermique-massique', 'la capacité thermique massique', 'c', 'J·kg^{-1}·K^{-1}', ['J·K^{-1}', 'J·kg^{-1}', 'J·kg·K^{-1}', 'W·kg^{-1}'],
+    'C = m c : une capacité thermique par kilogramme.'],
+  ['flux-thermique', 'le flux thermique', 'Φ', 'W', ['J', 'K·W^{-1}', 'W·m^{-2}', 'K'], 'Une énergie transférée par seconde : une puissance.'],
+  ['resistance-thermique', 'la résistance thermique', 'R_{th}', 'K·W^{-1}', ['W·K^{-1}', 'Ω', 'K', 'W·m^{-1}·K^{-1}'], 'Φ = ΔT / R_{th} donc R_{th} = ΔT / Φ.'],
+  ['coefficient-conducto-convectif', 'le coefficient de transfert conducto-convectif', 'h', 'W·m^{-2}·K^{-1}',
+    ['W·K^{-1}', 'W·m^{-2}', 'J·m^{-2}·K^{-1}', 'W·m·K^{-1}'], 'Φ = h S ΔT donc h = Φ / (S ΔT).'],
+  ['stefan', 'la constante de Stefan-Boltzmann', 'σ', 'W·m^{-2}·K^{-4}', ['W·m^{-2}', 'W·K^{-4}', 'W·m^{2}·K^{4}', 'J·m^{-2}·K^{-4}'],
+    'P / S = σ T⁴ donc σ = P / (S T⁴).'],
+  ['angle-diffraction', 'l’angle caractéristique de diffraction', 'θ', { affiche: 'rad', accepte: ['rad', 'radian', 'radians'] },
+    ['m', 'm^{-1}', 'Hz', '°·m'], 'θ = λ / a : un quotient de longueurs, exprimé en radians.'],
+  ['grossissement', 'le grossissement d’une lunette', 'G', null, ['m', 'rad', 'm^{-1}', 'Hz'], 'G = θ′ / θ : un rapport d’angles, sans unité.'],
+  ['capacite-condensateur', 'la capacité d’un condensateur', 'C', ['F', 'C·V^{-1}'], ['C', 'C·V', 'Ω', 'V·C^{-1}'], 'q = C u donc C = q / u : C·V⁻¹ = F.'],
+  ['constante-temps', 'la constante de temps d’un circuit RC', 'τ', ['s', 'Ω·F'], ['Ω', 'F', 's^{-1}', 'Ω·F^{-1}'], 'τ = R C : Ω × F = s.'],
+  ['travail-extraction', 'le travail d’extraction', 'W', ['J', 'eV'], ['Hz', 'W', 'V', 'J·s'], 'E_{c} = h ν − W : une énergie, souvent en eV.'],
+];
+
+/* ---------- Niveau 4 : unités de base et grandeurs sans unité ---------- */
+
+/** [clé, unité, son expression en unités de base, pièges, aide] */
+const UNITES_DERIVEES = [
+  ['newton', 'le newton (N)', 'kg·m·s^{-2}', ['kg·m·s^{-1}', 'kg·m^{2}·s^{-2}', 'kg·s^{-2}', 'kg·m^{-1}·s^{-2}'], 'F = m a : kg × m·s⁻².'],
+  ['joule', 'le joule (J)', 'kg·m^{2}·s^{-2}', ['kg·m·s^{-2}', 'kg·m^{2}·s^{-3}', 'kg·m^{2}·s^{-1}', 'kg·m^{-1}·s^{-2}'], 'E_{c} = ½ m v² : kg × (m·s⁻¹)².'],
+  ['watt', 'le watt (W)', 'kg·m^{2}·s^{-3}', ['kg·m^{2}·s^{-2}', 'kg·m·s^{-3}', 'kg·m^{2}·s^{-1}', 'kg·m^{2}·s^{3}'], 'P = E / Δt : J·s⁻¹.'],
+  ['pascal', 'le pascal (Pa)', 'kg·m^{-1}·s^{-2}', ['kg·m·s^{-2}', 'kg·m^{-2}·s^{-2}', 'kg·m^{2}·s^{-2}', 'kg·m^{-1}·s^{-1}'], 'P = F / S : N·m⁻².'],
+  ['coulomb', 'le coulomb (C)', 'A·s', ['A·s^{-1}', 'A^{-1}·s', 'kg·A', 'A'], 'Q = I Δt.'],
+  ['volt', 'le volt (V)', 'kg·m^{2}·s^{-3}·A^{-1}', ['kg·m^{2}·s^{-3}·A', 'kg·m^{2}·s^{-2}·A^{-1}', 'kg·m·s^{-3}·A^{-1}', 'kg·m^{2}·s^{-3}'],
+    'P = U I donc U = P / I : W·A⁻¹.'],
+  ['ohm', 'l’ohm (Ω)', 'kg·m^{2}·s^{-3}·A^{-2}', ['kg·m^{2}·s^{-3}·A^{-1}', 'kg·m^{2}·s^{-3}·A^{2}', 'kg·m^{2}·s^{-2}·A^{-2}', 'A^{-1}'],
+    'R = U / I : V·A⁻¹.'],
+  ['hertz', 'le hertz (Hz)', 's^{-1}', ['s', 'm·s^{-1}', 'rad', 'm^{-1}'], 'f = 1 / T.'],
+];
+
+/** [clé, question, réponse, unités acceptées, pièges, aide] : relations entre unités dérivées. */
+const RELATIONS_UNITES = [
+  ['joule-newton-metre', 'Le joule en newtons et en mètres ?', 'N·m', ['N·m'], ['N·m^{-1}', 'N·s', 'N·m^{2}', 'N·m^{-2}'], 'W = F × AB.'],
+  ['watt-joule', 'Le watt en joules et en secondes ?', 'J·s^{-1}', ['J·s^{-1}'], ['J·s', 'J·h^{-1}', 'J·s^{-2}', 'N·s'], 'P = E / Δt.'],
+  ['pascal-newton', 'Le pascal en newtons et en mètres ?', 'N·m^{-2}', ['N·m^{-2}'], ['N·m^{2}', 'N·m', 'N·m^{-1}', 'N·m^{-3}'], 'P = F / S.'],
+  ['volt-joule', 'Le volt en joules et en coulombs ?', 'J·C^{-1}', ['J·C^{-1}'], ['J·C', 'C·J^{-1}', 'J·A^{-1}', 'J·s^{-1}'], 'E = q U donc U = E / q.'],
+  ['ohm-volt', 'L’ohm en volts et en ampères ?', 'V·A^{-1}', ['V·A^{-1}'], ['V·A', 'A·V^{-1}', 'V·A^{-2}', 'W·A^{-1}'], 'U = R I.'],
+  ['farad-coulomb', 'Le farad en coulombs et en volts ?', 'C·V^{-1}', ['C·V^{-1}'], ['C·V', 'V·C^{-1}', 'C·A^{-1}', 'C^{2}·V'], 'q = C u.'],
+  ['siemens-ohm', 'Le siemens en ohms ?', 'Ω^{-1}', ['Ω^{-1}'], ['Ω', 'Ω^{2}', 'Ω·m', 'Ω·m^{-1}'], 'G = 1 / R.'],
+  ['becquerel', 'Le becquerel en unités de base ?', 's^{-1}', ['s^{-1}'], ['s', 'J·s^{-1}', 'kg·s^{-1}', 'sans unité'], 'Une désintégration par seconde.'],
+];
+
+const EQUIVALENCES_UNITES = [
+  ['N·kg^{-1} = m·s^{-2}', true, 'Vrai : N·kg⁻¹ = kg·m·s⁻² / kg = m·s⁻². g est aussi une accélération.'],
+  ['V·m^{-1} = N·C^{-1}', true, 'Vrai : E = U / d = F / q.'],
+  ['Ω·F = s', true, 'Vrai : τ = R C est une durée.'],
+  ['J = W·h', false, 'Faux : J = W·s ; 1 W·h = 3 600 J.'],
+  ['Pa·m^{3} = J', true, 'Vrai : N·m⁻² × m³ = N·m = J.'],
+  ['W = J·s', false, 'Faux : W = J·s⁻¹.'],
+  ['C = A·s^{-1}', false, 'Faux : C = A·s.'],
+  ['Hz = s', false, 'Faux : Hz = s⁻¹.'],
+  ['S = Ω^{-1}', true, 'Vrai : le siemens est l’inverse de l’ohm.'],
+  ['eV = 1,6 × 10^{-19} J', true, 'Vrai : l’énergie d’un électron sous 1 V.'],
+];
+
+/** Grandeurs sans unité et grandeurs à unité, pour les familles du niveau 4. */
+const SANS_UNITE_LISTE = ['l’absorbance', 'le pH', 'la constante d’équilibre', 'l’indice de réfraction', 'le rendement',
+  'le taux d’avancement final', 'le grandissement', 'le grossissement', 'la constante d’acidité', 'l’albédo'];
+const AVEC_UNITE_LISTE = ['la concentration', 'la conductivité', 'la constante radioactive', 'la masse molaire',
+  'le coefficient d’absorption molaire', 'la constante des gaz parfaits', 'la vitesse volumique', 'la pression', 'l’activité'];
+
+const NIVEAU_4_UNITES = [
+  ...UNITES_DERIVEES.map(([cle, nom, base, distracteurs, aide]) => ({
+    id: `unites.n4.base-${cle}`,
+    question: `Exprime ${nom} en unités de base du SI.`,
+    reponse: base,
+    formats: ['saisie', 'qcm'],
+    uniteAttendue: base,
+    basesSeules: true,
+    distracteurs,
+    aide: `${aide} Unités de base : kg, m, s, A, K, mol, cd.`,
+  })),
+  ...RELATIONS_UNITES.map(([cle, question, reponse, unites, distracteurs, aide]) => ({
+    id: `unites.n4.${cle}`,
+    question,
+    reponse,
+    formats: ['saisie', 'qcm'],
+    uniteAttendue: unites,
+    distracteurs,
+    aide,
+  })),
+  {
+    id: 'unites.n4.equivalences',
+    question: 'Deux unités égales : vrai ou faux ?',
+    formats: ['vraifaux'],
     generer() {
-      const valeur = tirage();
-      const resultat = valeur * facteur;
+      const [egalite, vrai, reponse] = auHasard(EQUIVALENCES_UNITES);
+      return { question: `« ${egalite} »`, vrai, reponse };
+    },
+  },
+  {
+    id: 'unites.n4.laquelle-sans-unite',
+    question: 'Laquelle de ces grandeurs est sans unité ?',
+    formats: ['qcm'],
+    aide: 'Un rapport de deux grandeurs de même unité, ou un logarithme, est sans unité.',
+    generer() {
+      const bonne = majuscule(auHasard(SANS_UNITE_LISTE));
+      return { question: 'Laquelle de ces grandeurs est sans unité ?', reponse: bonne, distracteurs: melanger(AVEC_UNITE_LISTE).slice(0, 5).map(majuscule) };
+    },
+  },
+  {
+    id: 'unites.n4.sans-unite-vrai-faux',
+    question: 'Grandeur sans unité : vrai ou faux ?',
+    formats: ['vraifaux'],
+    generer() {
+      const vrai = pileOuFace();
+      const nom = auHasard(vrai ? SANS_UNITE_LISTE : AVEC_UNITE_LISTE);
+      return { question: `« ${majuscule(nom)} est sans unité »`, vrai, reponse: `${vrai ? 'Vrai' : 'Faux'} : ${nom} ${vrai ? 'est sans unité' : 'a une unité'}.` };
+    },
+  },
+  {
+    id: 'unites.n4.nombre-unites-base',
+    question: 'Combien d’unités de base compte le Système international ?',
+    formats: ['qcm'],
+    reponse: '7',
+    distracteurs: ['5', '6', '10', '12', '4'],
+    aide: 'Le kilogramme, le mètre, la seconde, l’ampère, le kelvin, la mole et la candela.',
+  },
+  {
+    id: 'unites.n4.pas-unite-de-base',
+    question: 'Laquelle n’est pas une unité de base du SI ?',
+    formats: ['qcm'],
+    generer() {
+      const bonne = auHasard(['le newton', 'le joule', 'le volt', 'le litre', 'le gramme', 'le pascal', 'le watt']);
       return {
-        question: `${ecrireNombre(valeur)} ${depart} = ? ${arrivee}`,
-        reponse: `${ecrireNombre(resultat)} ${arrivee}`,
-        nombre: resultat,
+        question: 'Laquelle n’est pas une unité de base du SI ?',
+        reponse: bonne,
+        distracteurs: ['le kilogramme', 'le mètre', 'la seconde', 'l’ampère', 'le kelvin', 'la mole', 'la candela'],
+        aide: 'Unités de base : kg, m, s, A, K, mol, cd. Le gramme n’en est pas une : c’est le kilogramme.',
       };
     },
-  };
-}
+  },
+  {
+    id: 'unites.n4.quotient-meme-unite',
+    question: 'Pourquoi l’indice de réfraction n = c / v est-il sans unité ?',
+    formats: ['retournement'],
+    reponse: 'C’est le quotient de deux vitesses : les m·s⁻¹ se simplifient.',
+    aide: 'Même raisonnement pour le grandissement (deux longueurs) ou le rendement (deux énergies).',
+  },
+];
+
+/* ---------- Niveau 5 : analyse dimensionnelle ---------- */
+
+/** [clé, question, unités acceptées (la première affichée), pièges, démarche] */
+const UNITES_PAR_RELATION = [
+  ['r-gaz-parfaits', 'À partir de PV = nRT (P en Pa, V en m³), retrouve l’unité de R.', ['J·mol^{-1}·K^{-1}'],
+    ['J·K^{-1}', 'Pa·m^{3}', 'J·mol·K', 'Pa·m^{-3}·mol^{-1}·K^{-1}'], 'R = PV / (nT) : Pa·m³·mol⁻¹·K⁻¹, et Pa·m³ = N·m⁻²·m³ = N·m = J.'],
+  ['lambda-kohlrausch', 'À partir de σ = Σ λᵢ [Xᵢ] (σ en S·m⁻¹, [Xᵢ] en mol·m⁻³), retrouve l’unité de λᵢ.', ['S·m^{2}·mol^{-1}'],
+    ['S·m^{-1}', 'S·m^{-4}·mol', 'S·mol^{-1}', 'S·m^{2}'], 'λ = σ / [X] = (S·m⁻¹) / (mol·m⁻³) = S·m²·mol⁻¹.'],
+  ['epsilon-beer-lambert', 'À partir de A = ε ℓ c (A sans unité, ℓ en cm, c en mol·L⁻¹), retrouve l’unité de ε.', ['L·mol^{-1}·cm^{-1}', 'm^{2}·mol^{-1}'],
+    ['mol·L^{-1}·cm^{-1}', 'L·mol·cm', 'sans unité', 'cm·mol^{-1}'], 'ε = A / (ℓ c) = 1 / (cm × mol·L⁻¹) = L·mol⁻¹·cm⁻¹.'],
+  ['g-gravitation', 'À partir de F = G m m′ / d², retrouve l’unité de G.', ['N·m^{2}·kg^{-2}'],
+    ['N·kg^{-2}', 'N·m^{-2}·kg^{2}', 'N·m·kg^{-1}', 'kg^{2}·N^{-1}·m^{-2}'], 'G = F d² / (m m′) = N·m²·kg⁻² (= m³·kg⁻¹·s⁻²).'],
+  ['k-coulomb', 'À partir de F = k q q′ / d², retrouve l’unité de k.', ['N·m^{2}·C^{-2}'],
+    ['N·C^{-2}', 'N·m^{-2}·C^{2}', 'N·m·C^{-1}', 'C^{2}·N^{-1}·m^{-2}'], 'k = F d² / (q q′) = N·m²·C⁻².'],
+  ['h-planck', 'À partir de E = h ν, retrouve l’unité de h.', ['J·s'], ['J·s^{-1}', 'J·Hz', 'W', 'J'], 'h = E / ν = J / Hz = J·s.'],
+  ['k-ordre-1', 'À partir de v = k [A] (v en mol·L⁻¹·s⁻¹), retrouve l’unité de k.', ['s^{-1}'],
+    ['s', 'mol·L^{-1}·s^{-1}', 'L·mol^{-1}·s^{-1}', 'sans unité'], 'k = v / [A] = (mol·L⁻¹·s⁻¹) / (mol·L⁻¹) = s⁻¹.'],
+  ['lambda-radioactive', 'À partir de N(t) = N₀ e^{−λt}, retrouve l’unité de λ.', ['s^{-1}', 'Bq'], ['s', 'sans unité', 's^{-2}', 'mol·s^{-1}'],
+    'L’argument d’une exponentielle est sans unité : λ t n’a pas d’unité, donc λ est en s⁻¹.'],
+  ['c-massique', 'À partir de Q = m c ΔT, retrouve l’unité de c.', ['J·kg^{-1}·K^{-1}'],
+    ['J·kg·K', 'J·K^{-1}', 'J·kg^{-1}', 'kg·K·J^{-1}'], 'c = Q / (m ΔT) = J·kg⁻¹·K⁻¹.'],
+  ['r-thermique', 'À partir de Φ = ΔT / R_{th} (Φ en W), retrouve l’unité de R_{th}.', ['K·W^{-1}'], ['W·K^{-1}', 'K·W', 'Ω', 'W'],
+    'R_{th} = ΔT / Φ = K·W⁻¹.'],
+  ['h-newton', 'À partir de Φ = h S ΔT (loi de Newton), retrouve l’unité de h.', ['W·m^{-2}·K^{-1}'],
+    ['W·m^{2}·K', 'W·K^{-1}', 'W·m^{-2}', 'J·m^{-2}·K^{-1}'], 'h = Φ / (S ΔT) = W·m⁻²·K⁻¹.'],
+  ['sigma-stefan', 'À partir de P / S = σ T⁴, retrouve l’unité de σ.', ['W·m^{-2}·K^{-4}'],
+    ['W·m^{-2}', 'W·m^{2}·K^{4}', 'W·K^{-4}', 'W·m^{-2}·K^{4}'], 'σ = P / (S T⁴) = W·m⁻²·K⁻⁴.'],
+  ['kepler', 'À partir de T² / a³ = 4π² / (G M), retrouve l’unité de T² / a³.', ['s^{2}·m^{-3}'], ['s·m^{-1}', 'm^{3}·s^{-2}', 's^{2}·m^{3}', 'sans unité'],
+    'T en s, a en m : s²·m⁻³ ; on retrouve l’inverse de G M en m³·s⁻².'],
+  ['wien', 'À partir de λ_{max} × T = constante (loi de Wien), retrouve l’unité de la constante.', ['m·K'],
+    ['m·K^{-1}', 'K·m^{-1}', 'm', 'nm'], 'Une longueur fois une température : m·K.'],
+  ['avogadro-masse', 'À partir de M = m_{entité} × N_{A}, retrouve l’unité de N_{A}.', ['mol^{-1}'], ['mol', 'g·mol^{-1}', 'sans unité', 'kg'],
+    'N_{A} = M / m = (kg·mol⁻¹) / kg = mol⁻¹.'],
+  ['champ-condensateur', 'À partir de E = U / d, retrouve l’unité du champ E.', ['V·m^{-1}', 'N·C^{-1}'], ['V·m', 'V', 'N·C', 'm·V^{-1}'],
+    'E = U / d : V·m⁻¹, qui vaut aussi N·C⁻¹.'],
+  ['conductivite-thermique', 'À partir de R_{th} = e / (λ S) (e une épaisseur), retrouve l’unité de la conductivité thermique λ.',
+    ['W·m^{-1}·K^{-1}'], ['W·m·K', 'W·K^{-1}', 'K·W^{-1}·m^{-1}', 'W·m^{-2}·K^{-1}'], 'λ = e / (R_{th} S) = m / (K·W⁻¹ × m²) = W·m⁻¹·K⁻¹.'],
+  ['faraday', 'À partir de Q = n(e⁻) × F, retrouve l’unité de la constante de Faraday F.', ['C·mol^{-1}'], ['C·mol', 'mol·C^{-1}', 'C', 'A'],
+    'F = Q / n = C·mol⁻¹ : la charge d’une mole d’électrons.'],
+];
+
+/** Expressions homogènes ou non à une grandeur : [grandeur, justes, fausses]. */
+const HOMOGENEITE = [
+  ['une vitesse', ['\\sqrt{2gh}', '\\sqrt{g \\ell }', 'λ f', '\\frac{d}{Δt}'], ['2gh', '\\frac{g}{h}', '\\frac{λ}{f}', '\\sqrt{\\frac{g}{\\ell }}', 'g t^{2}']],
+  ['une durée', ['\\sqrt{\\frac{\\ell }{g}}', 'R C', '\\frac{\\ln 2}{λ}', '\\frac{1}{f}'], ['\\sqrt{\\frac{g}{\\ell }}', '\\frac{R}{C}', '\\frac{λ}{\\ln 2}', 'f', '\\ell  g']],
+  ['une énergie', ['\\frac{1}{2} m v^{2}', 'm g h', 'h ν', 'P V', 'q U'], ['\\frac{1}{2} m v', 'm g', '\\frac{h}{λ}', '\\frac{P}{V}', 'R I^{2}']],
+  ['une pression', ['ρ g h', '\\frac{1}{2} ρ v^{2}', '\\frac{F}{S}', '\\frac{nRT}{V}'], ['ρ g', 'F S', 'ρ v', '\\frac{nR}{V}', 'm g h']],
+  ['une force', ['m a', '\\frac{m v^{2}}{R}', 'q E', 'm g'], ['m v', '\\frac{m v}{R}', '\\frac{E}{q}', 'm g h', 'P V']],
+  ['une puissance', ['U I', 'R I^{2}', '\\frac{U^{2}}{R}', 'F v'], ['\\frac{U}{I}', 'R I', 'U I Δt', 'F d', 'm v']],
+];
+
+/** Affirmations d'homogénéité : [expression, grandeur, vrai, explication]. */
+const HOMOGENEITE_VRAI_FAUX = [
+  ['τ = R C', 'une durée', true, 'Ω × F = (V·A⁻¹) × (C·V⁻¹) = C·A⁻¹ = s.'],
+  ['\\sqrt{\\frac{\\ell }{g}}', 'une durée', true, '√(m / (m·s⁻²)) = √(s²) = s.'],
+  ['\\sqrt{2gh}', 'une vitesse', true, '√(m·s⁻² × m) = m·s⁻¹.'],
+  ['\\frac{1}{2} m v', 'une énergie', false, 'kg·m·s⁻¹ : c’est une quantité de mouvement. L’énergie cinétique est ½ m v².'],
+  ['\\frac{\\ln 2}{λ}', 'une durée', true, 'λ en s⁻¹, ln 2 sans unité : des secondes. C’est la demi-vie.'],
+  ['\\frac{h}{λ}', 'une énergie', false, 'J·s / m : c’est la quantité de mouvement du photon. L’énergie est h ν = h c / λ.'],
+  ['\\frac{λ D}{b}', 'une longueur', true, 'm × m / m = m : c’est l’interfrange.'],
+  ['\\frac{1}{2} ρ v^{2}', 'une pression', true, 'kg·m⁻³ × m²·s⁻² = kg·m⁻¹·s⁻² = Pa.'],
+  ['ρ g z', 'une énergie', false, 'kg·m⁻³ × m·s⁻² × m = Pa : c’est une pression.'],
+  ['\\frac{m v^{2}}{R}', 'une force', true, 'kg × m²·s⁻² / m = kg·m·s⁻² = N.'],
+  ['\\frac{G M}{d^{2}}', 'une accélération', true, 'N·m²·kg⁻² × kg / m² = N·kg⁻¹ = m·s⁻².'],
+  ['R I^{2}', 'une énergie', false, 'Ω × A² = V·A = W : c’est une puissance. L’énergie est R I² Δt.'],
+  ['\\frac{nRT}{V}', 'une pression', true, 'C’est P, d’après PV = nRT.'],
+  ['\\frac{k q}{d^{2}}', 'une force', false, 'N·m²·C⁻² × C / m² = N·C⁻¹ : c’est un champ électrique. La force est k q q′ / d².'],
+  ['q U', 'une énergie', true, 'C × V = C × J·C⁻¹ = J.'],
+];
+
+const NIVEAU_5_UNITES = [
+  ...UNITES_PAR_RELATION.map(([cle, question, unites, distracteurs, aide]) => ({
+    id: `unites.n5.${cle}`,
+    question,
+    reponse: unites[0],
+    formats: ['saisie', 'qcm'],
+    uniteAttendue: unites,
+    distracteurs,
+    aide,
+  })),
+  {
+    id: 'unites.n5.expression-homogene',
+    question: 'Quelle expression est homogène à cette grandeur ?',
+    formats: ['qcm'],
+    aide: 'Remplace chaque grandeur par son unité, simplifie, et compare.',
+    generer() {
+      const [grandeur, justes, fausses] = auHasard(HOMOGENEITE);
+      return {
+        question: `Quelle expression est homogène à ${grandeur} ?`,
+        reponse: `$${auHasard(justes)}$`,
+        distracteurs: fausses.map((f) => `$${f}$`),
+      };
+    },
+  },
+  {
+    id: 'unites.n5.homogeneite-vrai-faux',
+    question: 'Cette expression est-elle homogène à cette grandeur ?',
+    formats: ['vraifaux'],
+    generer() {
+      const [expression, grandeur, vrai, reponse] = auHasard(HOMOGENEITE_VRAI_FAUX);
+      return { question: `« $${expression}$ est homogène à ${grandeur} »`, vrai, reponse: `${vrai ? 'Vrai' : 'Faux'} : ${reponse}` };
+    },
+  },
+  {
+    id: 'unites.n5.bernoulli',
+    question: 'Dans P + ½ ρ v² + ρ g z = constante, quelle est l’unité de chaque terme ?',
+    formats: ['saisie', 'qcm'],
+    reponse: 'Pa',
+    uniteAttendue: ['Pa'],
+    distracteurs: ['J', 'W', 'N', 'kg·m^{-3}'],
+    aide: 'On n’additionne que des grandeurs de même unité : chaque terme est une pression, comme P.',
+  },
+  {
+    id: 'unites.n5.argument-log',
+    question: 'pH = −log([H₃O⁺] / c°) : pourquoi divise-t-on par c° = 1 mol·L⁻¹ ?',
+    formats: ['retournement'],
+    reponse: 'Pour que l’argument du logarithme soit sans unité.',
+    aide: 'Même règle pour une exponentielle : dans e^{−λt}, λ t est sans unité.',
+  },
+  {
+    id: 'unites.n5.quotient-reaction',
+    question: 'Le quotient de réaction se calcule avec des concentrations. Pourquoi est-il pourtant sans unité ?',
+    formats: ['retournement'],
+    reponse: 'Chaque concentration y est divisée par la concentration standard c° = 1 mol·L⁻¹.',
+    aide: '« Le quotient de réaction est adimensionné » (programme de terminale).',
+  },
+  {
+    id: 'unites.n5.on-additionne',
+    question: '« On peut additionner une énergie et une puissance »',
+    formats: ['vraifaux'],
+    vrai: false,
+    reponse: 'Faux : on n’additionne et on ne compare que des grandeurs de même unité. Une formule qui le fait est fausse.',
+  },
+  {
+    id: 'unites.n5.unite-rt',
+    question: 'Quelle est l’unité de R T (R constante des gaz parfaits, T en K) ?',
+    formats: ['saisie', 'qcm'],
+    reponse: 'J·mol^{-1}',
+    uniteAttendue: ['J·mol^{-1}'],
+    distracteurs: ['J', 'J·K^{-1}', 'J·mol^{-1}·K^{-1}', 'mol·J^{-1}'],
+    aide: 'J·mol⁻¹·K⁻¹ × K = J·mol⁻¹ : une énergie molaire.',
+  },
+];
 
 Paquets.inscrire({
-  cle: 'reflexes',
-  theme: 'Calcul',
-  titre: 'Réflexes : préfixes et conversions',
-  resume: 'Les automatismes de calcul, à refaire souvent et vite.',
+  cle: 'unites',
+  theme: 'Physique-chimie',
+  titre: 'Grandeurs et unités',
+  resume: 'Cinq niveaux : les grandeurs de seconde, de première et de terminale, les unités de base du SI, '
+    + 'puis l’analyse dimensionnelle (retrouver l’unité de R, de λ, de ε…). Toute écriture équivalente d’une unité est acceptée.',
   niveaux: ['seconde', 'premiere', 'terminale'],
-  // Un automatisme se perd vite : on le revoit plus souvent qu'une définition.
-  intervalles: [1, 2, 4, 8, 15],
-  // La vitesse fait partie de l'exercice : le temps écoulé reste sous les yeux.
-  chrono: true,
+  progression: 'niveaux',
+  formatFixe: 'mixte',
+  consignesParFormat: true,
   sections: [
-    {
-      cle: 'prefixes-valeur',
-      titre: 'Préfixe → facteur',
-      consigne: 'Par quelle puissance de dix ce préfixe multiplie-t-il ?',
-      cartes: PREFIXES.map(([cle, nom, symbole, exposant]) => ({
-        id: `reflexes.prefixes-valeur.${cle}`,
-        question: `Le préfixe ${nom} (${symbole})`,
-        reponse: `10^${exposant}`,
-        nombre: 10 ** exposant,
-        aide: `1 ${symbole}unité = 10^${exposant} unité.`,
-      })),
-    },
-    {
-      cle: 'prefixes-nom',
-      titre: 'Facteur → préfixe',
-      consigne: 'Quel préfixe correspond à ce facteur ?',
-      cartes: PREFIXES.map(([cle, nom, symbole, exposant]) => ({
-        id: `reflexes.prefixes-nom.${cle}`,
-        question: `Un facteur 10^${exposant}`,
-        reponse: `${nom} (${symbole})`,
-        saisie: [nom, symbole, `${nom} ${symbole}`],
-      })),
-    },
-    {
-      cle: 'conversions',
-      titre: 'Conversions',
-      consigne: 'Écris le résultat.',
-      consigneQcm: 'Quel est le résultat ?',
-      cartes: [
-        carteConversion('ml-vers-l', 'mL', 'L', 1e-3, () => tirerMesure(1, 500)),
-        carteConversion('l-vers-ml', 'L', 'mL', 1e3, () => tirerMesure(0.1, 5, 2)),
-        carteConversion('cm3-vers-l', 'cm³', 'L', 1e-3, () => tirerMesure(1, 500)),
-        carteConversion('m3-vers-l', 'm³', 'L', 1e3, () => tirerMesure(0.1, 9, 2)),
-        carteConversion('g-vers-kg', 'g', 'kg', 1e-3, () => tirerMesure(1, 900)),
-        carteConversion('mg-vers-g', 'mg', 'g', 1e-3, () => tirerMesure(1, 900)),
-        carteConversion('kg-vers-g', 'kg', 'g', 1e3, () => tirerMesure(0.1, 9, 2)),
-        carteConversion('mmol-l-vers-mol-l', 'mmol·L⁻¹', 'mol·L⁻¹', 1e-3, () => tirerMesure(1, 400)),
-        carteConversion('mol-l-vers-mmol-l', 'mol·L⁻¹', 'mmol·L⁻¹', 1e3, () => tirerMesure(0.01, 2, 2)),
-        carteConversion('hpa-vers-pa', 'hPa', 'Pa', 1e2, () => tirerEntier(900, 1050)),
-        {
-          id: 'reflexes.conversions.cm3-ml',
-          question: 'À quoi correspond 1 cm³ ?',
-          reponse: '1 cm³ = 1 mL',
-          saisie: ['1 ml', 'un ml', '1 millilitre', 'mL'],
-          aide: 'Et donc 1 L = 1000 cm³ = 1 dm³.',
-        },
-        {
-          id: 'reflexes.conversions.m3-l',
-          question: 'Combien de litres dans 1 m³ ?',
-          reponse: '1 m³ = 1000 L',
-          nombre: 1000,
-          unite: 'L',
-        },
-      ],
-    },
-    {
-      cle: 'ecriture-scientifique',
-      titre: 'Écriture scientifique',
-      consigne: 'Donne la valeur en écriture décimale.',
-      consigneQcm: 'Quelle est la valeur ?',
-      cartes: [
-        {
-          id: 'reflexes.ecriture-scientifique.vers-decimal',
-          question: 'D’une puissance de dix à l’écriture décimale',
-          generer() {
-            const mantisse = tirerMesure(1, 9.9, 1);
-            const exposant = tirerEntier(-4, 4);
-            const valeur = mantisse * 10 ** exposant;
-            return {
-              question: `${ecrireNombre(mantisse)} × 10^${exposant} = ?`,
-              reponse: ecrireNombre(valeur),
-              nombre: valeur,
-            };
-          },
-        },
-        {
-          id: 'reflexes.ecriture-scientifique.chiffres-significatifs',
-          question: 'Combien de chiffres significatifs dans 0,0250 ?',
-          reponse: '3 chiffres significatifs (2, 5 et 0)',
-          nombre: 3,
-          aide: 'Les zéros de tête ne comptent pas ; celui de fin, si.',
-        },
-      ],
-    },
-  ],
-});
-
-// ---- 34-contenu-nomenclature.js ----
-/* Paquet de nomenclature organique (terminale).
- *
- * Les deux sens sont travaillés séparément, parce que ce sont deux compétences
- * distinctes : lire une formule et écrire une formule. Une même molécule donne
- * donc deux cartes, avec deux identifiants et deux progressions.
- */
-
-const CHAINES = [
-  ['meth', 'méth', 1, 'CH4', 'méthane'],
-  ['eth', 'éth', 2, 'C2H6', 'éthane'],
-  ['prop', 'prop', 3, 'C3H8', 'propane'],
-  ['but', 'but', 4, 'C4H10', 'butane'],
-  ['pent', 'pent', 5, 'C5H12', 'pentane'],
-  ['hex', 'hex', 6, 'C6H14', 'hexane'],
-  ['hept', 'hept', 7, 'C7H16', 'heptane'],
-  ['oct', 'oct', 8, 'C8H18', 'octane'],
-  ['non', 'non', 9, 'C9H20', 'nonane'],
-  ['dec', 'déc', 10, 'C10H22', 'décane'],
-];
-
-/** Molécules travaillées dans les deux sens. */
-const MOLECULES = [
-  { cle: 'methane', nom: 'méthane', formule: 'CH4', aide: 'Alcane à 1 carbone.' },
-  { cle: 'ethane', nom: 'éthane', formule: 'CH3-CH3', autresFormules: ['C2H6'] },
-  { cle: 'propane', nom: 'propane', formule: 'CH3-CH2-CH3', autresFormules: ['C3H8'] },
-  { cle: 'butane', nom: 'butane', formule: 'CH3-CH2-CH2-CH3', autresFormules: ['C4H10'] },
-  { cle: '2-methylpropane', nom: '2-méthylpropane', formule: 'CH3-CH(CH3)-CH3',
-    aide: 'Chaîne principale de 3 carbones, un méthyle sur le carbone 2.' },
-  { cle: '2-methylbutane', nom: '2-méthylbutane', formule: 'CH3-CH(CH3)-CH2-CH3',
-    aide: 'La numérotation part du bout qui donne le plus petit indice : 2 et non 3.' },
-  { cle: '2-2-dimethylpropane', nom: '2,2-diméthylpropane', formule: 'CH3-C(CH3)2-CH3',
-    aide: 'Deux méthyles sur le même carbone : l’indice est répété, d’où « 2,2 ».' },
-  { cle: '3-ethylpentane', nom: '3-éthylpentane', formule: 'CH3-CH2-CH(C2H5)-CH2-CH3',
-    aide: 'Chaîne principale de 5 carbones, un éthyle au centre.' },
-
-  { cle: 'methanol', nom: 'méthanol', formule: 'CH3-OH', autresFormules: ['CH4O'] },
-  { cle: 'ethanol', nom: 'éthanol', formule: 'CH3-CH2-OH', autresFormules: ['C2H5OH', 'C2H6O'] },
-  { cle: 'propan-1-ol', nom: 'propan-1-ol', formule: 'CH3-CH2-CH2-OH' },
-  { cle: 'propan-2-ol', nom: 'propan-2-ol', formule: 'CH3-CH(OH)-CH3',
-    aide: 'Le groupe —OH est porté par le carbone 2 : alcool secondaire.' },
-  { cle: 'butan-1-ol', nom: 'butan-1-ol', formule: 'CH3-CH2-CH2-CH2-OH' },
-  { cle: 'butan-2-ol', nom: 'butan-2-ol', formule: 'CH3-CH(OH)-CH2-CH3' },
-  { cle: '2-methylpropan-2-ol', nom: '2-méthylpropan-2-ol', formule: 'CH3-C(CH3)(OH)-CH3',
-    aide: 'Le carbone portant —OH est lié à trois carbones : alcool tertiaire.' },
-
-  { cle: 'methanal', nom: 'méthanal', formule: 'H-CHO', autresFormules: ['HCHO', 'CH2O'],
-    aide: 'Le formaldéhyde. Le groupe —CHO est toujours en bout de chaîne.' },
-  { cle: 'ethanal', nom: 'éthanal', formule: 'CH3-CHO' },
-  { cle: 'propanal', nom: 'propanal', formule: 'CH3-CH2-CHO' },
-  { cle: 'propanone', nom: 'propanone', formule: 'CH3-CO-CH3',
-    aide: 'L’acétone. Le carbonyle est en milieu de chaîne : c’est une cétone.' },
-  { cle: 'butanone', nom: 'butanone', formule: 'CH3-CO-CH2-CH3',
-    aide: 'Pas besoin d’indice : une seule position est possible sur 4 carbones.' },
-  { cle: '3-methylbutan-2-one', nom: '3-méthylbutan-2-one', formule: 'CH3-CO-CH(CH3)-CH3' },
-
-  { cle: 'acide-methanoique', nom: 'acide méthanoïque', formule: 'H-COOH', autresFormules: ['HCOOH'],
-    aide: 'L’acide formique.' },
-  { cle: 'acide-ethanoique', nom: 'acide éthanoïque', formule: 'CH3-COOH',
-    aide: 'L’acide acétique, celui du vinaigre.' },
-  { cle: 'acide-propanoique', nom: 'acide propanoïque', formule: 'CH3-CH2-COOH' },
-  { cle: 'methanoate-de-methyle', nom: 'méthanoate de méthyle', formule: 'H-COO-CH3', autresFormules: ['HCOOCH3'] },
-  { cle: 'ethanoate-de-methyle', nom: 'éthanoate de méthyle', formule: 'CH3-COO-CH3' },
-  { cle: 'ethanoate-d-ethyle', nom: 'éthanoate d’éthyle', formule: 'CH3-COO-CH2-CH3',
-    autresNoms: ['ethanoate d ethyle', 'acetate d ethyle'],
-    aide: 'Le nom de l’ester se lit de l’acide vers l’alcool : …oate de …yle.' },
-
-  { cle: 'methanamine', nom: 'méthanamine', formule: 'CH3-NH2', autresNoms: ['methylamine'] },
-  { cle: 'ethanamine', nom: 'éthanamine', formule: 'CH3-CH2-NH2', autresNoms: ['ethylamine'] },
-
-  { cle: 'ethene', nom: 'éthène', formule: 'CH2=CH2', autresNoms: ['ethylene'] },
-  { cle: 'propene', nom: 'propène', formule: 'CH3-CH=CH2' },
-  { cle: 'but-1-ene', nom: 'but-1-ène', formule: 'CH2=CH-CH2-CH3' },
-  { cle: 'but-2-ene', nom: 'but-2-ène', formule: 'CH3-CH=CH-CH3' },
-
-  { cle: 'chloroethane', nom: 'chloroéthane', formule: 'CH3-CH2-Cl' },
-  { cle: '2-bromopropane', nom: '2-bromopropane', formule: 'CH3-CHBr-CH3' },
-];
-
-const GROUPES = [
-  ['hydroxyle', '—OH', 'un alcool', ['alcool'], 'Suffixe -ol.'],
-  ['carbonyle-bout', '—CHO (en bout de chaîne)', 'un aldéhyde', ['aldehyde'], 'Suffixe -al.'],
-  ['carbonyle-milieu', '—CO— (en milieu de chaîne)', 'une cétone', ['cetone'], 'Suffixe -one.'],
-  ['carboxyle', '—COOH', 'un acide carboxylique', ['acide carboxylique', 'acide'], 'Nom : acide …oïque.'],
-  ['ester', '—COO—', 'un ester', ['ester'], 'Nom : …oate de …yle.'],
-  ['amine', '—NH2', 'une amine', ['amine'], 'Suffixe -amine.'],
-  ['amide', '—CO—NH2', 'un amide', ['amide'], 'Suffixe -amide.'],
-  ['alcene', 'une double liaison C=C', 'un alcène', ['alcene'], 'Suffixe -ène.'],
-  ['halogene', '—Cl, —Br, —I ou —F', 'un halogénoalcane', ['halogenoalcane', 'halogeno alcane'],
-    'Préfixe chloro-, bromo-, iodo-, fluoro-.'],
-];
-
-const SUFFIXES = [
-  ['alcane', 'Un alcane', '-ane', ['ane']],
-  ['alcene', 'Un alcène', '-ène', ['ene']],
-  ['alcool', 'Un alcool', '-ol', ['ol']],
-  ['aldehyde', 'Un aldéhyde', '-al', ['al']],
-  ['cetone', 'Une cétone', '-one', ['one']],
-  ['acide', 'Un acide carboxylique', 'acide …oïque', ['acide oique', 'oique']],
-  ['ester', 'Un ester', '…oate de …yle', ['oate de yle', 'oate yle']],
-  ['amine', 'Une amine', '-amine', ['amine']],
-];
-
-const CLASSES_ALCOOLS = [
-  ['methanol', 'méthanol', 'primaire', 'Cas particulier : le carbone porte trois hydrogènes.'],
-  ['ethanol', 'éthanol', 'primaire', null],
-  ['propan-1-ol', 'propan-1-ol', 'primaire', null],
-  ['propan-2-ol', 'propan-2-ol', 'secondaire', null],
-  ['butan-1-ol', 'butan-1-ol', 'primaire', null],
-  ['butan-2-ol', 'butan-2-ol', 'secondaire', null],
-  ['2-methylpropan-2-ol', '2-méthylpropan-2-ol', 'tertiaire', null],
-  ['2-methylbutan-2-ol', '2-méthylbutan-2-ol', 'tertiaire', null],
-];
-
-function carteRegle(cle, question, reponse, distracteurs, aide) {
-  return { id: `nomenclature.regles.${cle}`, question, reponse, distracteurs, aide };
-}
-
-Paquets.inscrire({
-  cle: 'nomenclature',
-  theme: 'Chimie organique',
-  titre: 'Nomenclature des molécules organiques',
-  resume: 'Lire une formule, écrire un nom, et l’inverse. Le socle du programme de terminale.',
-  niveaux: ['terminale'],
-  sections: [
-    {
-      cle: 'chaines',
-      titre: 'Préfixes de chaîne',
-      consigne: 'Combien d’atomes de carbone ce préfixe annonce-t-il ?',
-      cartes: CHAINES.map(([cle, prefixe, carbones]) => ({
-        id: `nomenclature.chaines.${cle}`,
-        question: `Le préfixe « ${prefixe}- »`,
-        reponse: `${carbones} atome${carbones > 1 ? 's' : ''} de carbone`,
-        nombre: carbones,
-      })),
-    },
-    {
-      cle: 'brutes',
-      titre: 'Alcanes linéaires → formule brute',
-      consigne: 'Quelle est la formule brute ?',
-      cartes: CHAINES.map(([cle, , carbones, brute, alcane]) => ({
-        id: `nomenclature.brutes.${cle}`,
-        question: `Le ${alcane}`,
-        reponse: brute,
-        saisie: [brute],
-        aide: `Les alcanes suivent CnH2n+2 : ici n = ${carbones}.`,
-      })),
-    },
-    {
-      cle: 'groupes',
-      titre: 'Groupe caractéristique → famille',
-      consigne: 'Quelle famille ce groupe caractérise-t-il ?',
-      cartes: GROUPES.map(([cle, groupe, famille, saisie, aide]) => ({
-        id: `nomenclature.groupes.${cle}`,
-        question: `Le groupe ${groupe}`,
-        reponse: famille,
-        saisie: [famille, ...saisie],
-        aide,
-      })),
-    },
-    {
-      cle: 'suffixes',
-      titre: 'Famille → suffixe',
-      consigne: 'Quel suffixe utilise-t-on ?',
-      cartes: SUFFIXES.map(([cle, famille, suffixe, saisie]) => ({
-        id: `nomenclature.suffixes.${cle}`,
-        question: famille,
-        reponse: suffixe,
-        saisie: [suffixe, ...saisie],
-      })),
-    },
-    {
-      cle: 'familles-nom',
-      titre: 'Formule → nom',
-      consigne: 'Quel est le nom de cette molécule ?',
-      cartes: MOLECULES.map((m) => ({
-        id: `nomenclature.familles-nom.${m.cle}`,
-        question: m.formule,
-        reponse: m.nom,
-        saisie: [m.nom, ...(m.autresNoms || [])],
-        aide: m.aide,
-      })),
-    },
-    {
-      cle: 'familles-formule',
-      titre: 'Nom → formule semi-développée',
-      consigne: 'Écris la formule semi-développée.',
-      consigneQcm: 'Quelle est la formule semi-développée ?',
-      cartes: MOLECULES.map((m) => ({
-        id: `nomenclature.familles-formule.${m.cle}`,
-        question: m.nom,
-        reponse: m.formule,
-        saisie: [m.formule, ...(m.autresFormules || [])],
-        aide: m.aide,
-      })),
-    },
-    {
-      cle: 'classes-alcools',
-      titre: 'Classe des alcools',
-      consigne: 'Cet alcool est-il primaire, secondaire ou tertiaire ?',
-      cartes: CLASSES_ALCOOLS.map(([cle, nom, classe, aide]) => ({
-        id: `nomenclature.classes-alcools.${cle}`,
-        question: `Le ${nom}`,
-        reponse: `alcool ${classe}`,
-        saisie: [classe, `alcool ${classe}`],
-        aide,
-      })),
-    },
-    {
-      cle: 'regles',
-      titre: 'Les règles',
-      consigne: 'Quelle est la règle ?',
-      cartes: [
-        carteRegle('chaine-principale', 'Comment choisit-on la chaîne principale ?',
-          'La plus longue chaîne carbonée contenant le groupe caractéristique',
-          ['La chaîne qui porte le plus de ramifications', 'La chaîne la plus courte',
-            'N’importe quelle chaîne de la molécule'],
-          'Le groupe caractéristique prime toujours sur la longueur.'),
-        carteRegle('numerotation-groupe', 'Dans quel sens numérote-t-on une chaîne portant un groupe caractéristique ?',
-          'Dans le sens qui donne le plus petit indice au groupe caractéristique',
-          ['Dans le sens qui donne le plus petit indice aux ramifications',
-            'Toujours de gauche à droite', 'Dans le sens de l’ordre alphabétique'],
-          'Le groupe caractéristique passe avant les ramifications.'),
-        carteRegle('numerotation-alcane', 'Et pour un alcane ramifié, sans groupe caractéristique ?',
-          'Dans le sens qui donne les plus petits indices aux ramifications',
-          ['Toujours de gauche à droite', 'Dans le sens qui donne les plus grands indices',
-            'Dans le sens de la ramification la plus longue'], null),
-        carteRegle('ordre-alphabetique', 'Dans quel ordre écrit-on plusieurs ramifications différentes ?',
-          'Par ordre alphabétique, sans tenir compte des préfixes di, tri, tétra',
-          ['Par ordre de taille croissante', 'Par ordre d’indice croissant',
-            'Par ordre alphabétique en comptant di, tri, tétra'],
-          'Ainsi « 4-éthyl-2,2-diméthylhexane » : éthyl avant méthyl.'),
-        carteRegle('multiplicateurs', 'Comment indique-t-on deux, trois ou quatre ramifications identiques ?',
-          'Avec les préfixes di-, tri-, tétra-, et un indice par ramification',
-          ['Avec un seul indice', 'Avec les préfixes bi-, ter-, quadri-',
-            'En répétant le nom de la ramification'],
-          'Exemple : 2,3-diméthylbutane.'),
-        carteRegle('ramification-c1', 'Comment nomme-t-on une ramification à 1 carbone ?',
-          'Un méthyle (préfixe méthyl-)', ['Un éthyle', 'Un méthane', 'Un carbonyle'], null),
-        carteRegle('ramification-c2', 'Comment nomme-t-on une ramification à 2 carbones ?',
-          'Un éthyle (préfixe éthyl-)', ['Un méthyle', 'Un éthane', 'Un propyle'], null),
-        carteRegle('ponctuation', 'Comment sépare-t-on chiffres et lettres dans un nom ?',
-          'Un tiret entre un chiffre et une lettre, une virgule entre deux chiffres',
-          ['Une virgule partout', 'Un tiret partout', 'Un espace entre chaque élément'],
-          'Exemple : 2,3-diméthylbutane.'),
-        carteRegle('alcool-primaire', 'Qu’est-ce qu’un alcool primaire ?',
-          'Le carbone portant —OH est lié à au plus un autre atome de carbone',
-          ['Le carbone portant —OH est lié à deux autres carbones',
-            'Le carbone portant —OH est lié à trois autres carbones',
-            'Le groupe —OH est en bout de chaîne principale'], null),
-        carteRegle('alcool-secondaire', 'Qu’est-ce qu’un alcool secondaire ?',
-          'Le carbone portant —OH est lié à deux autres atomes de carbone',
-          ['Le carbone portant —OH est lié à un seul autre carbone',
-            'Le carbone portant —OH est lié à trois autres carbones',
-            'La molécule contient deux groupes —OH'], null),
-        carteRegle('alcool-tertiaire', 'Qu’est-ce qu’un alcool tertiaire ?',
-          'Le carbone portant —OH est lié à trois autres atomes de carbone',
-          ['Le carbone portant —OH est lié à deux autres carbones',
-            'La molécule contient trois groupes —OH',
-            'Le groupe —OH est porté par le carbone 3'], null),
-      ],
-    },
+    { cle: 'n1', titre: 'Niveau 1 · Seconde', consigne: null,
+      cartes: [...GRANDEURS_SECONDE.map((g) => carteGrandeur('n1', g)), ...famillesGrandeurs('n1', GRANDEURS_SECONDE)] },
+    { cle: 'n2', titre: 'Niveau 2 · Première', consigne: null,
+      cartes: [...GRANDEURS_PREMIERE.map((g) => carteGrandeur('n2', g)), ...famillesGrandeurs('n2', GRANDEURS_PREMIERE)] },
+    { cle: 'n3', titre: 'Niveau 3 · Terminale', consigne: null,
+      cartes: [...GRANDEURS_TERMINALE.map((g) => carteGrandeur('n3', g)), ...famillesGrandeurs('n3', GRANDEURS_TERMINALE)] },
+    { cle: 'n4', titre: 'Niveau 4 · Unités de base et grandeurs sans unité', consigne: null, cartes: NIVEAU_4_UNITES },
+    { cle: 'n5', titre: 'Niveau 5 · Analyse dimensionnelle', consigne: null, cartes: NIVEAU_5_UNITES },
   ],
 });
 
@@ -4295,6 +5931,11 @@ function appliquerSM2(etat, note, jour, dateEvaluation) {
 function appliquerReglages(etat, reussi, jour, paquet, note = null) {
   const reglage = ReglagesPaquet.de(paquet);
   const evaluation = ReglagesPaquet.evaluation(paquet, jour);
+  // Paquet à niveaux : une carte nouvelle réussie du premier coup est déjà sue,
+  // inutile de la revoir demain ; elle saute en boîte 3.
+  if (reussi && etat.introduite === null && Niveaux.actif(paquet) && reglage.algorithme !== 'sm2') {
+    return Leitner.appliquer({ ...etat, compartiment: 2 }, true, jour, reglage.intervalles, evaluation);
+  }
   if (reglage.algorithme === 'sm2') return appliquerSM2(etat, note || (reussi ? 'bien' : 'revoir'), jour, evaluation);
   if (reglage.algorithme === 'progressif' && !reussi) {
     return {
@@ -4364,6 +6005,9 @@ function calendrierCarte(paquet, jour, dateEvaluation) {
 
 /* ---------- Bibliothèque personnelle ---------- */
 
+/** Paquets livrés retirés de l'application, et celui qui les remplace dans les bibliothèques. */
+const PAQUETS_REMPLACES = { 'chimie-bases': 'unites', reflexes: 'conversions', nomenclature: 'conversions' };
+
 const Bibliotheque = {
   /** Clés des paquets ajoutés (intégrés ou publiés par un enseignant). */
   adoptes: null,
@@ -4371,6 +6015,10 @@ const Bibliotheque = {
   async charger() {
     const stocke = await Depot.lire('bibliotheque');
     this.adoptes = stocke && Array.isArray(stocke.paquets) ? stocke.paquets : null;
+    // Un élève qui avait un ancien paquet livré trouve son remplaçant à sa place.
+    if (this.adoptes && this.adoptes.some((cle) => PAQUETS_REMPLACES[cle])) {
+      this.adoptes = [...new Set(this.adoptes.map((cle) => PAQUETS_REMPLACES[cle] || cle))];
+    }
   },
 
   /** Tant que l'élève n'a rien choisi : les paquets intégrés de son niveau. */
@@ -4707,6 +6355,149 @@ const Perso = {
     await Depot.enregistrerContenu(store);
     if (ligne) await Photos.supprimer(photosDeLigne(ligne));
     this.inscrire();
+  },
+};
+
+// ---- 37-niveaux.js ----
+/* Paquets à niveaux : une montée en compétence régulière.
+ *
+ * Les sections d'un paquet « progression: 'niveaux' » sont des niveaux,
+ * ouverts un à un. Tout le monde commence au niveau 1, même un élève de
+ * terminale : revoir ses bases ne coûte que quelques séances, parce qu'une
+ * carte réussie du premier coup saute directement en boîte 3 (36-…,
+ * appliquerReglages) et que le quota de nouvelles double tant que tout réussit.
+ *
+ * - Un niveau s'ouvre quand 80 % des cartes du précédent ont atteint la
+ *   boîte 3 : réussies au moins deux fois, à quelques jours d'écart.
+ * - Ou par un test de positionnement : 10 cartes du niveau suivant, 8 justes
+ *   l'ouvrent tout de suite ; une tentative par niveau et par jour.
+ * - Les cartes des niveaux franchis restent dans le circuit Leitner : elles
+ *   reviennent à leur échéance, mêlées à celles du niveau en cours.
+ * - Garde-fou : si plus d'un tiers des cartes vues d'un niveau franchi sont
+ *   retombées en boîte 1, plus de nouvelle carte du niveau en cours tant que
+ *   ce niveau n'est pas consolidé.
+ *
+ * Un niveau ouvert le reste. Rangé avec le profil (clé « niveaux »).
+ */
+
+const SEUIL_NIVEAU = 0.8;
+const SEUIL_CONSOLIDATION = 1 / 3;
+const TAILLE_TEST_NIVEAU = 10;
+const REUSSITE_TEST_NIVEAU = 8;
+
+const Niveaux = {
+  /** { [clé du paquet]: { ouvert: index du plus haut niveau ouvert, tests: { [index]: date } } } */
+  donnees: {},
+
+  async charger() {
+    this.donnees = (await Depot.lire('niveaux')) || {};
+  },
+
+  actif(paquet) {
+    return Boolean(paquet && paquet.progression === 'niveaux');
+  },
+
+  suivi(paquet) {
+    return this.donnees[paquet.cle] || { ouvert: 0, tests: {} };
+  },
+
+  async enregistrer(paquet, changements) {
+    this.donnees = { ...this.donnees, [paquet.cle]: { ...this.suivi(paquet), ...changements } };
+    await Depot.ecrire('niveaux', this.donnees);
+  },
+
+  /** Où en est chaque niveau : cartes, part en boîte 3 ou plus, part retombée en boîte 1. */
+  detail(paquet) {
+    return paquet.sections.map((section) => {
+      const etats = Progression.etats(section.cartes);
+      const vues = etats.filter((e) => e.introduite !== null);
+      return {
+        section,
+        total: etats.length,
+        vues: vues.length,
+        maitrise: etats.length ? vues.filter((e) => e.compartiment >= 3).length / etats.length : 0,
+        rechute: vues.length >= 5 ? vues.filter((e) => e.compartiment === 1).length / vues.length : 0,
+      };
+    });
+  },
+
+  /** Plus haut niveau ouvert : celui qu'on a enregistré, ou celui que la maîtrise atteint. */
+  ouvert(paquet, detail = this.detail(paquet)) {
+    let atteint = 0;
+    while (atteint < detail.length - 1 && detail[atteint].maitrise >= SEUIL_NIVEAU) atteint += 1;
+    return Math.min(detail.length - 1, Math.max(this.suivi(paquet).ouvert || 0, atteint));
+  },
+
+  /** Niveau franchi à consolider avant d'avancer, ou null. */
+  aConsolider(paquet, detail = this.detail(paquet)) {
+    const ouvert = this.ouvert(paquet, detail);
+    return detail.slice(0, ouvert).find((n) => n.rechute > SEUIL_CONSOLIDATION) || null;
+  },
+
+  /** Enregistre un niveau nouvellement atteint ; renvoie sa section pour l'annoncer. */
+  async verifier(paquet) {
+    const ouvert = this.ouvert(paquet);
+    if (ouvert <= (this.suivi(paquet).ouvert || 0)) return null;
+    await this.enregistrer(paquet, { ouvert });
+    return paquet.sections[ouvert];
+  },
+
+  /** Tant que l'élève réussit plus de 90 % de ses cartes récentes, les nouvelles arrivent deux fois plus vite. */
+  accelere(etats, jour) {
+    const semaine = Dates.ajouter(jour, -7);
+    const recentes = etats.filter((e) => e.dernierPassage && e.dernierPassage >= semaine);
+    const passages = recentes.reduce((n, e) => n + e.passages, 0);
+    const reussites = recentes.reduce((n, e) => n + e.reussites, 0);
+    return passages >= 10 && reussites / passages >= 0.9;
+  },
+
+  /** Bilan du jour (même forme que Leitner.bilanListe), limité aux niveaux ouverts. */
+  bilan(paquet, jour = Dates.aujourdhui()) {
+    const detail = this.detail(paquet);
+    const ouvert = this.ouvert(paquet, detail);
+    const consolider = this.aConsolider(paquet, detail);
+    // Les nouvelles viennent dans l'ordre des niveaux : les bases d'abord.
+    const sections = paquet.sections.slice(0, ouvert + 1);
+    const etats = Progression.etats(sections.flatMap((s) => s.cartes));
+    const parJour = ReglagesPaquet.nouvellesParJour(paquet, jour) * (this.accelere(etats, jour) ? 2 : 1);
+    const courant = SuiviContenu.pour(paquet.cle).nouvelles;
+    const quota = Math.max(0, parJour - (courant && courant.date === jour ? courant.n : 0));
+    const bilan = Leitner.bilanListe(etats, jour, quota);
+    if (consolider) {
+      // Les cartes jamais vues des niveaux franchis restent permises, pas celles du niveau en cours.
+      const enCours = new Set(paquet.sections[ouvert].cartes.map((c) => c.id));
+      bilan.nouvelles = bilan.nouvelles.filter((e) => !enCours.has(e.id));
+      bilan.nouvellesDuJour = Math.min(quota, bilan.nouvelles.length);
+    }
+    return bilan;
+  },
+
+  /** Niveau qu'un test de positionnement peut ouvrir aujourd'hui, ou null. */
+  testPossible(paquet, jour = Dates.aujourdhui()) {
+    const suivant = this.ouvert(paquet) + 1;
+    if (suivant >= paquet.sections.length) return null;
+    if ((this.suivi(paquet).tests || {})[suivant] === jour) return null;
+    return suivant;
+  },
+
+  /**
+   * Fin d'un test : 8 bonnes réponses sur 10 ouvrent le niveau, et les cartes
+   * réussies y entrent directement en boîte 3. Renvoie { reussies, total, ouvert }.
+   */
+  async terminerTest(paquet, index, resultats, jour) {
+    const reussies = resultats.filter((r) => r.reussi);
+    const ouvert = reussies.length >= REUSSITE_TEST_NIVEAU;
+    const tests = { ...(this.suivi(paquet).tests || {}), [index]: jour };
+    if (ouvert) {
+      for (const { id } of reussies) {
+        const etat = Progression.obtenir(id);
+        if (etat.introduite === null) await Progression.enregistrer(appliquerReglages(etat, true, jour, paquet));
+      }
+      await this.enregistrer(paquet, { tests, ouvert: Math.max(index, this.suivi(paquet).ouvert || 0) });
+    } else {
+      await this.enregistrer(paquet, { tests });
+    }
+    return { reussies: reussies.length, total: resultats.length, ouvert };
   },
 };
 
@@ -5604,7 +7395,10 @@ function consigneDe(paquet, element) {
   const carte = Paquets.index.get(element.id);
   const section = Paquets.section(paquet, carte.section);
   if (carte.masque) return 'Que cache la zone orange ?';
-  if (paquet.origine !== 'integre') {
+  if (element.format === 'vraifaux') return 'Vrai ou faux ?';
+  if (carte.consigne) return carte.consigne;
+  // Paquets créés dans l'appli, et paquets livrés qui mêlent les formats dans une section.
+  if (paquet.origine !== 'integre' || paquet.consignesParFormat) {
     if (element.format === 'qcm') return 'Choisis la bonne réponse.';
     if (element.format === 'saisie') return 'Écris la réponse.';
     return 'Réponds de tête, puis retourne la carte.';
@@ -5663,7 +7457,7 @@ Ecrans['session-contenu'] = {
     }
     const element = SessionContenu.elementCourant();
     if (element) rendreCarteContenu(zone, element);
-    else rendreFinDeSerieContenu(zone);
+    else return rendreFinDeSerieContenu(zone);
   },
 };
 
@@ -5680,7 +7474,8 @@ function rendreCarteContenu(zone, element) {
   const entete = el('div', { class: 'revision-entete' },
     el('span', { text: `Carte ${s.position + 1} sur ${s.file.length}` }),
     element.reprise && el('span', { class: 'badge', text: 'À revoir' }),
-    !element.compte && !element.reprise && el('span', { class: 'badge', text: 'Hors barème' }),
+    s.type === 'test' && el('span', { class: 'badge accent', text: 'Test de positionnement' }),
+    !element.compte && !element.reprise && s.type !== 'test' && el('span', { class: 'badge', text: 'Hors barème' }),
     // Dans un objectif, on rappelle de quel paquet vient la carte.
     el('span', { text: s.paquets.length > 1 ? paquet.titre : etiquetteSection(paquet, carte.section) }));
 
@@ -5696,6 +7491,7 @@ function rendreCarteContenu(zone, element) {
 
   if (element.format === 'qcm') formatQcm(carte, enonce, element, panneau);
   else if (element.format === 'saisie') formatSaisie(carte, enonce, element, panneau);
+  else if (element.format === 'vraifaux') formatVraiFaux(carte, enonce, element, panneau);
   else formatRetournement(carte, enonce, panneau, element);
 }
 
@@ -5713,10 +7509,11 @@ function chronometre(debut) {
 }
 
 function blocReponse(carte, enonce) {
+  const aide = enonce.aide || carte.aide;
   return el('div', { class: 'pile serree apparition' },
     enonce.reponse && el('div', { class: 'reponse' }, texteCarte(enonce.reponse, 'reponse-texte')),
     carte.photoReponse && photoZoomable(carte.photoReponse),
-    carte.aide && el('p', { class: 'discret aide' }, texteCarte(carte.aide)));
+    aide && el('p', { class: 'discret aide' }, texteCarte(aide)));
 }
 
 /** Photo d'une carte ; un toucher l'agrandit en plein écran. */
@@ -5807,7 +7604,11 @@ function formatRetournement(carte, enonce, panneau, element) {
 /* Format 2 : quatre propositions, correction automatique. */
 function formatQcm(carte, enonce, element, panneau) {
   if (!element.options) {
-    element.options = melanger([carte.reponse, ...Paquets.distracteurs(carte)]);
+    // Carte tirée au hasard : ses pièges viennent du tirage ; on en montre trois, différents à chaque passage.
+    const pieges = element.tirage && element.tirage.distracteurs
+      ? melanger([...new Set(element.tirage.distracteurs)].filter((d) => d !== enonce.reponse)).slice(0, 3)
+      : Paquets.distracteurs(carte);
+    element.options = melanger([enonce.reponse, ...pieges]);
   }
   const suite = el('div', { class: 'pile' });
   const grille = el('div', { class: 'choix' });
@@ -5816,17 +7617,17 @@ function formatQcm(carte, enonce, element, panneau) {
   const choisir = async (texte, bouton) => {
     if (repondu) return;
     repondu = true;
-    const reussi = texte === carte.reponse;
+    const reussi = texte === enonce.reponse;
     for (const b of grille.children) {
       b.disabled = true;
-      if (b.dataset.reponse === carte.reponse) b.classList.add('juste');
+      if (b.dataset.reponse === enonce.reponse) b.classList.add('juste');
       else if (b === bouton) b.classList.add('faux');
     }
     toucheEcran = null;
     await SessionContenu.repondre(reussi);
     suite.replaceChildren(
       el('p', { class: 'verdict', text: reussi ? 'Bonne réponse' : 'Ce n’était pas la bonne' }),
-      carte.aide && el('p', { class: 'discret aide' }, texteCarte(carte.aide)),
+      (enonce.aide || carte.aide) && el('p', { class: 'discret aide' }, texteCarte(enonce.aide || carte.aide)),
       el('button', { type: 'button', class: 'bouton principal bloc grand', onclick: afficher }, 'Suivant'));
     toucheEcran = (e) => {
       if (e.key === ' ' || e.key === 'Enter') {
@@ -5853,26 +7654,43 @@ function formatQcm(carte, enonce, element, panneau) {
 function formatSaisie(carte, enonce, element, panneau) {
   const attenduNombre = enonce.nombre !== undefined ? enonce.nombre : carte.nombre;
   const attenduTexte = enonce.saisie || carte.saisie || [];
+  const tolerance = enonce.tolerance ?? carte.tolerance;
+  const scientifique = enonce.ecritureScientifique ?? carte.ecritureScientifique;
+  // Une unité attendue : toute écriture équivalente est juste (J·mol⁻¹·K⁻¹ = Pa·m³·mol⁻¹·K⁻¹).
+  const uniteAttendue = enonce.uniteAttendue ?? carte.uniteAttendue;
+  const basesSeules = enonce.basesSeules ?? carte.basesSeules;
+  // Le pavé décimal n'a ni « ^ » ni « × » : clavier complet dès qu'une puissance de dix est probable.
+  const puissance = scientifique || (attenduNombre !== undefined && attenduNombre !== 0
+    && (Math.abs(attenduNombre) < 1e-3 || Math.abs(attenduNombre) >= 1e6));
   const champSaisie = el('input', {
     type: 'text',
-    inputmode: attenduNombre !== undefined ? 'decimal' : 'text',
+    inputmode: attenduNombre !== undefined && !puissance ? 'decimal' : 'text',
     autocomplete: 'off',
     autocapitalize: 'off',
     spellcheck: 'false',
     'aria-label': 'Votre réponse',
   });
-  const unite = carte.unite ? el('span', { class: 'unite', text: carte.unite }) : null;
+  const unite = (enonce.unite || carte.unite) ? el('span', { class: 'unite', text: enonce.unite || carte.unite }) : null;
   const suite = el('div', { class: 'pile' });
 
   const verifier = async () => {
-    const saisie = champSaisie.value;
+    // « 2 500 m » quand l'unité est déjà affichée : on ne compte pas l'unité retapée.
+    const uniteAffichee = enonce.unite || carte.unite;
+    const saisie = uniteAffichee && champSaisie.value.trim().endsWith(uniteAffichee)
+      ? champSaisie.value.trim().slice(0, -uniteAffichee.length)
+      : champSaisie.value;
     if (!saisie.trim()) {
       champSaisie.focus();
       return;
     }
-    const reussi = attenduNombre !== undefined
-      ? memeNombre(nombreSaisi(saisie), attenduNombre)
-      : reponseAcceptee(saisie, [carte.reponse, ...attenduTexte]);
+    let reussi;
+    if (uniteAttendue) {
+      reussi = ([].concat(uniteAttendue).some((u) => memeUnite(saisie, u)) && (!basesSeules || enUnitesDeBase(saisie)))
+        || reponseAcceptee(saisie, attenduTexte);
+    }
+    else if (attenduNombre !== undefined) {
+      reussi = memeNombre(nombreSaisi(saisie), attenduNombre, tolerance) && (!scientifique || estEcritureScientifique(saisie));
+    } else reussi = reponseAcceptee(saisie, [enonce.reponse, ...attenduTexte]);
     champSaisie.disabled = true;
     champSaisie.classList.add(reussi ? 'juste' : 'faux');
     formulaire.querySelector('button').disabled = true;
@@ -5892,8 +7710,10 @@ function formatSaisie(carte, enonce, element, panneau) {
         },
       }, 'Ma réponse était juste'));
     }
+    const seulementForme = !reussi && scientifique && memeNombre(nombreSaisi(saisie), attenduNombre, tolerance);
     suite.replaceChildren(
-      el('p', { class: 'verdict', text: reussi ? 'Bonne réponse' : 'Réponse attendue' }),
+      el('p', { class: 'verdict', text: reussi ? 'Bonne réponse'
+        : seulementForme ? 'Valeur juste, mais pas en écriture scientifique (a × 10ⁿ, 1 ⩽ a < 10)' : 'Réponse attendue' }),
       blocReponse(carte, enonce),
       actions);
     toucheEcran = (e) => {
@@ -5915,6 +7735,42 @@ function formatSaisie(carte, enonce, element, panneau) {
   formulaire.append(barreSymboles(formulaire, { compacte: true }));
   panneau.append(formulaire, suite);
   champSaisie.focus();
+}
+
+/* Format 4 : une affirmation, vraie ou fausse. */
+function formatVraiFaux(carte, enonce, element, panneau) {
+  const suite = el('div', { class: 'pile' });
+  let repondu = false;
+  const choisir = async (choix) => {
+    if (repondu) return;
+    repondu = true;
+    const reussi = choix === Boolean(enonce.vrai);
+    for (const b of rangee.children) {
+      b.disabled = true;
+      if ((b.dataset.choix === 'vrai') === Boolean(enonce.vrai)) b.classList.add('juste');
+      else if ((b.dataset.choix === 'vrai') === choix) b.classList.add('faux');
+    }
+    toucheEcran = null;
+    await SessionContenu.repondre(reussi);
+    suite.replaceChildren(
+      el('p', { class: 'verdict', text: reussi ? 'Bonne réponse' : `Non : c’était ${enonce.vrai ? 'vrai' : 'faux'}` }),
+      blocReponse(carte, enonce),
+      el('button', { type: 'button', class: 'bouton principal bloc grand', onclick: afficher }, 'Suivant'));
+    toucheEcran = (e) => {
+      if (e.key === ' ' || e.key === 'Enter') {
+        e.preventDefault();
+        afficher();
+      }
+    };
+  };
+  const rangee = el('div', { class: 'choix vrai-faux' },
+    el('button', { type: 'button', class: 'bouton grand', 'data-choix': 'vrai', onclick: () => choisir(true) }, 'Vrai'),
+    el('button', { type: 'button', class: 'bouton grand', 'data-choix': 'faux', onclick: () => choisir(false) }, 'Faux'));
+  panneau.append(rangee, suite);
+  toucheEcran = (e) => {
+    if (e.key === 'v' || e.key === '1') choisir(true);
+    if (e.key === 'f' || e.key === '2') choisir(false);
+  };
 }
 
 /**
@@ -5941,11 +7797,41 @@ async function corrigerDerniereReponse() {
 
 /* ---------- Fin de série ---------- */
 
+/** Fin d'un test de positionnement : le niveau s'ouvre, ou on dit ce qui manque. */
+async function rendreFinDeTest(zone) {
+  const s = SessionContenu.active;
+  const paquet = s.paquets[0];
+  const index = paquet.sections.findIndex((section) => section.cle === s.section);
+  // Noté une seule fois, même si l'écran est redessiné.
+  if (!s.bilanTest) s.bilanTest = await Niveaux.terminerTest(paquet, index, s.resultats, s.jour);
+  const { reussies, total, ouvert } = s.bilanTest;
+  const niveau = paquet.sections[index];
+  definirTitre(ouvert ? 'Niveau débloqué' : 'Test terminé');
+  zone.append(el('div', { class: 'pile' },
+    el('div', { class: 'chiffres' }, chiffre(`${reussies} / ${total}`, 'bonnes réponses')),
+    el('div', { class: ouvert ? 'panneau pile' : 'alerte pile' },
+      el('p', {}, el('strong', { text: ouvert ? `${niveau.titre} est ouvert.` : `${niveau.titre} reste fermé.` })),
+      el('p', { text: ouvert
+        ? 'Les cartes réussies y entrent directement en boîte 3 ; les autres arriveront dans tes séances, '
+          + 'avec celles des niveaux précédents.'
+        : `Il fallait ${REUSSITE_TEST_NIVEAU} bonnes réponses sur ${TAILLE_TEST_NIVEAU}. Continue les séances : `
+          + 'le niveau s’ouvrira de lui-même quand le précédent sera maîtrisé. Nouvel essai possible demain.' })),
+    el('button', {
+      type: 'button',
+      class: 'bouton principal bloc grand',
+      onclick: () => {
+        SessionContenu.arreter();
+        aller('paquet', paquet.cle);
+      },
+    }, 'Retour au paquet')));
+}
+
 function rendreFinDeSerieContenu(zone) {
   const s = SessionContenu.active;
   document.body.classList.remove('plein');
-  definirTitre('Série terminée');
   toucheEcran = null;
+  if (s.type === 'test') return rendreFinDeTest(zone);
+  definirTitre('Série terminée');
 
   const reussies = s.resultats.filter((r) => r.reussi).length;
   const ratees = s.resultats.filter((r) => !r.reussi);
@@ -7867,7 +9753,7 @@ const ModeLocal = {
 /** Recharge tout ce qui dépend du dépôt (appareil ou compte). */
 async function rechargerDonnees() {
   await Promise.all([Profil.charger(), Progression.charger(), SuiviContenu.charger(), Journal.charger(),
-    ReglagesPaquet.charger(), Bibliotheque.charger(), Objectifs.charger()]);
+    ReglagesPaquet.charger(), Bibliotheque.charger(), Objectifs.charger(), Niveaux.charger()]);
   Perso.inscrire();
 }
 
@@ -8195,8 +10081,52 @@ function tuilePaquet(paquet) {
       el('span', { class: 'badges' },
         el('span', { class: 'badge', text: etiquetteOrigine(paquet) }),
         el('span', { class: 'badge', text: pluriel(paquet.cartes.length, 'carte') }),
+        Niveaux.actif(paquet) && el('span', { class: 'badge accent',
+          text: `Niveau ${Niveaux.ouvert(paquet) + 1} / ${paquet.sections.length}` }),
         badgeEvaluation(paquet))),
     paquet.cartes.length ? barreCompartiments(repartition) : null);
+}
+
+/** Les niveaux d'un paquet à niveaux : ouverts, en cours, fermés, et la part maîtrisée de chacun. */
+function barreNiveaux(paquet) {
+  const detail = Niveaux.detail(paquet);
+  const ouvert = Niveaux.ouvert(paquet, detail);
+  return el('ol', { class: 'niveaux' }, detail.map((niveau, i) => {
+    const etat = i > ouvert ? 'ferme' : niveau.maitrise >= SEUIL_NIVEAU ? 'maitrise' : 'en-cours';
+    const pourcent = Math.round(niveau.maitrise * 100);
+    return el('li', { class: `niveau ${etat}` },
+      el('span', { class: 'niveau-icone', 'aria-hidden': 'true', text: etat === 'ferme' ? '🔒' : etat === 'maitrise' ? '✓' : '▶' }),
+      el('span', { class: 'niveau-texte' },
+        el('strong', { text: niveau.section.titre }),
+        el('span', { class: 'discret petit', text: etat === 'ferme'
+          ? `${pluriel(niveau.total, 'carte')} · s’ouvre à ${Math.round(SEUIL_NIVEAU * 100)} % du niveau précédent, ou par le test`
+          : `${pourcent} % maîtrisé · ${niveau.vues} / ${pluriel(niveau.total, 'carte vue', 'cartes vues')}` })),
+      etat !== 'ferme' && el('span', { class: 'niveau-jauge', role: 'img', 'aria-label': `${pourcent} % maîtrisé` },
+        el('span', { style: `width:${pourcent}%` })));
+  }));
+}
+
+/** Bloc des niveaux sur l'écran d'un paquet : barre, garde-fou, test de positionnement. */
+function blocNiveaux(paquet) {
+  const bloc = el('section', { class: 'pile' }, el('h2', { text: 'Niveaux' }), barreNiveaux(paquet));
+  const consolider = Niveaux.aConsolider(paquet);
+  if (consolider) {
+    bloc.append(el('div', { class: 'alerte' }, el('strong', { text: `Consolide d’abord « ${consolider.section.titre} ». ` }),
+      'Trop de ses cartes sont retombées en boîte 1 : les nouvelles cartes du niveau suivant attendent qu’elles remontent.'));
+  }
+  const test = Niveaux.testPossible(paquet);
+  if (test !== null) {
+    bloc.append(el('div', { class: 'panneau pile serree' },
+      el('p', {}, el('strong', { text: `Déjà à l’aise ? Passe le test du ${paquet.sections[test].titre.split(' · ')[0].toLowerCase()}.` })),
+      el('p', { class: 'discret', text: `${TAILLE_TEST_NIVEAU} questions, sans effet sur tes boîtes. ${REUSSITE_TEST_NIVEAU} bonnes réponses `
+        + 'ouvrent le niveau tout de suite ; tes bases continuent d’arriver dans tes séances. Un essai par jour.' }),
+      el('button', {
+        type: 'button',
+        class: 'bouton accent',
+        onclick: () => lancerContenu({ paquet, section: paquet.sections[test].cle, format: paquet.formatFixe || Profil.donnees.format, type: 'test' }),
+      }, 'Passer le test de positionnement')));
+  }
+  return bloc;
 }
 
 /** Paquets regroupés par thème, thèmes dans l'ordre alphabétique. */
@@ -8294,10 +10224,12 @@ Ecrans.paquet = {
       const bilan = SessionContenu.bilan(paquet, section, jour);
       const repartition = Progression.repartition(cartes);
       const aFaire = bilan.dues.length + bilan.nouvellesDuJour;
-      const formats = Paquets.formatsCommuns(cartes);
+      // Un paquet qui impose son format (chaque carte dans le sien) n'en propose pas d'autre.
+      const formats = paquet.formatFixe ? [] : Paquets.formatsCommuns(cartes);
       if (formats.length && !formats.includes(Profil.donnees.format)) {
         Profil.enregistrer({ format: formats[0] });
       }
+      const format = () => paquet.formatFixe || Profil.donnees.format;
 
       if (!cartes.length) {
         infos.replaceChildren(el('div', { class: 'panneau pile vide' },
@@ -8324,7 +10256,7 @@ Ecrans.paquet = {
           el('button', {
             type: 'button',
             class: 'bouton principal bloc grand',
-            onclick: () => lancerContenu({ paquet, section, format: Profil.donnees.format, type: 'jour' }),
+            onclick: () => lancerContenu({ paquet, section, format: format(), type: 'jour' }),
           }, 'Commencer la séance du jour'));
       } else {
         infos.append(el('div', { class: 'panneau' },
@@ -8335,7 +10267,7 @@ Ecrans.paquet = {
         el('button', {
           type: 'button',
           class: `bouton bloc grand ${aFaire ? '' : 'principal'}`,
-          onclick: () => lancerContenu({ paquet, section, format: Profil.donnees.format, type: 'libre' }),
+          onclick: () => lancerContenu({ paquet, section, format: format(), type: 'libre' }),
         }, 'S’entraîner librement'));
     };
 
@@ -8346,7 +10278,8 @@ Ecrans.paquet = {
     pile.append(badges);
     if (paquet.resume) pile.append(el('p', { text: paquet.resume }));
 
-    if (paquet.sections.length > 1) {
+    // Paquet à niveaux : pas de choix de section, la barre des niveaux suit la séance.
+    if (!Niveaux.actif(paquet) && paquet.sections.length > 1) {
       const sections = [[null, 'Tout le paquet'], ...paquet.sections.map((s) => [s.cle, s.titre])];
       pile.append(
         el('h2', { text: 'Sélection' }),
@@ -8357,6 +10290,7 @@ Ecrans.paquet = {
     }
     pile.append(infos);
     majInfos();
+    if (Niveaux.actif(paquet)) pile.append(blocNiveaux(paquet));
 
     /* Gestion */
     const gestion = el('section', { class: 'panneau pile' }, el('h2', { text: 'Organiser' }));
@@ -8443,7 +10377,7 @@ function ligneCatalogue(paquet) {
                 : Paquets.get(cle).cartes;
               apercu.replaceChildren(el('dl', { class: 'rappel-cartes' }, cartes.slice(0, 8).flatMap((c) => [
                 el('dt', {}, texteCarte(c.question || (c.masque ? 'Photo à trous' : 'Photo'))),
-                el('dd', {}, texteCarte(c.reponse || '(photo)')),
+                el('dd', {}, texteCarte(c.reponse || (c.generer ? 'valeurs tirées au hasard à chaque passage' : '(photo)'))),
               ])), cartes.length > 8 && el('p', { class: 'discret', text: `… et ${cartes.length - 8} autres.` }));
             } catch (e) {
               apercu.replaceChildren(el('p', { class: 'erreur', text: messageNuage(e) }));

@@ -22,7 +22,7 @@ const ModeLocal = {
 /** Recharge tout ce qui dépend du dépôt (appareil ou compte). */
 async function rechargerDonnees() {
   await Promise.all([Profil.charger(), Progression.charger(), SuiviContenu.charger(), Journal.charger(),
-    ReglagesPaquet.charger(), Bibliotheque.charger(), Objectifs.charger()]);
+    ReglagesPaquet.charger(), Bibliotheque.charger(), Objectifs.charger(), Niveaux.charger()]);
   Perso.inscrire();
 }
 

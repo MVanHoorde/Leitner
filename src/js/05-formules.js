@@ -266,6 +266,8 @@ function normaliserReponse(texte) {
   return String(texte ?? '')
     // « \alpha » vaut « α » ; « \frac{1}{2} » se compare comme « 1/2 ».
     .replace(/\\([A-Za-z]+)/g, (tout, nom) => COMMANDES_SYMBOLES[nom] || '')
+    // Le signe micro du clavier (µ) et la lettre grecque (μ) sont le même préfixe.
+    .replace(/µ/g, 'μ')
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
@@ -280,31 +282,153 @@ function reponseAcceptee(saisie, acceptees) {
   return acceptees.some((attendue) => normaliserReponse(attendue) === propre);
 }
 
+const EXPOSANTS_UNICODE = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', '⁻': '-', '⁺': '+' };
+
 /**
- * Lit un nombre écrit à la française : virgule décimale, espaces d'affichage,
- * puissances de dix notées « e-3 », « ×10^-3 » ou « 10^-3 ».
+ * Ramène une saisie numérique à la forme « 6.2e4 » : virgule décimale,
+ * espaces d'affichage, puissances de dix notées « e-3 », « ×10^-3 »,
+ * « 10^{-3} » (barre de formules), « 10⁻³ » ou « 2,5.10^3 » (point des copies).
  */
-function nombreSaisi(texte) {
+function nettoyerNombre(texte) {
   let propre = String(texte ?? '')
     .trim()
     .toLowerCase()
     .replace(/\s/g, '')
+    .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+/g, (exposant) => `^${[...exposant].map((c) => EXPOSANTS_UNICODE[c]).join('')}`)
+    .replace(/[{}()]/g, '')
     .replace(/−/g, '-')
+    .replace(/[.·]10\^/g, 'e')
     .replace(/,/g, '.')
     // « ×10 » et « 10^ » marquent une puissance de dix ; « 100 » reste un nombre.
     .replace(/[x×*]10\^?/g, 'e')
     .replace(/10\^/g, 'e')
     .replace(/\^/g, '');
   if (propre.startsWith('e')) propre = `1${propre}`;
+  return propre;
+}
+
+function nombreSaisi(texte) {
+  const propre = nettoyerNombre(texte);
   if (!/^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/.test(propre)) return null;
   const valeur = Number(propre);
   return Number.isFinite(valeur) ? valeur : null;
 }
 
-/** Égalité numérique tolérante : la saisie peut être arrondie à la marge. */
-function memeNombre(saisi, attendu) {
+/** Vrai si la saisie est en écriture scientifique : a × 10ⁿ avec 1 ⩽ a < 10. */
+function estEcritureScientifique(texte) {
+  return /^[-+]?[1-9](\.\d+)?e[-+]?\d+$/.test(nettoyerNombre(texte));
+}
+
+/**
+ * Égalité numérique tolérante : la saisie peut être arrondie à la marge.
+ * tolerance : écart relatif admis, plus large pour un ordre de grandeur ou un
+ * calcul de tête approché. Pas de marge absolue, sauf pour zéro : à 10⁻¹⁹ J,
+ * elle accepterait n'importe quoi.
+ */
+function memeNombre(saisi, attendu, tolerance = 1e-6) {
   if (saisi === null) return false;
-  return Math.abs(saisi - attendu) <= Math.max(Math.abs(attendu) * 1e-6, 1e-12);
+  if (attendu === 0) return Math.abs(saisi) <= 1e-12;
+  return Math.abs(saisi - attendu) <= Math.abs(attendu) * tolerance;
+}
+
+/* ---------- Unités : « J·mol⁻¹·K⁻¹ » et « kg.m^2/(s^2.mol.K) » sont la même ---------- */
+
+/** Unités connues : [facteur vers le SI, { unité de base: exposant }]. */
+const UNITES_SI = {
+  m: [1, { m: 1 }], g: [1e-3, { kg: 1 }], s: [1, { s: 1 }], A: [1, { A: 1 }], K: [1, { K: 1 }],
+  mol: [1, { mol: 1 }], cd: [1, { cd: 1 }],
+  N: [1, { kg: 1, m: 1, s: -2 }], J: [1, { kg: 1, m: 2, s: -2 }], W: [1, { kg: 1, m: 2, s: -3 }],
+  Pa: [1, { kg: 1, m: -1, s: -2 }], C: [1, { A: 1, s: 1 }], V: [1, { kg: 1, m: 2, s: -3, A: -1 }],
+  'Ω': [1, { kg: 1, m: 2, s: -3, A: -2 }], ohm: [1, { kg: 1, m: 2, s: -3, A: -2 }],
+  S: [1, { kg: -1, m: -2, s: 3, A: 2 }], F: [1, { kg: -1, m: -2, s: 4, A: 2 }], T: [1, { kg: 1, s: -2, A: -1 }],
+  Hz: [1, { s: -1 }], Bq: [1, { s: -1 }], L: [1e-3, { m: 3 }], l: [1e-3, { m: 3 }],
+  min: [60, { s: 1 }], h: [3600, { s: 1 }], t: [1e3, { kg: 1 }], bar: [1e5, { kg: 1, m: -1, s: -2 }],
+  eV: [1.602176634e-19, { kg: 1, m: 2, s: -2 }], Wh: [3600, { kg: 1, m: 2, s: -2 }],
+  // Une différence de températures vaut autant en °C qu'en K.
+  '°C': [1, { K: 1 }], degC: [1, { K: 1 }], rad: [1, {}], sr: [1, {}],
+};
+
+const PREFIXES_UNITES = { G: 1e9, M: 1e6, k: 1e3, h: 1e2, da: 1e1, d: 1e-1, c: 1e-2, m: 1e-3, 'µ': 1e-6, 'μ': 1e-6, u: 1e-6, n: 1e-9, p: 1e-12 };
+
+/** Un symbole, avec ou sans préfixe : « mol », « kJ », « µm », « hPa ». */
+function symboleUnite(symbole) {
+  if (UNITES_SI[symbole]) return UNITES_SI[symbole];
+  for (const longueur of [2, 1]) {
+    const prefixe = symbole.slice(0, longueur);
+    const base = UNITES_SI[symbole.slice(longueur)];
+    if (PREFIXES_UNITES[prefixe] && base && symbole.length > longueur) return [PREFIXES_UNITES[prefixe] * base[0], base[1]];
+  }
+  return null;
+}
+
+/**
+ * Lit une unité composée : séparateurs « · . * × » ou espaces, « / » pour
+ * diviser le facteur suivant (ou un groupe entre parenthèses), exposants
+ * « ^-2 », « -2 », « ⁻² » ou « ^{-2} ». Renvoie { facteur, dims } ou null.
+ */
+function lireUnite(texte) {
+  const source = String(texte ?? '')
+    .replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺]+/g, (exposant) => `^${[...exposant].map((c) => EXPOSANTS_UNICODE[c]).join('')}`)
+    .replace(/[{}]/g, '')
+    .replace(/−/g, '-')
+    .trim();
+  let i = 0;
+  const exposant = () => {
+    const m = /^\^?\s*([-+]?\d+)/.exec(source.slice(i));
+    if (!m) return 1;
+    i += m[0].length;
+    return Number(m[1]);
+  };
+  const produit = () => {
+    const resultat = { facteur: 1, dims: {} };
+    let signe = 1;
+    while (i < source.length && source[i] !== ')') {
+      const c = source[i];
+      if (/[\s·.*×]/.test(c)) { i += 1; continue; }
+      if (c === '/') { signe = -1; i += 1; continue; }
+      let terme;
+      if (c === '(') {
+        i += 1;
+        terme = produit();
+        if (!terme || source[i] !== ')') return null;
+        i += 1;
+      } else if (c === '1' && !/^\d/.test(source.slice(i + 1))) {
+        i += 1;
+        terme = { facteur: 1, dims: {} };
+      } else {
+        const m = /^(°C|[A-Za-zµμΩ]+)/.exec(source.slice(i));
+        if (!m) return null;
+        const connu = symboleUnite(m[0]);
+        if (!connu) return null;
+        i += m[0].length;
+        terme = { facteur: connu[0], dims: connu[1] };
+      }
+      const puissance = exposant() * signe;
+      resultat.facteur *= terme.facteur ** puissance;
+      for (const [base, n] of Object.entries(terme.dims)) resultat.dims[base] = (resultat.dims[base] || 0) + n * puissance;
+      signe = 1;
+    }
+    return resultat;
+  };
+  const resultat = produit();
+  if (!resultat || i < source.length || !source) return null;
+  return resultat;
+}
+
+/** Vrai si les deux écritures désignent la même unité (préfixes compris). */
+function memeUnite(saisie, attendue) {
+  const a = lireUnite(saisie);
+  const b = lireUnite(attendue);
+  if (!a || !b) return false;
+  const bases = new Set([...Object.keys(a.dims), ...Object.keys(b.dims)]);
+  for (const base of bases) if ((a.dims[base] || 0) !== (b.dims[base] || 0)) return false;
+  return Math.abs(a.facteur / b.facteur - 1) < 1e-9;
+}
+
+/** Vrai si l'écriture n'emploie que les sept unités de base du SI (kg et non g, pas de N ni de J). */
+function enUnitesDeBase(texte) {
+  const symboles = String(texte ?? '').match(/[A-Za-zµμΩ°]+/g) || [];
+  return symboles.length > 0 && symboles.every((s) => ['kg', 'm', 's', 'A', 'K', 'mol', 'cd'].includes(s));
 }
 
 /** Écriture française d'un nombre, sans notation scientifique parasite. */

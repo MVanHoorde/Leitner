@@ -19,7 +19,21 @@
  *   unite         unité rappelée à côté du champ de saisie
  *   distracteurs  [] fausses réponses du QCM ; sinon, prises dans la section
  *   qcm: false    interdit le QCM pour cette carte
- *   generer()     carte générative : renvoie { question, reponse, nombre|saisie }
+ *   generer()     carte générative : renvoie { question, reponse, nombre|saisie },
+ *                 et selon son format distracteurs (QCM), vrai (vrai/faux), aide
+ *   vrai          vrai/faux : l'énoncé est une affirmation, reponse l'explique
+ *   tolerance     écart relatif admis pour une réponse numérique approchée
+ *   ecritureScientifique  la réponse doit être écrite a × 10ⁿ, pas seulement juste
+ *   uniteAttendue une unité (« J·mol^{-1}·K^{-1} ») : toute écriture équivalente est
+ *                 acceptée, préfixes compris (ou une liste d'unités) ; saisie[] ajoute
+ *                 des réponses en toutes lettres
+ *   basesSeules   avec uniteAttendue : la réponse n'emploie que kg, m, s, A, K, mol, cd
+ *   consigne      consigne propre à la carte
+ *
+ * Une carte peut aussi fixer ses formats (formats: ['vraifaux']…) ; un paquet
+ * qui déclare formatFixe impose ce format de séance (« mixte » : chaque carte
+ * dans le sien). Un paquet « progression: 'niveaux' » ouvre ses sections une
+ * à une (37-niveaux.js).
  *
  * Les cartes créées dans l'application (36-bibliotheque.js) ajoutent :
  *   formats       [] formats permis, à la place de la déduction ci-dessous
@@ -33,6 +47,7 @@ const FORMATS = {
   retournement: 'Carte retournée',
   qcm: 'QCM',
   saisie: 'À écrire',
+  vraifaux: 'Vrai ou faux',
 };
 
 /** Rythme par défaut des paquets de contenu : plus étalé que le trombinoscope,
@@ -250,6 +265,8 @@ const SessionContenu = {
 
   /** Situation du jour pour une sélection de cartes. */
   bilan(paquet, section, jour = Dates.aujourdhui()) {
+    // Paquet à niveaux : seulement les niveaux ouverts, nouvelles dosées par niveau.
+    if (Niveaux.actif(paquet) && !section) return Niveaux.bilan(paquet, jour);
     const cartes = Paquets.cartesDe(paquet, section);
     return Leitner.bilanListe(Progression.etats(cartes), jour, SuiviContenu.quotaNouvelles(paquet, jour));
   },
@@ -290,6 +307,16 @@ const SessionContenu = {
     const aNoter = new Set([...bilan.dues, ...bilan.nouvelles.slice(0, bilan.nouvellesDuJour)].map((c) => c.id));
 
     let ids;
+    if (s.type === 'test') {
+      // Test de positionnement : un tirage dans le niveau visé, sans effet sur Leitner.
+      if (s.lot > 0) return 0;
+      ids = melanger(Paquets.cartesDe(s.paquets[0], s.section).map((c) => c.id)).slice(0, TAILLE_TEST_NIVEAU);
+      s.file = ids.map((id) => this.preparer(id, false));
+      s.position = 0;
+      s.resultats = [];
+      s.lot += 1;
+      return ids.length;
+    }
     if (s.type === 'jour') {
       ids = [...aNoter].filter((id) => !s.vues.has(id)).slice(0, taille);
     } else {
@@ -316,9 +343,10 @@ const SessionContenu = {
   preparer(id, compte, reprises = 0) {
     const carte = Paquets.index.get(id);
     const formats = Paquets.formatsDe(carte);
-    const format = this.active.format === 'mixte'
+    const voulu = Paquets.get(carte.paquet).formatFixe || this.active.format;
+    const format = voulu === 'mixte'
       ? formats[Math.floor(Math.random() * formats.length)]
-      : (formats.includes(this.active.format) ? this.active.format : 'retournement');
+      : (formats.includes(voulu) ? voulu : 'retournement');
     return {
       id,
       compte,
@@ -339,6 +367,7 @@ const SessionContenu = {
     const s = this.active;
     if (!s) return 0;
     const bilan = this.bilanActif();
+    if (s.type === 'test') return 0;
     if (s.type === 'jour') {
       const aNoter = [...bilan.dues, ...bilan.nouvelles.slice(0, bilan.nouvellesDuJour)];
       return aNoter.filter((c) => !s.vues.has(c.id)).length;
@@ -368,10 +397,14 @@ const SessionContenu = {
         const paquet = Paquets.get(carte.paquet);
         await Progression.enregistrer(appliquerReglages(etat, reussi, s.jour, paquet, note));
         if (nouvelle) await SuiviContenu.noterNouvelles(paquet.cle, s.jour);
+        if (Niveaux.actif(paquet)) {
+          const ouvert = await Niveaux.verifier(paquet);
+          if (ouvert) annoncer(`Bravo : ${ouvert.titre} débloqué !`);
+        }
       }
     }
-    // Une carte ratée revient en fin de lot, sans nouvelle notation.
-    if (!reussi && element.reprises < MAX_REPRISES) {
+    // Une carte ratée revient en fin de lot, sans nouvelle notation (pas pendant un test).
+    if (!reussi && element.reprises < MAX_REPRISES && s.type !== 'test') {
       s.file.push(this.preparer(element.id, false, element.reprises + 1));
     }
     s.position += 1;
