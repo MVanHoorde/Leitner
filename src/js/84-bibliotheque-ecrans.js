@@ -9,8 +9,15 @@ function etiquetteOrigine(paquet) {
   return 'Livré avec l’appli';
 }
 
+/** Prochaine évaluation : celle du paquet, ou d'un objectif qui le contient. */
 function badgeEvaluation(paquet) {
-  const { dateEvaluation } = ReglagesPaquet.de(paquet);
+  const jour = Dates.aujourdhui();
+  const [dateEvaluation] = [ReglagesPaquet.de(paquet).dateEvaluation, ...Objectifs.datesPour(paquet.cle, jour)]
+    .filter((d) => d && d >= jour).sort();
+  return badgeDate(dateEvaluation);
+}
+
+function badgeDate(dateEvaluation) {
   if (!dateEvaluation) return null;
   const jours = Dates.ecart(Dates.aujourdhui(), dateEvaluation);
   if (jours < 0) return null;
@@ -85,7 +92,11 @@ Ecrans.paquets = {
         '+ Nouveau paquet'));
     }
     actions.append(el('button', { type: 'button', class: 'bouton', onclick: () => aller('catalogue') }, 'Bibliothèque du prof'));
-    pile.append(actions);
+    if (paquets.length > 1) {
+      actions.append(el('button', { type: 'button', class: 'bouton', onclick: () => aller('editer-objectif', 'nouveau') },
+        '+ Objectif (bac blanc, contrôle…)'));
+    }
+    pile.append(actions, blocObjectifs());
 
     if (!paquets.length) {
       pile.append(el('div', { class: 'panneau pile vide' },

@@ -42,6 +42,22 @@ QCM (trois pièges choisis), réponse à écrire, photo à trous (une carte par 
 cachée). Chaque face peut porter une photo. « Coller une liste » crée des cartes
 en lot (`question ; réponse` par ligne).
 
+**Objectifs** (`src/js/38-objectifs.js`, écrans dans `88-objectifs-ecrans.js`) :
+plusieurs paquets révisés ensemble, par exemple tous les chapitres d'un bac
+blanc. Les cartes sont mélangées, mais chacune est notée selon les réglages de
+son paquet et compte dans son quota ; la date d'évaluation de l'objectif vaut
+pour tous ses paquets. Rangés dans le profil (clé `objectifs`), sans table.
+
+**Formules** (`src/js/05-formules.js`) : syntaxe proche de LaTeX, dessinée en
+HTML/CSS sans bibliothèque — `^{…}`, `_{…}`, `\frac{a}{b}`, `\sqrt{x}`,
+`\sqrt[n]{x}`, `\bar{AB}`, `\vec{u}`, `\sum_{i=1}^{n}`, `\prod`, `\int`,
+`\lim`, et les noms grecs (`\alpha`…). La barre de formules
+(`src/js/87-symboles.js`) les insère et affiche le rendu en direct.
+Entre `$…$` (ou `$$…$$` pour une formule centrée), le LaTeX complet passe par
+KaTeX 0.18.9 et son extension mhchem (`\ce{…}`), embarqués depuis
+`vendor/katex/` (MIT) avec leurs polices woff2 en data: ; `\$` écrit un dollar.
+L'onglet « ? Aide » de la barre sert de mode d'emploi aux élèves.
+
 Avec une date d'évaluation, aucune carte n'est repoussée au-delà de la veille,
 et le quota de nouvelles cartes monte si besoin pour que tout ait été vu trois
 jours avant.

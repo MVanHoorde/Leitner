@@ -1,9 +1,169 @@
-/* Formules chimiques et comparaison des réponses écrites.
+/* Formules et comparaison des réponses écrites.
  *
  * Les paquets écrivent les formules en texte simple (« CH3-CH2-OH »,
- * « SO4^2- ») ; l'affichage est reconstruit ici avec indices et exposants,
- * sans bibliothèque et sans requête réseau.
+ * « SO4^2- », « \frac{m}{V} ») ; l'affichage est reconstruit ici en HTML et
+ * CSS, sans requête réseau. Cette notation simplifiée couvre l'essentiel et
+ * reste lisible même tapée à la main. Pour tout le reste, le LaTeX entre
+ * « $…$ » passe par KaTeX, embarqué dans le fichier (vendor/katex).
  */
+
+/** Commandes qui ne donnent qu'un caractère : « \alpha », « \to »… */
+const COMMANDES_SYMBOLES = {
+  alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', epsilon: 'ε', varepsilon: 'ε', zeta: 'ζ', eta: 'η',
+  theta: 'θ', lambda: 'λ', mu: 'μ', nu: 'ν', xi: 'ξ', pi: 'π', rho: 'ρ', sigma: 'σ', tau: 'τ',
+  phi: 'φ', varphi: 'φ', chi: 'χ', psi: 'ψ', omega: 'ω',
+  Gamma: 'Γ', Delta: 'Δ', Theta: 'Θ', Lambda: 'Λ', Pi: 'Π', Sigma: 'Σ', Phi: 'Φ', Psi: 'Ψ', Omega: 'Ω',
+  times: '×', div: '÷', cdot: '·', pm: '±', approx: '≈', neq: '≠', leq: '≤', geq: '≥', le: '≤', ge: '≥',
+  infty: '∞', to: '→', partial: '∂', nabla: '∇', hbar: 'ℏ', propto: '∝', in: '∈', equiv: '≡',
+};
+
+/**
+ * LaTeX complet entre « $…$ » (« $$…$$ » : formule centrée), dessiné par
+ * KaTeX, embarqué avec son extension de chimie mhchem (\ce{…}). Une faute de
+ * frappe ne casse rien : KaTeX affiche alors la source en rouge.
+ */
+function formuleLatex(source, centree) {
+  const noeud = el('span', { class: `latex${centree ? ' latex-centree' : ''}` });
+  if (typeof katex === 'undefined') {
+    noeud.textContent = source;
+    return noeud;
+  }
+  try {
+    katex.render(source, noeud, {
+      displayMode: centree,
+      throwOnError: false,
+      // Les élèves écrivent ce qu'ils veulent : ni liens, ni HTML, ni macros persistantes.
+      trust: false,
+      strict: 'ignore',
+      maxExpand: 500,
+      maxSize: 20,
+    });
+  } catch {
+    noeud.textContent = source;
+  }
+  return noeud;
+}
+
+/** Fin d'un « $…$ » ou « $$…$$ » ouvert en i, ou null s'il n'est pas refermé. */
+function lireLatex(texte, i) {
+  const centree = texte[i + 1] === '$';
+  const delimiteur = centree ? '$$' : '$';
+  let j = i + delimiteur.length;
+  while (j < texte.length) {
+    if (texte[j] === '\\') j += 2;
+    else if (texte.startsWith(delimiteur, j)) {
+      const source = texte.slice(i + delimiteur.length, j);
+      return source.trim() ? { source, centree, fin: j + delimiteur.length } : null;
+    } else j += 1;
+  }
+  return null;
+}
+
+/** Grands opérateurs : bornes dessus-dessous, sauf l'intégrale qui les porte à droite. */
+const GRANDS_OPERATEURS = { sum: '∑', prod: '∏', int: '∫', oint: '∮', lim: 'lim' };
+
+/**
+ * Groupe « {…} » commençant en position i, accolades imbriquées comprises,
+ * ou null s'il n'est pas refermé (texte tronqué : il reste affiché tel quel).
+ */
+function lireGroupe(texte, i) {
+  if (texte[i] !== '{') return null;
+  let profondeur = 0;
+  for (let j = i; j < texte.length; j += 1) {
+    if (texte[j] === '{') profondeur += 1;
+    else if (texte[j] === '}') {
+      profondeur -= 1;
+      if (!profondeur) return { contenu: texte.slice(i + 1, j), fin: j + 1 };
+    }
+  }
+  return null;
+}
+
+/** Argument d'une commande : un groupe, ou à défaut un seul caractère (\frac12). */
+function lireArgument(texte, i) {
+  while (texte[i] === ' ') i += 1;
+  if (texte[i] === '{') return lireGroupe(texte, i);
+  if (i < texte.length && !/[\\}^_]/.test(texte[i])) return { contenu: texte[i], fin: i + 1 };
+  return null;
+}
+
+/** Bornes « _{…} » et « ^{…} » d'un grand opérateur, dans un ordre quelconque. */
+function lireBornes(texte, i) {
+  const bornes = { bas: null, haut: null, fin: i };
+  for (let tour = 0; tour < 2; tour += 1) {
+    let j = bornes.fin;
+    while (texte[j] === ' ') j += 1;
+    const cle = texte[j] === '_' ? 'bas' : texte[j] === '^' ? 'haut' : null;
+    if (!cle || bornes[cle] !== null) break;
+    const argument = lireArgument(texte, j + 1);
+    if (!argument) break;
+    bornes[cle] = argument.contenu;
+    bornes.fin = argument.fin;
+  }
+  return bornes;
+}
+
+/** Trait du radical, étiré à la hauteur de ce qu'il couvre. */
+function signeRacine() {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 40 100');
+  svg.setAttribute('preserveAspectRatio', 'none');
+  svg.setAttribute('class', 'racine-signe');
+  svg.setAttribute('aria-hidden', 'true');
+  const trace = document.createElementNS(ns, 'path');
+  trace.setAttribute('d', 'M0 62 L9 56 L20 97 L38 2 L40 2');
+  trace.setAttribute('vector-effect', 'non-scaling-stroke');
+  svg.append(trace);
+  return svg;
+}
+
+/**
+ * \frac{a}{b}, \sqrt{x}, \sqrt[n]{x}, \bar{AB}, \vec{u}, \sum_{i=1}^{n}…
+ * Renvoie { noeud, fin }, ou null si la commande est incomplète.
+ */
+function structureFormule(nom, texte, i) {
+  const span = (classe, ...enfants) => el('span', { class: classe }, ...enfants);
+  if (nom === 'frac') {
+    const haut = lireArgument(texte, i);
+    const bas = haut && lireArgument(texte, haut.fin);
+    if (!bas) return null;
+    return { noeud: span('frac', span('frac-haut', rendreFormule(haut.contenu)), span('frac-bas', rendreFormule(bas.contenu))), fin: bas.fin };
+  }
+  if (nom === 'sqrt') {
+    let indice = null;
+    let j = i;
+    if (texte[j] === '[') {
+      const ferme = texte.indexOf(']', j);
+      if (ferme === -1) return null;
+      indice = texte.slice(j + 1, ferme);
+      j = ferme + 1;
+    }
+    const argument = lireArgument(texte, j);
+    if (!argument) return null;
+    return {
+      noeud: span('racine', indice && span('racine-indice', rendreFormule(indice)), signeRacine(),
+        span('racine-sous', rendreFormule(argument.contenu))),
+      fin: argument.fin,
+    };
+  }
+  if (nom === 'bar' || nom === 'overline' || nom === 'vec') {
+    const argument = lireArgument(texte, i);
+    if (!argument) return null;
+    return { noeud: span(nom === 'vec' ? 'vecteur' : 'barre', rendreFormule(argument.contenu)), fin: argument.fin };
+  }
+  if (GRANDS_OPERATEURS[nom]) {
+    const { bas, haut, fin } = lireBornes(texte, i);
+    const signe = GRANDS_OPERATEURS[nom];
+    const borne = (contenu) => contenu !== null && span('borne', rendreFormule(contenu));
+    if (nom === 'int' || nom === 'oint') {
+      return { noeud: span('integrale', span('integrale-signe', signe),
+        (bas !== null || haut !== null) && span('integrale-bornes', borne(haut) || span('borne', ''), borne(bas) || span('borne', ''))), fin };
+    }
+    return { noeud: span(`grand-op${nom === 'lim' ? ' lim' : ''}`, borne(haut), span('grand-op-signe', signe), borne(bas)), fin };
+  }
+  return null;
+}
 
 /**
  * Un chiffre qui suit une lettre ou une parenthèse fermante est un indice
@@ -12,27 +172,47 @@
  *
  * Pour les cartes écrites par les élèves : « ^{…} » et « _{…} » mettent
  * n'importe quel texte en exposant ou en indice (10^{-3}, C_{m}), et « _ »
- * seul met en indice le mot qui suit (v_0, E_c). La barre de symboles de
- * l'éditeur insère ces marques.
+ * seul met en indice le mot qui suit (v_0, E_c). Les commandes à barre
+ * oblique (\frac, \sqrt, \vec, \sum…) dessinent le reste. La barre de
+ * symboles de l'éditeur insère toutes ces marques.
+ *
+ * Renvoie une liste de nœuds et de textes ; chaque groupe est rendu de la
+ * même façon, si bien qu'une fraction peut loger sous une racine.
  */
-function formuleChimique(texte, classe = 'formule') {
-  const noeud = el('span', { class: classe });
+function rendreFormule(texte) {
+  const sortie = [];
   let tampon = '';
   const vider = () => {
-    if (tampon) noeud.append(tampon);
+    if (tampon) sortie.push(tampon);
     tampon = '';
-  };
-  /** Contenu d'un groupe « {…} » commençant en position i, ou null. */
-  const groupe = (i) => {
-    if (texte[i] !== '{') return null;
-    const fin = texte.indexOf('}', i + 1);
-    return fin === -1 ? null : { contenu: texte.slice(i + 1, fin), fin: fin + 1 };
   };
   for (let i = 0; i < texte.length; i += 1) {
     const caractere = texte[i];
-    if (caractere === '^' || caractere === '_') {
+    const latex = caractere === '$' && lireLatex(texte, i);
+    if (latex) {
+      vider();
+      sortie.push(formuleLatex(latex.source, latex.centree));
+      i = latex.fin - 1;
+    } else if (caractere === '\\' && texte[i + 1] === '$') {
+      // « \$ » : un dollar ordinaire.
+      tampon += '$';
+      i += 1;
+    } else if (caractere === '\\') {
+      const nom = (/^[A-Za-z]+/.exec(texte.slice(i + 1)) || [''])[0];
+      const structure = nom && structureFormule(nom, texte, i + 1 + nom.length);
+      if (structure) {
+        vider();
+        sortie.push(structure.noeud);
+        i = structure.fin - 1;
+      } else if (COMMANDES_SYMBOLES[nom]) {
+        tampon += COMMANDES_SYMBOLES[nom];
+        i += nom.length;
+      } else {
+        tampon += caractere;
+      }
+    } else if (caractere === '^' || caractere === '_') {
       const balise = caractere === '^' ? 'sup' : 'sub';
-      const g = groupe(i + 1);
+      const g = lireGroupe(texte, i + 1);
       let contenu;
       let fin;
       if (g) {
@@ -50,20 +230,30 @@ function formuleChimique(texte, classe = 'formule') {
         continue;
       }
       vider();
-      noeud.append(el(balise, { text: contenu.replace(/-/g, '−') }));
+      // Le tiret d'un exposant est un signe moins ; une commande n'en contient jamais.
+      sortie.push(el(balise, {}, rendreFormule(contenu.replace(/-/g, '−'))));
       i = fin - 1;
     } else if (/\d/.test(caractere) && i > 0 && /[A-Za-z)\]]/.test(texte[i - 1])) {
       let fin = i;
       while (fin < texte.length && /\d/.test(texte[fin])) fin += 1;
       vider();
-      noeud.append(el('sub', { text: texte.slice(i, fin) }));
+      sortie.push(el('sub', { text: texte.slice(i, fin) }));
       i = fin - 1;
     } else {
       tampon += caractere;
     }
   }
   vider();
-  return noeud;
+  return sortie;
+}
+
+function formuleChimique(texte, classe = 'formule') {
+  return el('span', { class: classe }, rendreFormule(texte));
+}
+
+/** Vrai si le texte porte une mise en forme que l'élève ne voit pas en tapant. */
+function contientMiseEnForme(texte) {
+  return /[\\^_$]/.test(String(texte ?? ''));
 }
 
 /**
@@ -74,6 +264,8 @@ function formuleChimique(texte, classe = 'formule') {
  */
 function normaliserReponse(texte) {
   return String(texte ?? '')
+    // « \alpha » vaut « α » ; « \frac{1}{2} » se compare comme « 1/2 ».
+    .replace(/\\([A-Za-z]+)/g, (tout, nom) => COMMANDES_SYMBOLES[nom] || '')
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()

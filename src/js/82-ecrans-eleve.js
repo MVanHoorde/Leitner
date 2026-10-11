@@ -98,17 +98,19 @@ Ecrans['accueil-eleve'] = {
     const detail = total
       ? `${pluriel(dues, 'carte due', 'cartes dues')} · ${pluriel(nouvelles, 'nouvelle')} · ${estimerDuree(total, Journal.secondesParCarte())}`
       : 'Tout est à jour pour aujourd’hui';
-    const evaluations = paquets
-      .map((p) => ({ p, date: ReglagesPaquet.evaluation(p) }))
-      .filter((e) => e.date)
-      .sort((a, b) => a.date.localeCompare(b.date));
+    // Un objectif s'annonce une fois, pas une fois par paquet qu'il contient.
+    const jour = Dates.aujourdhui();
+    const evaluations = [
+      ...Objectifs.liste.map((o) => ({ titre: o.titre, date: o.dateEvaluation })),
+      ...paquets.map((p) => ({ titre: p.titre, date: ReglagesPaquet.de(p).dateEvaluation })),
+    ].filter((e) => e.date && e.date > jour).sort((a, b) => a.date.localeCompare(b.date));
 
     pile.append(
       el('p', { class: 'discret', text: [compte && compte.prof ? 'Compte enseignant' : ((compte && compte.classe) || nomNiveau(Profil.niveau)),
         `${pluriel(paquets.length, 'paquet')} dans ta bibliothèque`].filter(Boolean).join(' · ') }),
-      evaluations.length ? el('div', { class: 'alerte pile serree' }, ...evaluations.slice(0, 3).map(({ p, date }) => {
-        const jours = Dates.ecart(Dates.aujourdhui(), date);
-        return el('p', {}, el('strong', { text: jours === 1 ? 'Demain' : `Dans ${jours} jours` }), ` : évaluation sur « ${p.titre} ».`);
+      evaluations.length ? el('div', { class: 'alerte pile serree' }, ...evaluations.slice(0, 3).map(({ titre, date }) => {
+        const jours = Dates.ecart(jour, date);
+        return el('p', {}, el('strong', { text: jours === 1 ? 'Demain' : `Dans ${jours} jours` }), ` : évaluation sur « ${titre} ».`);
       })) : null,
       boutonMenu('Réviser', detail, () => aller('paquets'), total ? 'principal' : ''),
       Depot.uid ? boutonMenu('Créer un paquet de cartes', miens

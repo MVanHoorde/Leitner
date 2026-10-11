@@ -236,7 +236,8 @@ Ecrans.carte = {
       apercu.replaceChildren(
         face(etat.modele === 'double' ? 'Face A' : 'Question', etat.recto, etat.photoRecto),
         face(etat.modele === 'double' ? 'Face B' : etat.modele === 'qcm' ? 'Bonne réponse · pièges' : 'Réponse', verso, etat.photoVerso),
-        el('p', { class: 'discret petit', text: 'Astuce : H2O s’affiche avec un indice, x^2 avec un exposant.' }));
+        el('p', { class: 'discret petit', text: 'Astuce : H2O s’affiche avec un indice, x^2 avec un exposant. '
+          + 'Fractions, racines, vecteurs, sommes : ouvre les menus de la barre de formules.' }));
     };
 
     const dessinerChamps = () => {
@@ -397,7 +398,7 @@ Ecrans.carte = {
     zone.append(el('div', { class: 'pile' },
       el('h2', { text: 'Modèle' }),
       choixModele,
-      el('section', { class: 'panneau pile' }, barreSymboles(champs), champs),
+      el('section', { class: 'panneau pile' }, champs, barreSymboles(champs, { collante: true })),
       el('section', { class: 'pile serree' }, el('h3', { text: 'Aperçu' }), apercu),
       erreur,
       el('div', { class: 'rangee' }, boutonSuivante, ligne ? null : boutonEnregistrer),
@@ -504,8 +505,8 @@ Ecrans.import = {
         modele = v;
         analyser();
       }, 'Modèle des cartes importées'),
-      barreSymboles(texte.parentNode || zone),
       texte,
+      barreSymboles(zone),
       bilan,
       erreur,
       creer));

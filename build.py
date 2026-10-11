@@ -5,11 +5,13 @@
 """
 
 import base64
+import re
 from pathlib import Path
 
 RACINE = Path(__file__).resolve().parent
 SRC = RACINE / "src"
 PDFJS = RACINE / "vendor" / "pdfjs"
+KATEX = RACINE / "vendor" / "katex"
 SORTIE = RACINE / "reconnaitre-mes-eleves.html"
 
 
@@ -31,6 +33,22 @@ def verifier_texte_brut(nom, code):
     return code
 
 
+def css_katex():
+    """Feuille de KaTeX, polices woff2 intégrées en data: (la page n'a pas le
+    droit de charger un fichier, et tous les navigateurs actuels lisent woff2)."""
+    css = lire(KATEX / "katex.min.css")
+
+    def police(m):
+        nom = m.group(1)
+        donnees = base64.b64encode((KATEX / "fonts" / f"{nom}.woff2").read_bytes()).decode("ascii")
+        return f'src:url(data:font/woff2;base64,{donnees}) format("woff2")'
+
+    css, n = re.subn(r'src:url\(fonts/([\w-]+)\.woff2\) format\("woff2"\)(?:,url\([^)]*\) format\("[a-z]+"\))*', police, css)
+    if n == 0 or "url(fonts/" in css:
+        raise SystemExit("katex.min.css : polices introuvables ou non remplacées")
+    return "/* KaTeX — Copyright Khan Academy — MIT License */\n" + css
+
+
 def main():
     gabarit = lire(SRC / "index.html")
     css = lire(SRC / "styles.css")
@@ -44,6 +62,10 @@ def main():
         "/*@CSS*/": css,
         "/*@PDFJS*/": bibliotheque,
         "/*@PDFJS_WORKER*/": worker,
+        "/*@KATEX_CSS*/": css_katex(),
+        # KaTeX et son extension de chimie (mhchem), MIT : formules entre $…$.
+        "/*@KATEX*/": proteger_script("/* KaTeX — Copyright Khan Academy — MIT License */\n"
+                                      + lire(KATEX / "katex.min.js") + "\n" + lire(KATEX / "mhchem.min.js")),
         "/*@JS*/": proteger_script(js),
         # Icône de l'écran d'accueil, intégrée pour que le fichier reste autonome.
         "/*@ICONE*/": base64.b64encode((SRC / "icone.png").read_bytes()).decode("ascii"),

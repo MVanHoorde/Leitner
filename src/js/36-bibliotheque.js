@@ -86,10 +86,11 @@ const ReglagesPaquet = {
     };
   },
 
-  /** Évaluation encore à venir, ou null. */
+  /** Évaluation encore à venir, celle du paquet ou d'un objectif qui le contient, ou null. */
   evaluation(paquet, jour = Dates.aujourdhui()) {
     const { dateEvaluation } = this.de(paquet);
-    return dateEvaluation && dateEvaluation > jour ? dateEvaluation : null;
+    const dates = [dateEvaluation, ...Objectifs.datesPour(paquet.cle, jour)].filter((d) => d && d > jour).sort();
+    return dates[0] || null;
   },
 
   /**

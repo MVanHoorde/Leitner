@@ -72,6 +72,12 @@ const Paquets = {
     return this.liste.find((p) => p.cle === cle) || null;
   },
 
+  /** Paquet auquel appartient une carte. */
+  deCarte(id) {
+    const carte = this.index.get(id);
+    return carte ? this.get(carte.paquet) : null;
+  },
+
   section(paquet, cleSection) {
     return paquet.sections.find((s) => s.cle === cleSection) || null;
   },
@@ -217,12 +223,18 @@ const SessionContenu = {
    * Dans les deux cas, seules les cartes réellement dues (ou nouvelles dans le
    * quota) modifient les compartiments : reprendre dix fois la même carte dans
    * la journée ne la propulse pas artificiellement au compartiment 5.
+   *
+   * Un paquet (et éventuellement une section), ou plusieurs paquets pour un
+   * objectif : chaque carte est alors notée selon les réglages de son paquet.
+   * retour : [écran, paramètre] où revenir en fin de séance.
    */
-  demarrer({ paquet, section = null, format, type = 'jour' }) {
+  demarrer({ paquet = null, paquets = null, section = null, format, type = 'jour', titre = null, retour = null }) {
     this.active = {
       id: nouvelId(),
-      paquet,
-      section,
+      paquets: paquets || [paquet],
+      titre: titre || paquet.titre,
+      retour: retour || ['paquet', paquet.cle],
+      section: paquets ? null : section,
       format,
       type,
       jour: Dates.aujourdhui(),
@@ -242,10 +254,39 @@ const SessionContenu = {
     return Leitner.bilanListe(Progression.etats(cartes), jour, SuiviContenu.quotaNouvelles(paquet, jour));
   },
 
+  /**
+   * Situation du jour sur plusieurs paquets. Chacun garde son quota de
+   * nouvelles ; celles du jour sont alternées d'un paquet à l'autre, pour
+   * qu'une série courte ne découvre pas un seul chapitre.
+   */
+  bilanGroupe(paquets, jour = Dates.aujourdhui()) {
+    const bilans = paquets.map((p) => this.bilan(p, null, jour));
+    const dues = bilans.flatMap((b) => b.dues)
+      .sort((a, b) => (a.echeance < b.echeance ? -1 : a.echeance > b.echeance ? 1 : a.compartiment - b.compartiment));
+    const permises = bilans.map((b) => b.nouvelles.slice(0, b.nouvellesDuJour));
+    const alternees = [];
+    for (let rang = 0; permises.some((l) => rang < l.length); rang += 1) {
+      for (const liste of permises) if (rang < liste.length) alternees.push(liste[rang]);
+    }
+    return {
+      cartes: bilans.flatMap((b) => b.cartes),
+      dues,
+      enRetard: bilans.reduce((n, b) => n + b.enRetard, 0),
+      // Les permises en tête : la file prend les nouvellesDuJour premières.
+      nouvelles: [...alternees, ...bilans.flatMap((b) => b.nouvelles.slice(b.nouvellesDuJour))],
+      nouvellesDuJour: alternees.length,
+    };
+  },
+
+  bilanActif() {
+    const s = this.active;
+    return s.paquets.length === 1 ? this.bilan(s.paquets[0], s.section, s.jour) : this.bilanGroupe(s.paquets, s.jour);
+  },
+
   chargerLot() {
     const s = this.active;
     const taille = Profil.donnees.tailleSession;
-    const bilan = this.bilan(s.paquet, s.section, s.jour);
+    const bilan = this.bilanActif();
     const aNoter = new Set([...bilan.dues, ...bilan.nouvelles.slice(0, bilan.nouvellesDuJour)].map((c) => c.id));
 
     let ids;
@@ -297,7 +338,7 @@ const SessionContenu = {
   restant() {
     const s = this.active;
     if (!s) return 0;
-    const bilan = this.bilan(s.paquet, s.section, s.jour);
+    const bilan = this.bilanActif();
     if (s.type === 'jour') {
       const aNoter = [...bilan.dues, ...bilan.nouvelles.slice(0, bilan.nouvellesDuJour)];
       return aNoter.filter((c) => !s.vues.has(c.id)).length;
@@ -324,8 +365,9 @@ const SessionContenu = {
         const nouvelle = etat.introduite === null;
         // Conservé pour permettre de rejouer la notation si l'élève conteste.
         element.etatAvant = etat;
-        await Progression.enregistrer(appliquerReglages(etat, reussi, s.jour, s.paquet, note));
-        if (nouvelle) await SuiviContenu.noterNouvelles(s.paquet.cle, s.jour);
+        const paquet = Paquets.get(carte.paquet);
+        await Progression.enregistrer(appliquerReglages(etat, reussi, s.jour, paquet, note));
+        if (nouvelle) await SuiviContenu.noterNouvelles(paquet.cle, s.jour);
       }
     }
     // Une carte ratée revient en fin de lot, sans nouvelle notation.

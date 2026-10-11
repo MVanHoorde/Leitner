@@ -22,12 +22,12 @@ const ModeLocal = {
 /** Recharge tout ce qui dépend du dépôt (appareil ou compte). */
 async function rechargerDonnees() {
   await Promise.all([Profil.charger(), Progression.charger(), SuiviContenu.charger(), Journal.charger(),
-    ReglagesPaquet.charger(), Bibliotheque.charger()]);
+    ReglagesPaquet.charger(), Bibliotheque.charger(), Objectifs.charger()]);
   Perso.inscrire();
 }
 
 /** Écrans qu'une synchronisation peut redessiner sans gêner l'élève. */
-const ECRANS_RAFRAICHISSABLES = new Set(['accueil-eleve', 'paquets', 'paquet', 'statistiques', 'cartes']);
+const ECRANS_RAFRAICHISSABLES = new Set(['accueil-eleve', 'paquets', 'paquet', 'statistiques', 'cartes', 'objectif']);
 
 let synchronisationEnCours = null;
 
@@ -90,16 +90,19 @@ async function fermerCompte() {
 
 function champMotDePasseCompte(placeholder, autocomplete) {
   const entree = el('input', { type: 'password', autocomplete, placeholder, autocapitalize: 'off', spellcheck: 'false' });
+  const montrer = (visible) => {
+    entree.type = visible ? 'text' : 'password';
+    basculer.textContent = visible ? 'Cacher' : 'Voir';
+    basculer.setAttribute('aria-label', visible ? 'Masquer le mot de passe' : 'Afficher le mot de passe');
+  };
   const basculer = el('button', {
     type: 'button',
     class: 'bouton discret-bouton',
     'aria-label': 'Afficher le mot de passe',
-    onclick: () => {
-      entree.type = entree.type === 'password' ? 'text' : 'password';
-      basculer.textContent = entree.type === 'password' ? 'Voir' : 'Cacher';
-    },
+    onclick: () => montrer(entree.type === 'password'),
   }, 'Voir');
-  return { entree, bloc: el('div', { class: 'rangee saisie mot-de-passe' }, entree, basculer) };
+  // Masqué de nouveau à l'envoi.
+  return { entree, masquer: () => montrer(false), bloc: el('div', { class: 'rangee saisie mot-de-passe' }, entree, basculer) };
 }
 
 function formulaireConnexion() {
@@ -136,6 +139,7 @@ function formulaireConnexion() {
 
     formulaire.addEventListener('submit', async (evenement) => {
       evenement.preventDefault();
+      mdp.masquer();
       erreur.textContent = '';
       valider.disabled = true;
       valider.textContent = 'Un instant…';

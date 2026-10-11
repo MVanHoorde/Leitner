@@ -64,10 +64,9 @@ Ecrans['session-contenu'] = {
   libelleRetour: 'Arrêter',
   pleinEcran: true,
   surRetour() {
-    const cle = SessionContenu.active ? SessionContenu.active.paquet.cle : null;
+    const retour = SessionContenu.active ? SessionContenu.active.retour : ['paquets'];
     SessionContenu.arreter();
-    if (cle) aller('paquet', cle);
-    else aller('paquets');
+    aller(...retour);
   },
   rendre(zone) {
     const s = SessionContenu.active;
@@ -87,8 +86,9 @@ Ecrans['session-contenu'] = {
 function rendreCarteContenu(zone, element) {
   const s = SessionContenu.active;
   const carte = Paquets.index.get(element.id);
+  const paquet = Paquets.get(carte.paquet);
   const enonce = element.tirage || carte;
-  definirTitre(`${s.paquet.titre} · ${FORMATS[element.format]}`);
+  definirTitre(`${s.titre} · ${FORMATS[element.format]}`);
   element.debut = element.debut || Date.now();
 
   const scene = el('div', { class: 'scene scene-texte' });
@@ -97,17 +97,18 @@ function rendreCarteContenu(zone, element) {
     el('span', { text: `Carte ${s.position + 1} sur ${s.file.length}` }),
     element.reprise && el('span', { class: 'badge', text: 'À revoir' }),
     !element.compte && !element.reprise && el('span', { class: 'badge', text: 'Hors barème' }),
-    el('span', { text: etiquetteSection(s.paquet, carte.section) }));
+    // Dans un objectif, on rappelle de quel paquet vient la carte.
+    el('span', { text: s.paquets.length > 1 ? paquet.titre : etiquetteSection(paquet, carte.section) }));
 
   zone.append(el('div', { class: 'revision' },
     entete,
     el('div', { class: 'carte-revision' }, scene, panneau)));
 
-  scene.append(el('p', { class: 'consigne', text: consigneDe(s.paquet, element) }));
+  scene.append(el('p', { class: 'consigne', text: consigneDe(paquet, element) }));
   if (enonce.question) scene.append(texteCarte(enonce.question, String(enonce.question).length > 90 ? 'enonce long' : 'enonce'));
   if (carte.masque) scene.append(figureMasque(carte.masque, false));
   else if (carte.photoQuestion) scene.append(photoZoomable(carte.photoQuestion));
-  if (s.paquet.chrono) scene.append(chronometre(element.debut));
+  if (paquet.chrono) scene.append(chronometre(element.debut));
 
   if (element.format === 'qcm') formatQcm(carte, enonce, element, panneau);
   else if (element.format === 'saisie') formatSaisie(carte, enonce, element, panneau);
@@ -178,7 +179,7 @@ function boutonsNotesSM2(element) {
   const etat = Progression.obtenir(element.id);
   const delai = (note) => {
     if (!element.compte) return '';
-    const jours = delaiPrevu(etat, note, s.jour, s.paquet);
+    const jours = delaiPrevu(etat, note, s.jour, Paquets.deCarte(element.id));
     return jours <= 1 ? 'demain' : `dans ${jours} j`;
   };
   const rangee = el('div', { class: 'notes-sm2' });
@@ -204,7 +205,7 @@ function formatRetournement(carte, enonce, panneau, element) {
     // Photo à trous : la zone se dévoile sur place, sans dupliquer la photo.
     const cadre = carte.masque && document.querySelector('.scene .masque-cadre');
     if (cadre) cadre.replaceWith(figureMasque(carte.masque, true));
-    const sm2 = ReglagesPaquet.de(SessionContenu.active.paquet).algorithme === 'sm2';
+    const sm2 = ReglagesPaquet.de(Paquets.get(carte.paquet)).algorithme === 'sm2';
     panneau.replaceChildren(blocReponse(carte, enonce),
       sm2 ? boutonsNotesSM2(element) : boutonsAutoEvaluation((reussi) => repondreContenu(reussi)));
   };
@@ -347,7 +348,7 @@ async function corrigerDerniereReponse() {
   // On rejoue la notation depuis l'état d'avant la réponse, pas depuis l'état
   // déjà rétrogradé au compartiment 1.
   if (precedent.compte && precedent.etatAvant) {
-    await Progression.enregistrer(appliquerReglages(precedent.etatAvant, true, s.jour, s.paquet));
+    await Progression.enregistrer(appliquerReglages(precedent.etatAvant, true, s.jour, Paquets.deCarte(precedent.id)));
   }
   // La reprise ajoutée en fin de file n'a plus lieu d'être.
   const reprise = s.file.findIndex((e, i) => i >= s.position && e.id === precedent.id && e.reprise);
@@ -404,9 +405,8 @@ function rendreFinDeSerieContenu(zone) {
       type: 'button',
       class: 'bouton grand',
       onclick: () => {
-        const cle = s.paquet.cle;
         SessionContenu.arreter();
-        aller('paquet', cle);
+        aller(...s.retour);
       },
     }, 'Terminer'),
     el('button', {
