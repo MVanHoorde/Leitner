@@ -1555,8 +1555,17 @@ function rendreFormule(texte) {
   return sortie;
 }
 
+/**
+ * La classe « formule » est TOUJOURS posée, même quand l'appelant en donne une
+ * autre (« enonce », « reponse-texte ») : c'est elle qui porte la mise en page
+ * des fractions, racines, vecteurs et sommes (styles.css, .formule .frac…).
+ * Sans elle, la carte et l'aperçu de l'éditeur aplatissaient « rac{m}{V} »
+ * en « mV » alors que l'aperçu de la barre de formules le dessinait bien
+ * (signalé par une élève le 12/10/2026).
+ */
 function formuleChimique(texte, classe = 'formule') {
-  return el('span', { class: classe }, rendreFormule(texte));
+  const classes = classe === 'formule' ? 'formule' : `formule ${classe}`;
+  return el('span', { class: classes }, rendreFormule(texte));
 }
 
 /** Vrai si le texte porte une mise en forme que l'élève ne voit pas en tapant. */
