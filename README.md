@@ -56,8 +56,21 @@ lit, sans pouvoir écrire, ce que font les élèves de ses classes.
 
 Cinq modèles de cartes : question → réponse, dans les deux sens (deux cartes),
 QCM (trois pièges choisis), réponse à écrire, photo à trous (une carte par zone
-cachée). Chaque face peut porter une photo. « Coller une liste » crée des cartes
-en lot (`question ; réponse` par ligne).
+cachée). Chaque face peut porter une photo.
+
+**Importer des cartes** (écran `coller-liste`, logique dans `src/js/39-csv.js`) :
+coller une liste (`question ; réponse` par ligne), ou importer un fichier `.csv`
+préparé dans un tableur, qui porte les quatre modèles sans photo :
+`type;question;reponse;piege1;piege2;piege3;autres_reponses;aide`. Colonnes
+reconnues à leur nom (ordre, accents et majuscules indifférents), lignes dont la
+première cellule commence par `#` ignorées, séparateur deviné (`;`, `,`,
+tabulation), plusieurs réponses acceptées séparées par `|`. Un fichier qui n'est
+pas de l'UTF-8 valide est relu en Windows-1252 (Excel, « CSV séparateur
+point-virgule »). Chaque ligne refusée est signalée avec son numéro. Le bouton
+« Télécharger le modèle » donne un fichier d'exemple avec son mode d'emploi en
+commentaires. « Exporter en .csv » (écran des cartes d'un paquet) écrit le même
+format, en UTF-8 avec BOM, pour Excel ; les photos et les photos à trous n'y
+figurent pas.
 
 **Objectifs** (`src/js/38-objectifs.js`, écrans dans `88-objectifs-ecrans.js`) :
 plusieurs paquets révisés ensemble, par exemple tous les chapitres d'un bac

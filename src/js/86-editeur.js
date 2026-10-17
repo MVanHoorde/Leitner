@@ -446,10 +446,26 @@ function lireListe(texte) {
   return { cartes, ignorees };
 }
 
+/** Le texte collé ou lu → cartes à créer. Un tableau à en-tête (colonnes
+ * « question » et « reponse ») passe par lireTableau (39-csv.js), qui connaît les quatre
+ * modèles ; sinon, une liste « question ; réponse » au modèle choisi. */
+function lireImport(texte, modele) {
+  if (separateurTableau(texte)) return { tableau: true, ...lireTableau(texte, modele) };
+  const { cartes, ignorees } = lireListe(texte);
+  return {
+    tableau: false,
+    cartes: cartes.map((contenu) => ({ modele, contenu })),
+    erreurs: [],
+    ignorees,
+  };
+}
+
+const LIBELLES_IMPORT = { simple: 'Q→R', double: 'deux sens', qcm: 'QCM', saisie: 'à écrire' };
+
 // « import » est l'import de trombinoscopes PDF (75-import.js) : deux écrans du
 // même nom s'écraseraient, le dernier chargé gagnant.
 Ecrans['coller-liste'] = {
-  titre: 'Coller une liste',
+  titre: 'Importer des cartes',
   titreCourt: 'Import',
   parent: 'paquet',
   libelleRetour: 'Paquet',
@@ -463,26 +479,57 @@ Ecrans['coller-liste'] = {
       aller('paquets');
       return;
     }
-    definirTitre(`Coller une liste · ${paquet.titre}`);
+    definirTitre(`Importer des cartes · ${paquet.titre}`);
     let modele = 'simple';
     const texte = el('textarea', { rows: 10, placeholder: 'mole ; unité de quantité de matière\nH2O ; eau\n1789 ; prise de la Bastille' });
-    const bilan = el('div', { class: 'pile serree' });
+    const bilan = el('div', { class: 'pile serree', role: 'status' });
     const erreur = el('p', { class: 'erreur', role: 'alert' });
     const creer = el('button', { type: 'button', class: 'bouton principal bloc grand', disabled: true }, 'Créer les cartes');
 
     const analyser = () => {
-      const { cartes, ignorees } = lireListe(texte.value);
+      const { tableau, cartes, erreurs, ignorees, colonnesIgnorees } = lireImport(texte.value, modele);
       creer.disabled = !cartes.length;
-      creer.textContent = cartes.length ? `Créer ${pluriel(cartes.length, 'carte')}${modele === 'double' ? ' (deux sens)' : ''}` : 'Créer les cartes';
+      const parType = Object.entries(LIBELLES_IMPORT)
+        .map(([m, libelle]) => [cartes.filter((c) => c.modele === m).length, libelle])
+        .filter(([n]) => n);
+      creer.textContent = cartes.length ? `Créer ${pluriel(cartes.length, 'carte')}` : 'Créer les cartes';
       bilan.replaceChildren(
+        tableau && el('p', { class: 'discret', text: `Tableau reconnu · ${parType.map(([n, l]) => `${n} ${l}`).join(' · ') || 'aucune carte valable'}` }),
         cartes.length > 0 && el('dl', { class: 'rappel-cartes' }, cartes.slice(0, 4).flatMap((c) => [
-          el('dt', {}, texteCarte(c.recto)), el('dd', {}, texteCarte(c.verso))])),
+          el('dt', {}, texteCarte(c.contenu.recto)),
+          el('dd', {}, texteCarte(c.modele === 'qcm' ? `${c.contenu.verso} · pièges : ${c.contenu.faux.join(' · ')}` : c.contenu.verso))])),
         cartes.length > 4 && el('p', { class: 'discret', text: `… et ${cartes.length - 4} autres.` }),
-        ignorees.length > 0 && el('p', { class: 'erreur', text: `${pluriel(ignorees.length, 'ligne ignorée', 'lignes ignorées')} (pas de séparateur) : `
-          + ignorees.slice(0, 3).join(' · ') }));
+        ignorees && ignorees.length > 0 && el('p', { class: 'erreur', text: `${pluriel(ignorees.length, 'ligne ignorée', 'lignes ignorées')} (pas de séparateur) : `
+          + ignorees.slice(0, 3).join(' · ') }),
+        erreurs.length > 0 && el('div', { class: 'pile serree' },
+          el('p', { class: 'erreur', text: `${pluriel(erreurs.length, 'ligne écartée', 'lignes écartées')} — corrige-les dans ton tableur et réimporte :` }),
+          el('ul', { class: 'petit' }, erreurs.slice(0, 10).map((e) => el('li', { text: `ligne ${e.numero} : ${e.message}` }))),
+          erreurs.length > 10 && el('p', { class: 'discret petit', text: `… et ${erreurs.length - 10} autres.` })),
+        colonnesIgnorees && colonnesIgnorees.length > 0 && el('p', { class: 'discret petit',
+          text: `Colonnes non lues : ${colonnesIgnorees.join(', ')}.` }));
       return cartes;
     };
     texte.addEventListener('input', analyser);
+
+    const fichier = el('input', { type: 'file', accept: '.csv,text/csv,text/plain,.txt', id: 'fichier-csv', class: 'visuellement-cache' });
+    fichier.addEventListener('change', async () => {
+      const f = fichier.files[0];
+      fichier.value = '';
+      if (!f) return;
+      erreur.textContent = '';
+      if (f.size > 1024 * 1024) {
+        erreur.textContent = 'Fichier trop lourd (1 Mo au plus) : est-ce bien un .csv ?';
+        return;
+      }
+      if (/\.(xlsx?|ods)$/i.test(f.name)) {
+        erreur.textContent = 'C’est un classeur, pas un .csv : dans ton tableur, « Enregistrer sous » → CSV UTF-8, puis importe ce fichier-là.';
+        return;
+      }
+      texte.value = decoderCsv(await f.arrayBuffer());
+      const cartes = analyser();
+      annoncer(`${f.name} lu : ${pluriel(cartes.length, 'carte prête', 'cartes prêtes')}.`);
+    });
+
     creer.addEventListener('click', async () => {
       const cartes = analyser();
       if (cartes.length > 500) {
@@ -491,7 +538,7 @@ Ecrans['coller-liste'] = {
       }
       creer.disabled = true;
       try {
-        const n = await Perso.creerCartes(id, cartes.map((c) => ({ modele, contenu: c })));
+        const n = await Perso.creerCartes(id, cartes.map(({ modele: m, contenu }) => ({ modele: m, contenu })));
         annoncer(`${pluriel(n, 'carte créée', 'cartes créées')}.`);
         aller('paquet', `p:${id}`);
       } catch (e) {
@@ -501,14 +548,25 @@ Ecrans['coller-liste'] = {
     });
 
     zone.append(el('div', { class: 'pile' },
-      el('p', { text: 'Une carte par ligne : la question, un point-virgule, la réponse. '
-        + 'Pratique pour copier un tableau depuis un tableur ou un document.' }),
-      selecteur([['simple', 'Question → réponse'], ['double', 'Dans les deux sens']], modele, (v) => {
-        modele = v;
-        analyser();
-      }, 'Modèle des cartes importées'),
-      texte,
-      barreSymboles(zone),
+      el('section', { class: 'panneau pile' },
+        el('h2', { text: 'Depuis un tableur' }),
+        el('p', { text: 'Prépare tes cartes dans Excel ou LibreOffice, une par ligne : questions-réponses, '
+          + 'QCM avec leurs pièges, réponses à écrire, aides. Le modèle contient le mode d’emploi.' }),
+        el('div', { class: 'rangee' },
+          fichier,
+          el('label', { for: 'fichier-csv', class: 'bouton accent' }, 'Importer un fichier .csv'),
+          el('button', { type: 'button', class: 'bouton', onclick: () => telechargerTexte('modele-cartes.csv', modeleCsv()) },
+            'Télécharger le modèle'))),
+      el('section', { class: 'pile' },
+        el('h2', { text: 'Ou coller une liste' }),
+        el('p', { text: 'Une carte par ligne : la question, un point-virgule, la réponse. '
+          + 'Un tableau copié depuis un tableur, avec sa ligne de titres, est lu comme le modèle.' }),
+        selecteur([['simple', 'Question → réponse'], ['double', 'Dans les deux sens']], modele, (v) => {
+          modele = v;
+          analyser();
+        }, 'Modèle des cartes sans type'),
+        texte,
+        barreSymboles(zone)),
       bilan,
       erreur,
       creer));
