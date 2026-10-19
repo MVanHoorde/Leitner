@@ -34,8 +34,13 @@ body {
   background: var(--marine);
   color: #fff;
   padding: max(12px, env(safe-area-inset-top)) 20px 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
-.entete h1 { margin: 0; font-size: 22px; font-weight: 650; }
+.entete h1 { margin: 0; font-size: 22px; font-weight: 650; flex: 1; }
+.vers-resonance { color: #fff; font-weight: 600; text-decoration: none; padding: 6px 10px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, .45); }
+.vers-resonance:focus-visible { outline: 3px solid var(--cyan); outline-offset: 2px; }
 
 .bandeau-test {
   background: var(--cyan-pale);
@@ -93,6 +98,7 @@ p:last-child { margin-bottom: 0; }
   cursor: pointer;
   touch-action: manipulation;
   text-align: center;
+  text-decoration: none;
 }
 .bouton:disabled { opacity: .5; cursor: default; }
 .bouton.principal { background: var(--marine); color: #fff; }

@@ -76,6 +76,7 @@ async function afficher() {
   }
 
   majPied();
+  majLienResonance();
   window.scrollTo(0, 0);
   try {
     await ecran.rendre(zone, param);

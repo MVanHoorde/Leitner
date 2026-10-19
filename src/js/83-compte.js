@@ -74,6 +74,36 @@ async function ouvrirCompte(compte) {
   }
 }
 
+/* ---------- Pont Résonance ---------- */
+
+/** Ticket du pont (#pont=…), retiré aussitôt de l'adresse : il ne doit rester ni dans
+ *  l'historique ni dans un favori. Null s'il n'y en a pas, '' s'il est illisible. */
+function lireTicketPont() {
+  if (!location.hash.startsWith('#pont=')) return null;
+  const trouve = /^#pont=([A-Za-z0-9_-]{10,200})$/.exec(location.hash);
+  history.replaceState(null, '', location.pathname + location.search);
+  return trouve ? trouve[1] : '';
+}
+
+async function entrerParPont(ticket) {
+  try {
+    if (!ticket) throw new Error('ticket illisible');
+    const compte = await Nuage.ouvrirPont(ticket);
+    await ouvrirCompte(compte);
+    annoncer(`Bienvenue ${compte.pseudo} !`);
+  } catch (e) {
+    console.error(e);
+    annoncer(estHorsLigne(e) ? MESSAGES_NUAGE.HORS_LIGNE
+      : 'Le passage depuis Résonance a échoué (lien déjà utilisé ou expiré). Reviens par Résonance.');
+  }
+}
+
+/** Lien « ‹ Résonance » de l'en-tête : seulement pour un compte venu par le pont. */
+function majLienResonance() {
+  const compte = Nuage.compte();
+  $('#vers-resonance').hidden = !(compte && compte.resonance);
+}
+
 async function fermerCompte() {
   await Depot.envoyer().catch(() => {});
   if (Depot.enAttente()) {
@@ -183,6 +213,10 @@ function ecranConnexion(zone) {
       el('p', { text: 'Crée tes paquets de cartes, même à partir d’une photo de ta fiche. Ajoute ceux du prof. '
         + 'La boîte de Leitner te ramène chaque carte juste avant que tu l’oublies.' })),
     formulaireConnexion(),
+    el('div', { class: 'panneau pile' },
+      el('p', { class: 'discret', text: 'En terminale spé physique-chimie, tu as un compte Résonance : '
+        + 'pas besoin d’en créer un ici.' }),
+      el('a', { class: 'bouton bloc', href: `${ADRESSE_RESONANCE}#vers-leitner` }, 'Me connecter avec Résonance')),
     el('details', { class: 'panneau' },
       el('summary', { text: 'Utiliser sans compte' }),
       el('div', { class: 'pile' },
@@ -267,7 +301,10 @@ function panneauCompte() {
       compte.classe ? ` · ${compte.classe}` : '', compte.prof ? ' · compte enseignant' : ''),
     el('p', { class: 'discret', text: `${STATUTS_DEPOT[Depot.statut]}.` }),
     jaugePhotos(),
-    !compte.prof && formulaireGroupe(),
+    // Compte du pont : inscrit dans aucune classe du site, il n'a pas de groupe à rejoindre.
+    compte.resonance
+      ? el('p', { class: 'discret', text: 'Compte relié à Résonance : pour te reconnecter, passe par Résonance.' })
+      : !compte.prof && formulaireGroupe(),
     el('div', { class: 'rangee' },
       el('button', {
         type: 'button',

@@ -22,8 +22,12 @@ async function demarrer() {
       await Etat.enregistrerSuivi({ persistanceDemandee: true });
     }
 
+    // Arrivée par le pont de Résonance : le ticket remplace la session éventuelle de l'appareil.
+    const ticket = lireTicketPont();
+    if (ticket !== null) await entrerParPont(ticket);
+    else if (compte) synchroniserTout();
+
     window.addEventListener('hashchange', afficher);
-    if (compte) synchroniserTout();
     if (Porte.courante === 'prof' && Porte.enseignant()) {
       afficherVerrou((await Base.lireMeta('chiffrement')) ? 'deverrouiller' : 'creer');
     } else {

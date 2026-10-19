@@ -10,7 +10,9 @@ Elle a deux entrées, choisies au lancement :
   bibliothèque personnelle rangée par thème, création de paquets et de cartes,
   « Bibliothèque du prof » où piocher les paquets publiés, réglages Leitner par
   paquet, progression. Sans compte, on peut réviser les paquets livrés avec
-  l'application, la progression restant sur l'appareil.
+  l'application, la progression restant sur l'appareil. Les élèves de
+  terminale entrent **par Résonance**, sans compte du site (voir « Le pont
+  Résonance »).
 - **Trombinoscope (enseignant)** — apprendre à reconnaître ses élèves (visage →
   nom, prénom, classe), import de trombinoscopes PDF, tableau de bord. Protégé
   par mot de passe ; noms et photos sont chiffrés en AES-GCM et **ne quittent
@@ -53,6 +55,29 @@ lit, sans pouvoir écrire, ce que font les élèves de ses classes.
   (Leitner classique, Leitner progressif, SM-2 à quatre notes), rythmes
   (intensif, standard, long terme, sur mesure), date d'évaluation, bibliothèque personnelle, conversion des paquets
   en ligne au format des paquets intégrés.
+
+### Le pont Résonance
+
+Résonance (dépôt `tutorat_pc_isaac`) a ses propres comptes, sur un autre projet
+Supabase. Un élève de terminale y entre dans la Boîte à cartes comme on « se
+connecte avec Google » :
+
+1. Résonance (Outils → Boîte à cartes) envoie la session de l'élève à la
+   fonction `pont-resonance` du portfolio
+   (`Site-Web-Portfolio/supabase/functions/pont-resonance/pont.ts`).
+2. La fonction la fait vérifier **par Résonance**, crée ou retrouve un compte
+   sans nom (`<uuid Résonance>@resonance.local`, mot de passe jeté, identifiant
+   `PC-…` dans `app_metadata`) et rend un ticket à usage unique.
+3. Résonance ouvre `reconnaitre-mes-eleves.html#pont=<ticket>` ;
+   `lireTicketPont()` le retire aussitôt de l'adresse et `Nuage.ouvrirPont()`
+   l'échange contre une session (`POST /auth/v1/verify`), après avoir fermé la
+   session précédente de l'appareil.
+
+Ouvert directement, Leitner propose « Me connecter avec Résonance », qui mène à
+`/tutorat_pc_isaac/index.html#vers-leitner` : Résonance demande la connexion
+s'il le faut, puis passe le pont. Un compte venu du pont (`compte.resonance`)
+porte le lien « ‹ Résonance » dans l'en-tête et n'a pas de formulaire de groupe
+(il n'est inscrit dans aucune classe).
 
 Cinq modèles de cartes : question → réponse, dans les deux sens (deux cartes),
 QCM (trois pièges choisis), réponse à écrire, photo à trous (une carte par zone

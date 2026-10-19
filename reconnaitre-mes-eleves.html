@@ -50,8 +50,13 @@ body {
   background: var(--marine);
   color: #fff;
   padding: max(12px, env(safe-area-inset-top)) 20px 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
-.entete h1 { margin: 0; font-size: 22px; font-weight: 650; }
+.entete h1 { margin: 0; font-size: 22px; font-weight: 650; flex: 1; }
+.vers-resonance { color: #fff; font-weight: 600; text-decoration: none; padding: 6px 10px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, .45); }
+.vers-resonance:focus-visible { outline: 3px solid var(--cyan); outline-offset: 2px; }
 
 .bandeau-test {
   background: var(--cyan-pale);
@@ -109,6 +114,7 @@ p:last-child { margin-bottom: 0; }
   cursor: pointer;
   touch-action: manipulation;
   text-align: center;
+  text-decoration: none;
 }
 .bouton:disabled { opacity: .5; cursor: default; }
 .bouton.principal { background: var(--marine); color: #fff; }
@@ -1076,6 +1082,7 @@ textarea:focus, input[type=search]:focus { border-color: var(--cyan); outline: n
 <div id="app">
   <header class="entete">
     <h1 id="titre">Boîte à cartes</h1>
+    <a id="vers-resonance" class="vers-resonance" href="/tutorat_pc_isaac/index.html#outils" hidden>‹ Résonance</a>
   </header>
   <div id="bandeau-date" class="bandeau-test" hidden></div>
   <main id="ecran" tabindex="-1"></main>
@@ -1930,6 +1937,8 @@ const NUAGE_URL = 'https://ztyvuiaohxekuyjeoaxz.supabase.co';
 const NUAGE_CLE = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp0eXZ1aWFvaHhla3V5amVvYXh6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ1NDQzNTIsImV4cCI6MjEwMDEyMDM1Mn0.iBBZiAIec0hSxzAU8FKNe6AO-HeysuxBKXduURBP7Hc';
 const NUAGE_STOCKAGE = 'leitner.session';
 const NUAGE_BUCKET = 'leitner';
+/** Résonance (dépôt tutorat_pc_isaac), même origine : #vers-leitner y lance le pont dès la connexion. */
+const ADRESSE_RESONANCE = '/tutorat_pc_isaac/index.html';
 
 const REGLE_MOT_DE_PASSE = 'Au moins 6 caractères, dont une majuscule, une minuscule et un chiffre.';
 
@@ -2220,6 +2229,40 @@ const Nuage = {
       const code = /CODE_CLASSE_INCONNU|DEJA_UNE_CLASSE_SNT|PAS_ENCORE_INSCRIT/.exec(`${e.code} ${e.message}`);
       throw code ? erreurNuage(code[0]) : e;
     }
+  },
+
+  /**
+   * Pont Résonance : un élève de terminale connecté à Résonance arrive ici avec un ticket à
+   * usage unique, délivré par la fonction pont-resonance du portfolio après avoir vérifié sa
+   * session auprès de Résonance. Le ticket devient une session de ce projet-ci ; le compte n'a
+   * pas de mot de passe connu, on n'y entre que par Résonance.
+   */
+  async ouvrirPont(ticket) {
+    // Une autre session sur l'appareil : on la ferme ici seulement (scope=local), et AVANT
+    // l'échange — une déconnexion globale du même compte révoquerait la nouvelle session.
+    if (this.jeton) {
+      await fetch(`${NUAGE_URL}/auth/v1/logout?scope=local`, {
+        method: 'POST',
+        headers: { apikey: NUAGE_CLE, Authorization: `Bearer ${this.jeton.access_token}` },
+      }).catch(() => {});
+      this.jeton = null;
+      this.ecrireSession();
+    }
+    let reponse;
+    try {
+      reponse = await this.auth('verify', { type: 'email', token_hash: ticket });
+    } catch (e) {
+      if (estHorsLigne(e)) throw e;
+      // Anciennes versions du serveur : le type « magiclink », retiré depuis au profit de « email ».
+      reponse = await this.auth('verify', { type: 'magiclink', token_hash: ticket });
+    }
+    this.memoriser(reponse);
+    const meta = (reponse.user && reponse.user.app_metadata) || {};
+    const compte = await this.identifier(meta.identifiant || 'resonance');
+    compte.classe = compte.classe || 'Terminale (Résonance)';
+    compte.resonance = true;
+    this.ecrireSession();
+    return compte;
   },
 
   seDeconnecter() {
@@ -7021,6 +7064,7 @@ async function afficher() {
   }
 
   majPied();
+  majLienResonance();
   window.scrollTo(0, 0);
   try {
     await ecran.rendre(zone, param);
@@ -10777,6 +10821,36 @@ async function ouvrirCompte(compte) {
   }
 }
 
+/* ---------- Pont Résonance ---------- */
+
+/** Ticket du pont (#pont=…), retiré aussitôt de l'adresse : il ne doit rester ni dans
+ *  l'historique ni dans un favori. Null s'il n'y en a pas, '' s'il est illisible. */
+function lireTicketPont() {
+  if (!location.hash.startsWith('#pont=')) return null;
+  const trouve = /^#pont=([A-Za-z0-9_-]{10,200})$/.exec(location.hash);
+  history.replaceState(null, '', location.pathname + location.search);
+  return trouve ? trouve[1] : '';
+}
+
+async function entrerParPont(ticket) {
+  try {
+    if (!ticket) throw new Error('ticket illisible');
+    const compte = await Nuage.ouvrirPont(ticket);
+    await ouvrirCompte(compte);
+    annoncer(`Bienvenue ${compte.pseudo} !`);
+  } catch (e) {
+    console.error(e);
+    annoncer(estHorsLigne(e) ? MESSAGES_NUAGE.HORS_LIGNE
+      : 'Le passage depuis Résonance a échoué (lien déjà utilisé ou expiré). Reviens par Résonance.');
+  }
+}
+
+/** Lien « ‹ Résonance » de l'en-tête : seulement pour un compte venu par le pont. */
+function majLienResonance() {
+  const compte = Nuage.compte();
+  $('#vers-resonance').hidden = !(compte && compte.resonance);
+}
+
 async function fermerCompte() {
   await Depot.envoyer().catch(() => {});
   if (Depot.enAttente()) {
@@ -10886,6 +10960,10 @@ function ecranConnexion(zone) {
       el('p', { text: 'Crée tes paquets de cartes, même à partir d’une photo de ta fiche. Ajoute ceux du prof. '
         + 'La boîte de Leitner te ramène chaque carte juste avant que tu l’oublies.' })),
     formulaireConnexion(),
+    el('div', { class: 'panneau pile' },
+      el('p', { class: 'discret', text: 'En terminale spé physique-chimie, tu as un compte Résonance : '
+        + 'pas besoin d’en créer un ici.' }),
+      el('a', { class: 'bouton bloc', href: `${ADRESSE_RESONANCE}#vers-leitner` }, 'Me connecter avec Résonance')),
     el('details', { class: 'panneau' },
       el('summary', { text: 'Utiliser sans compte' }),
       el('div', { class: 'pile' },
@@ -10970,7 +11048,10 @@ function panneauCompte() {
       compte.classe ? ` · ${compte.classe}` : '', compte.prof ? ' · compte enseignant' : ''),
     el('p', { class: 'discret', text: `${STATUTS_DEPOT[Depot.statut]}.` }),
     jaugePhotos(),
-    !compte.prof && formulaireGroupe(),
+    // Compte du pont : inscrit dans aucune classe du site, il n'a pas de groupe à rejoindre.
+    compte.resonance
+      ? el('p', { class: 'discret', text: 'Compte relié à Résonance : pour te reconnecter, passe par Résonance.' })
+      : !compte.prof && formulaireGroupe(),
     el('div', { class: 'rangee' },
       el('button', {
         type: 'button',
@@ -13461,8 +13542,12 @@ async function demarrer() {
       await Etat.enregistrerSuivi({ persistanceDemandee: true });
     }
 
+    // Arrivée par le pont de Résonance : le ticket remplace la session éventuelle de l'appareil.
+    const ticket = lireTicketPont();
+    if (ticket !== null) await entrerParPont(ticket);
+    else if (compte) synchroniserTout();
+
     window.addEventListener('hashchange', afficher);
-    if (compte) synchroniserTout();
     if (Porte.courante === 'prof' && Porte.enseignant()) {
       afficherVerrou((await Base.lireMeta('chiffrement')) ? 'deverrouiller' : 'creer');
     } else {

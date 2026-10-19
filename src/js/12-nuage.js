@@ -18,6 +18,8 @@ const NUAGE_URL = 'https://ztyvuiaohxekuyjeoaxz.supabase.co';
 const NUAGE_CLE = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp0eXZ1aWFvaHhla3V5amVvYXh6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ1NDQzNTIsImV4cCI6MjEwMDEyMDM1Mn0.iBBZiAIec0hSxzAU8FKNe6AO-HeysuxBKXduURBP7Hc';
 const NUAGE_STOCKAGE = 'leitner.session';
 const NUAGE_BUCKET = 'leitner';
+/** Résonance (dépôt tutorat_pc_isaac), même origine : #vers-leitner y lance le pont dès la connexion. */
+const ADRESSE_RESONANCE = '/tutorat_pc_isaac/index.html';
 
 const REGLE_MOT_DE_PASSE = 'Au moins 6 caractères, dont une majuscule, une minuscule et un chiffre.';
 
@@ -308,6 +310,40 @@ const Nuage = {
       const code = /CODE_CLASSE_INCONNU|DEJA_UNE_CLASSE_SNT|PAS_ENCORE_INSCRIT/.exec(`${e.code} ${e.message}`);
       throw code ? erreurNuage(code[0]) : e;
     }
+  },
+
+  /**
+   * Pont Résonance : un élève de terminale connecté à Résonance arrive ici avec un ticket à
+   * usage unique, délivré par la fonction pont-resonance du portfolio après avoir vérifié sa
+   * session auprès de Résonance. Le ticket devient une session de ce projet-ci ; le compte n'a
+   * pas de mot de passe connu, on n'y entre que par Résonance.
+   */
+  async ouvrirPont(ticket) {
+    // Une autre session sur l'appareil : on la ferme ici seulement (scope=local), et AVANT
+    // l'échange — une déconnexion globale du même compte révoquerait la nouvelle session.
+    if (this.jeton) {
+      await fetch(`${NUAGE_URL}/auth/v1/logout?scope=local`, {
+        method: 'POST',
+        headers: { apikey: NUAGE_CLE, Authorization: `Bearer ${this.jeton.access_token}` },
+      }).catch(() => {});
+      this.jeton = null;
+      this.ecrireSession();
+    }
+    let reponse;
+    try {
+      reponse = await this.auth('verify', { type: 'email', token_hash: ticket });
+    } catch (e) {
+      if (estHorsLigne(e)) throw e;
+      // Anciennes versions du serveur : le type « magiclink », retiré depuis au profit de « email ».
+      reponse = await this.auth('verify', { type: 'magiclink', token_hash: ticket });
+    }
+    this.memoriser(reponse);
+    const meta = (reponse.user && reponse.user.app_metadata) || {};
+    const compte = await this.identifier(meta.identifiant || 'resonance');
+    compte.classe = compte.classe || 'Terminale (Résonance)';
+    compte.resonance = true;
+    this.ecrireSession();
+    return compte;
   },
 
   seDeconnecter() {
