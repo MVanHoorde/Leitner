@@ -176,6 +176,10 @@ function structureFormule(nom, texte, i) {
  * oblique (\frac, \sqrt, \vec, \sum…) dessinent le reste. La barre de
  * symboles de l'éditeur insère toutes ces marques.
  *
+ * Le code se met entre accents graves, et passe tel quel, en chasse fixe :
+ * `f_E * c` (dans la ligne) ou ```…``` (bloc, retours à la ligne et
+ * indentation gardés). Sans eux, v0 deviendrait v₀ et x_max un indice.
+ *
  * Renvoie une liste de nœuds et de textes ; chaque groupe est rendu de la
  * même façon, si bien qu'une fraction peut loger sous une racine.
  */
@@ -188,6 +192,15 @@ function rendreFormule(texte) {
   };
   for (let i = 0; i < texte.length; i += 1) {
     const caractere = texte[i];
+    const code = caractere === '`' && lireCode(texte, i);
+    if (code) {
+      vider();
+      sortie.push(code.bloc
+        ? el('pre', { class: 'code-bloc' }, el('code', { text: code.source }))
+        : el('code', { class: 'code', text: code.source }));
+      i = code.fin - 1;
+      continue;
+    }
     const latex = caractere === '$' && lireLatex(texte, i);
     if (latex) {
       vider();
@@ -258,6 +271,45 @@ function rendreFormule(texte) {
 function formuleChimique(texte, classe = 'formule') {
   const classes = classe === 'formule' ? 'formule' : `formule ${classe}`;
   return el('span', { class: classes }, rendreFormule(texte));
+}
+
+/** Code entre accents graves à la position i : { source, bloc, fin } ou null
+ *  si la marque n'est pas refermée (l'accent reste alors un caractère). */
+function lireCode(texte, i) {
+  const bloc = texte.startsWith('```', i);
+  const marque = bloc ? '```' : '`';
+  const fin = texte.indexOf(marque, i + marque.length);
+  if (fin === -1) return null;
+  let source = texte.slice(i + marque.length, fin);
+  if (bloc) source = source.replace(/^\n/, '').replace(/\n$/, '');
+  return source ? { source, bloc, fin: fin + marque.length } : null;
+}
+
+/**
+ * Une ligne de code, ramenée à ce qui compte pour Python : guillemets droits
+ * (le clavier de l'iPad les courbe), vrai tiret, et plus d'espaces — sauf entre
+ * guillemets, où elles comptent : '40 00' n'est pas '4000'. Contrairement à
+ * normaliserReponse, la ponctuation reste : '3' n'est pas 3, [1, 2] n'est pas
+ * (1, 2), 2.0 n'est pas 20.
+ */
+function normaliserCode(texte) {
+  const propre = String(texte ?? '')
+    .trim()
+    .replace(/^`+|`+$/g, '')
+    .replace(/[‘’‚‛′"“”„‟″]/g, "'")
+    .replace(/−/g, '-');
+  let sortie = '';
+  let dansTexte = false;
+  for (const caractere of propre) {
+    if (caractere === "'") dansTexte = !dansTexte;
+    if (dansTexte || !/\s/.test(caractere)) sortie += caractere;
+  }
+  return sortie;
+}
+
+function codeAccepte(saisie, acceptees) {
+  const propre = normaliserCode(saisie);
+  return Boolean(propre) && acceptees.some((attendue) => normaliserCode(attendue) === propre);
 }
 
 /** Vrai si le texte porte une mise en forme que l'élève ne voit pas en tapant. */

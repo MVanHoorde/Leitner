@@ -284,15 +284,19 @@ function formatSaisie(carte, enonce, element, panneau) {
   // Une unité attendue : toute écriture équivalente est juste (J·mol⁻¹·K⁻¹ = Pa·m³·mol⁻¹·K⁻¹).
   const uniteAttendue = enonce.uniteAttendue ?? carte.uniteAttendue;
   const basesSeules = enonce.basesSeules ?? carte.basesSeules;
+  // Réponse en code (Python) : comparée signe à signe, espaces exceptés ; champ en chasse fixe.
+  const code = (enonce.comparaison ?? carte.comparaison) === 'code';
   // Le pavé décimal n'a ni « ^ » ni « × » : clavier complet dès qu'une puissance de dix est probable.
   const puissance = scientifique || (attenduNombre !== undefined && attenduNombre !== 0
     && (Math.abs(attenduNombre) < 1e-3 || Math.abs(attenduNombre) >= 1e6));
   const champSaisie = el('input', {
     type: 'text',
-    inputmode: attenduNombre !== undefined && !puissance ? 'decimal' : 'text',
+    inputmode: attenduNombre !== undefined && !puissance && !code ? 'decimal' : 'text',
     autocomplete: 'off',
     autocapitalize: 'off',
+    autocorrect: 'off',
     spellcheck: 'false',
+    class: code ? 'saisie-code' : null,
     'aria-label': 'Votre réponse',
   });
   const unite = (enonce.unite || carte.unite) ? el('span', { class: 'unite', text: enonce.unite || carte.unite }) : null;
@@ -309,7 +313,8 @@ function formatSaisie(carte, enonce, element, panneau) {
       return;
     }
     let reussi;
-    if (uniteAttendue) {
+    if (code) reussi = codeAccepte(saisie, [enonce.reponse, ...attenduTexte]);
+    else if (uniteAttendue) {
       reussi = ([].concat(uniteAttendue).some((u) => memeUnite(saisie, u)) && (!basesSeules || enUnitesDeBase(saisie)))
         || reponseAcceptee(saisie, attenduTexte);
     }
@@ -356,8 +361,9 @@ function formatSaisie(carte, enonce, element, panneau) {
     evenement.preventDefault();
     verifier();
   });
-  // Le grec et les symboles n'existent pas sur tous les claviers.
-  formulaire.append(barreSymboles(formulaire, { compacte: true }));
+  // Le grec et les symboles n'existent pas sur tous les claviers. Pas pour du code :
+  // la barre insère des marques de formule (\frac…) que Python ne comprend pas.
+  if (!code) formulaire.append(barreSymboles(formulaire, { compacte: true }));
   panneau.append(formulaire, suite);
   champSaisie.focus();
 }

@@ -313,11 +313,16 @@ const Bibliotheque = {
     }
   },
 
-  /** Tant que l'élève n'a rien choisi : les paquets intégrés de son niveau. */
+  /** Tant que l'élève n'a rien choisi : les paquets intégrés de son niveau. Un paquet
+   *  « resonance » (Python de spé PC) ne vient d'office qu'aux comptes passés par
+   *  Résonance : les autres terminales du site (enseignement scientifique) l'ajoutent
+   *  elles-mêmes si elles le veulent. */
   cles() {
     if (this.adoptes) return this.adoptes;
+    const compte = Nuage.compte();
     return Paquets.liste.filter((p) => p.origine === 'integre'
-      && (!Profil.niveau || p.niveaux.includes(Profil.niveau))).map((p) => p.cle);
+      && (!Profil.niveau || p.niveaux.includes(Profil.niveau))
+      && (!p.resonance || (compte && compte.resonance))).map((p) => p.cle);
   },
 
   contient(cle) {

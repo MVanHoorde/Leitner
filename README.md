@@ -113,13 +113,21 @@ KaTeX 0.18.9 et son extension mhchem (`\ce{…}`), embarqués depuis
 `vendor/katex/` (MIT) avec leurs polices woff2 en data: ; `\$` écrit un dollar.
 L'onglet « ? Aide » de la barre sert de mode d'emploi aux élèves.
 
+**Code** (même fichier) : entre accents graves, le texte passe tel quel, en
+chasse fixe — `` `f_E * c` `` dans la ligne, ` ``` ` … ` ``` ` pour un bloc
+(retours à la ligne et indentation gardés). Sans eux, `v0` deviendrait v₀ et
+`x_max` un indice. Une carte `comparaison: 'code'` compare la réponse écrite par
+`normaliserCode` : guillemets droits ou courbes (clavier de l'iPad), vrai tiret,
+espaces ignorées **sauf entre guillemets** ; la ponctuation compte (`'3'` n'est
+pas `3`, `2.0` n'est pas `20`). Champ en chasse fixe, sans barre de formules.
+
 Avec une date d'évaluation, aucune carte n'est repoussée au-delà de la veille,
 et le quota de nouvelles cartes monte si besoin pour que tout ait été vu trois
 jours avant.
 
 ## Les paquets intégrés
 
-Les cartes sont écrites dans le code (`src/js/33-*`), jamais en base : elles se
+Les cartes sont écrites dans le code (`src/js/33-*` à `35-*`), jamais en base : elles se
 mettent à jour avec l'application, et seule la progression est stockée. **Un
 identifiant de carte ne change jamais** — la progression des élèves y est
 attachée. Le contrat d'une carte est documenté en tête de `src/js/32-paquets.js`.
@@ -134,7 +142,20 @@ Deux paquets livrés, chacun en cinq niveaux :
   de R, de λ de Kohlrausch, de ε…). Le lecteur d'unités de
   `src/js/05-formules.js` accepte toute écriture équivalente (J·mol⁻¹·K⁻¹ =
   J/(mol.K) = Pa·m³·mol⁻¹·K⁻¹) et refuse un préfixe de travers.
- Quatre formats : carte retournée, QCM
+
+Un troisième suit le parcours Python de Résonance, un niveau par niveau du
+parcours (`tutorat_pc_isaac/outils/python/`) :
+
+- « Python pour l'ECE » (`src/js/35-contenu-python.js`) : **niveau 1 seulement**
+  (65 cartes, en audit), sur les huit étapes de `niveau-1.html` — qu'affiche
+  Python, ligne à compléter comme à l'ECE, rôle et usage d'une fonction, lire
+  une erreur. Une carte n'interroge que ce que la page du parcours montre.
+  `resonance: true` : il n'entre d'office que dans la bibliothèque des comptes
+  venus par le pont (les autres terminales du site l'ajoutent si elles veulent).
+  Fiche d'audit tirée du code : `node outils/audit-paquet.mjs
+  src/js/35-contenu-python.js docs/audit-python-n1.md`.
+
+Quatre formats : carte retournée, QCM
 (trois pièges tirés parmi cinq à sept), réponse écrite (comparaison numérique
 avec tolérance réglable, écriture scientifique exigée au besoin), vrai ou faux.
 La plupart des cartes sont *génératives* : valeurs et pièges sont retirés à
