@@ -300,6 +300,11 @@ function calendrierCarte(paquet, jour, dateEvaluation) {
 /** Paquets livrés retirés de l'application, et celui qui les remplace dans les bibliothèques. */
 const PAQUETS_REMPLACES = { 'chimie-bases': 'unites', reflexes: 'conversions', nomenclature: 'conversions' };
 
+/** Un paquet livré en brouillon (audit: 'brouillon') n'est montré qu'à un enseignant. */
+function visiblePourMoi(paquet) {
+  return Boolean(paquet) && (paquet.audit !== 'brouillon' || Porte.enseignant());
+}
+
 const Bibliotheque = {
   /** Clés des paquets ajoutés (intégrés ou publiés par un enseignant). */
   adoptes: null,
@@ -316,11 +321,12 @@ const Bibliotheque = {
   /** Tant que l'élève n'a rien choisi : les paquets intégrés de son niveau. Un paquet
    *  « resonance » (Python de spé PC) ne vient d'office qu'aux comptes passés par
    *  Résonance : les autres terminales du site (enseignement scientifique) l'ajoutent
-   *  elles-mêmes si elles le veulent. */
+   *  elles-mêmes si elles le veulent. Un paquet en brouillon n'est visible que d'un
+   *  enseignant, le temps de l'audit. */
   cles() {
-    if (this.adoptes) return this.adoptes;
+    if (this.adoptes) return this.adoptes.filter((cle) => visiblePourMoi(Paquets.get(cle)));
     const compte = Nuage.compte();
-    return Paquets.liste.filter((p) => p.origine === 'integre'
+    return Paquets.liste.filter((p) => p.origine === 'integre' && visiblePourMoi(p)
       && (!Profil.niveau || p.niveaux.includes(Profil.niveau))
       && (!p.resonance || (compte && compte.resonance))).map((p) => p.cle);
   },

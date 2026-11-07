@@ -140,7 +140,7 @@ Ecrans.paquets = {
       actions.append(el('button', { type: 'button', class: 'bouton', onclick: () => aller('editer-objectif', 'nouveau') },
         '+ Objectif (bac blanc, contrôle…)'));
     }
-    pile.append(actions, blocObjectifs());
+    pile.append(actions, blocAuditBibliotheque(), blocObjectifs());
 
     if (!paquets.length) {
       pile.append(el('div', { class: 'panneau pile vide' },
@@ -171,7 +171,7 @@ Ecrans.paquet = {
   parent: 'paquets',
   porte: 'tous',
   rendre(zone, cle) {
-    const paquet = Paquets.get(cle);
+    const paquet = visiblePourMoi(Paquets.get(cle)) ? Paquets.get(cle) : null;
     if (!paquet) {
       zone.append(el('div', { class: 'panneau pile' },
         el('p', { text: 'Paquet introuvable. Il a peut-être été supprimé ou retiré de la bibliothèque commune.' }),
@@ -325,7 +325,8 @@ function ligneCatalogue(paquet) {
       el('div', { class: 'badges' },
         theme && el('span', { class: 'badge', text: theme }),
         ...(niveaux || []).map((n) => el('span', { class: 'badge', text: nomNiveau(n) })),
-        miens && el('span', { class: 'badge accent', text: 'Publié par moi' })),
+        miens && el('span', { class: 'badge accent', text: 'Publié par moi' }),
+        paquet.brouillon && el('span', { class: 'badge urgent', text: 'Brouillon : invisible des élèves' })),
       description && el('p', { class: 'discret', text: description }),
       el('div', { class: 'rangee' },
         miens ? null : bouton,
@@ -371,9 +372,9 @@ Ecrans.catalogue = {
       recherche,
       resultats));
 
-    const integres = Paquets.liste.filter((p) => p.origine === 'integre').map((p) => ({
+    const integres = Paquets.liste.filter((p) => p.origine === 'integre' && visiblePourMoi(p)).map((p) => ({
       cle: p.cle, titre: p.titre, theme: p.theme, niveaux: p.niveaux, nombre: p.cartes.length,
-      description: p.resume, enLigne: false, couleur: '#1B2A4A',
+      description: p.resume, enLigne: false, couleur: '#1B2A4A', brouillon: p.audit === 'brouillon',
     }));
     let enLigne = [];
     let message = null;

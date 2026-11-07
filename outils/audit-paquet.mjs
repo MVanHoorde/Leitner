@@ -1,12 +1,16 @@
 // Fiche d'audit d'un paquet intégré, tirée du code : ce qu'on relit est ce que voit l'élève.
 //   node outils/audit-paquet.mjs src/js/35-contenu-python.js docs/audit-python-n1.md
+// Un chapitre de terminale a besoin de ses outils communs, donnés avant lui :
+//   node outils/audit-paquet.mjs src/js/35-contenu-chapitres.js src/js/35-contenu-doppler.js docs/audit-doppler.md
 // Une carte générative est montrée par trois tirages. Rien n'est écrit dans le paquet.
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-const [source, sortie] = process.argv.slice(2);
+const fichiers = process.argv.slice(2);
+const sortie = fichiers.pop();
+const source = fichiers[fichiers.length - 1];
 let paquet = null;
-vm.runInNewContext(fs.readFileSync(source, 'utf8'), {
+vm.runInNewContext(fichiers.map((f) => fs.readFileSync(f, 'utf8')).join('\n;\n'), {
   auHasard: (l) => l[Math.floor(Math.random() * l.length)],
   entierEntre: (a, b) => a + Math.floor(Math.random() * (b - a + 1)),
   pileOuFace: () => Math.random() < 0.5,
@@ -47,6 +51,10 @@ for (const section of paquet.sections) {
       lignes.push(`- **Énoncé :** ${md(t.question)}`);
       if (typeof t.vrai === 'boolean') lignes.push(`- **Attendu :** ${t.vrai ? 'Vrai' : 'Faux'}`);
       lignes.push(`- **Réponse :** ${md(t.reponse)}`);
+      if (t.nombre !== undefined) {
+        lignes.push(`- **Valeur à écrire :** ${t.nombre}${t.unite ? ` (${t.unite})` : ''}`
+          + `${t.tolerance ? ` · écart admis ${t.tolerance * 100} %` : ''}${t.ecritureScientifique ? ' · écriture scientifique' : ''}`);
+      }
       if (t.saisie && t.saisie.length) lignes.push(`- **Acceptées aussi à l'écrit :** ${liste(t.saisie)}`);
       if (t.distracteurs && t.distracteurs.length) lignes.push(`- **Pièges :** ${liste(t.distracteurs)}`);
       if (t.aide) lignes.push(`- **Aide :** ${md(t.aide)}`);

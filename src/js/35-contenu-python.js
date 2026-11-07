@@ -888,6 +888,7 @@ Paquets.inscrire({
     + 'variables, affichage, numpy, listes, statistiques, graphiques, messages d’erreur. Les valeurs changent à chaque passage.',
   niveaux: ['terminale'],
   resonance: true,
+  audit: 'ouvert',
   progression: 'niveaux',
   formatFixe: 'mixte',
   consignesParFormat: true,

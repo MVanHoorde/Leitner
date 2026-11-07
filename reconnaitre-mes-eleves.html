@@ -5946,6 +5946,2953 @@ Paquets.inscrire({
   ],
 });
 
+// ---- 35-contenu-chapitres.js ----
+/* Outils communs aux paquets de chapitres de terminale (35-contenu-son.js,
+ * -diffraction, -interferences, -doppler, -incertitudes, -dosages).
+ *
+ * Trois niveaux par chapitre (décision de Loïc, 31/10/2026) :
+ *   n1  vocabulaire, définitions, formules ;
+ *   n2  calcul direct et exploitation en situation : mini-problèmes, calculs
+ *       toujours faisables de tête, sans calculatrice ;
+ *   n3  pièges, raisonnement, type bac, copies d'élèves à corriger :
+ *       calculatrice permise.
+ *
+ * Notions : programme de spécialité de terminale, BO spécial n° 8 du
+ * 25/07/2019 (« Ondes et signaux » 1 ; « Mesure et incertitudes » ;
+ * « Constitution et transformations de la matière » 1.B, dosages par
+ * étalonnage seulement, pas les titrages).
+ *
+ * Un paquet neuf porte audit: 'brouillon' : seul un compte enseignant le voit,
+ * dans l'écran « Audit des paquets » (89-audit-ecrans.js). Une fois validé par
+ * Loïc, on retire la propriété. audit: 'ouvert' : visible des élèves, mais
+ * encore listé dans l'écran d'audit.
+ *
+ * Ce fichier ne dépend que d'auHasard, entierEntre, pileOuFace, melanger et
+ * pieges, pour que outils/audit-paquet.mjs puisse l'exécuter seul.
+ * RÈGLE ABSOLUE (32-paquets.js) : un identifiant de carte ne change jamais.
+ */
+
+/** Le titre du niveau s'affiche en tête de chaque carte : il dit si la calculatrice est permise. */
+const TITRES_NIVEAUX_CHAPITRE = [
+  'Niveau 1 · Vocabulaire, définitions, formules',
+  'Niveau 2 · Situations, calculs de tête',
+  'Niveau 3 · Pièges et type bac, calculatrice permise',
+];
+
+/** Écriture française : virgule, espace des milliers, vrai signe moins ; cs chiffres significatifs si demandé. */
+function chNombre(x, cs = null) {
+  if (cs === null) {
+    return Number(x.toPrecision(12)).toLocaleString('fr-FR', { maximumFractionDigits: 10 }).replace('-', '−');
+  }
+  const brut = Number(x).toPrecision(cs);
+  if (/e/.test(brut)) return chSci(x, cs);
+  return brut.replace('.', ',').replace('-', '−');
+}
+
+/** a × 10^{n}, avec cs chiffres significatifs (2 par défaut). */
+function chSci(x, cs = 2) {
+  if (x === 0) return '0';
+  let n = Math.floor(Math.log10(Math.abs(x)));
+  let m = Number((x / 10 ** n).toFixed(cs - 1));
+  if (Math.abs(m) >= 10) {
+    m /= 10;
+    n += 1;
+  }
+  const mantisse = m.toFixed(cs - 1).replace('.', ',').replace('-', '−');
+  return n === 0 ? mantisse : `${mantisse} × 10^{${n}}`;
+}
+
+/** Un piège tiré peut tomber sur la bonne réponse ou sur un autre piège : on les écarte. */
+function piegesDistincts(carte) {
+  if (!carte.generer) return carte;
+  const tirer = carte.generer;
+  carte.generer = () => {
+    const tirage = tirer();
+    if (tirage.distracteurs) tirage.distracteurs = pieges(tirage.reponse, tirage.distracteurs);
+    return tirage;
+  };
+  return carte;
+}
+
+/** Inscrit un chapitre en trois niveaux, ouverts un à un (37-niveaux.js). */
+function inscrireChapitre({ cle, theme, titre, resume, n1, n2, n3, audit = 'brouillon' }) {
+  return Paquets.inscrire({
+    cle,
+    theme,
+    titre,
+    resume,
+    niveaux: ['terminale'],
+    progression: 'niveaux',
+    formatFixe: 'mixte',
+    consignesParFormat: true,
+    audit,
+    sections: [n1, n2, n3].map((cartes, i) => ({
+      cle: `n${i + 1}`,
+      titre: TITRES_NIVEAUX_CHAPITRE[i],
+      consigne: null,
+      cartes: cartes.map(piegesDistincts),
+    })),
+  });
+}
+
+// ---- 35-contenu-diffraction.js ----
+/* Paquet « Diffraction » (terminale, Ondes et signaux 1.B).
+ *
+ * Programme (BO spécial n° 8 du 25/07/2019) : caractériser la diffraction dans
+ * des situations variées et en citer des conséquences concrètes ; exploiter
+ * θ = λ / a ; le cas d'une onde lumineuse diffractée par une fente. On se
+ * limite aux ondes progressives sinusoïdales.
+ *
+ * Notations : λ longueur d'onde, a largeur de la fente (ou diamètre du fil),
+ * θ demi-angle caractéristique en radians, D distance fente-écran, L largeur
+ * de la tache centrale. Petits angles : tan θ ≈ θ = L / (2D), donc L = 2λD / a.
+ * Niveau 2 : valeurs choisies pour un calcul de tête.
+ *
+ * PROPOSITION à auditer par Loïc (audit: 'brouillon', 35-contenu-chapitres.js).
+ * RÈGLE ABSOLUE (32-paquets.js) : un identifiant de carte ne change jamais.
+ */
+
+/* ---------- Niveau 1 · Vocabulaire, définitions, formules ---------- */
+
+const DIFFRACTION_N1 = [
+  {
+    id: 'diffraction.n1.definition',
+    question: 'Qu’est-ce que la diffraction d’une onde ?',
+    formats: ['retournement', 'qcm'],
+    reponse: 'L’étalement des directions de propagation d’une onde qui rencontre une ouverture ou un obstacle',
+    distracteurs: [
+      'Le changement de fréquence d’une onde dont l’émetteur se déplace',
+      'L’addition de deux ondes qui se renforcent ou s’annulent',
+      'L’affaiblissement d’une onde au cours de sa propagation',
+    ],
+  },
+  {
+    id: 'diffraction.n1.condition',
+    question: 'À quelle condition la diffraction est-elle marquée ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'Quand la taille a de l’ouverture est du même ordre de grandeur que λ, ou plus petite',
+    distracteurs: [
+      'Quand l’ouverture est beaucoup plus grande que λ',
+      'Quand l’onde a une grande amplitude',
+      'Seulement quand l’onde est lumineuse',
+    ],
+  },
+  {
+    id: 'diffraction.n1.formule-theta',
+    question: 'Quelle relation donne l’angle caractéristique de diffraction θ ?',
+    formats: ['qcm', 'retournement'],
+    reponse: '$\\theta = \\dfrac{\\lambda}{a}$',
+    distracteurs: ['$\\theta = \\dfrac{a}{\\lambda}$', '$\\theta = \\lambda \\times a$', '$\\theta = \\dfrac{2\\lambda}{a}$'],
+    aide: 'λ longueur d’onde et a largeur de l’ouverture, dans la même unité ; θ en radians.',
+  },
+  {
+    id: 'diffraction.n1.unite-theta',
+    question: 'Dans $\\theta = \\dfrac{\\lambda}{a}$, en quelle unité s’exprime θ ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'En radians (rad)',
+    distracteurs: ['En degrés (°)', 'En mètres (m)', 'En m⁻¹'],
+    aide: 'λ / a est un rapport de deux longueurs : le résultat est un angle en radians, jamais en degrés.',
+  },
+  {
+    id: 'diffraction.n1.unites-lambda-a',
+    question: 'Pour calculer λ / a, comment exprimer λ et a ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'Dans la même unité, par exemple les deux en mètres',
+    distracteurs: ['λ en nm et a en mm', 'λ en m et a en mm', 'Peu importe : θ n’a pas d’unité'],
+    aide: '600 nm = 6,00 × 10^{-7} m et 0,20 mm = 2,0 × 10^{-4} m.',
+  },
+  {
+    id: 'diffraction.n1.frequence-inchangee',
+    question: '« Après une fente, l’onde diffractée a la même fréquence et la même longueur d’onde que l’onde incidente. »',
+    formats: ['vraifaux'],
+    vrai: true,
+    reponse: 'Vrai : la diffraction change les directions de propagation, ni la fréquence, ni la longueur d’onde, ni la célérité.',
+  },
+  {
+    id: 'diffraction.n1.ouverture-petite',
+    question: 'On rétrécit la fente. La tache centrale de diffraction…',
+    formats: ['qcm', 'retournement'],
+    reponse: '…s’élargit : θ = λ / a augmente quand a diminue',
+    distracteurs: ['…rétrécit : θ diminue', '…ne change pas : seule λ compte', '…disparaît'],
+  },
+  {
+    id: 'diffraction.n1.couleur',
+    question: 'Même fente, laser rouge puis laser bleu. Quelle lumière est la plus diffractée ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'La rouge : sa longueur d’onde est plus grande',
+    distracteurs: ['La bleue : sa longueur d’onde est plus grande', 'La bleue : elle est plus énergétique', 'Les deux autant : seule a compte'],
+    aide: 'λ rouge ≈ 650 nm, λ bleu ≈ 450 nm : θ = λ / a est plus grand pour le rouge.',
+  },
+  {
+    id: 'diffraction.n1.figure-fente',
+    question: 'Une fente fine verticale éclairée par un laser : la figure de diffraction s’étale…',
+    formats: ['qcm', 'retournement'],
+    reponse: '…horizontalement, perpendiculairement à la fente',
+    distracteurs: ['…verticalement, le long de la fente', '…en anneaux concentriques', '…dans toutes les directions à la fois'],
+    aide: 'La diffraction est marquée dans la direction où l’ouverture est étroite.',
+  },
+  {
+    id: 'diffraction.n1.tache-centrale',
+    question: 'Dans la figure de diffraction d’une fente, comment est la tache centrale ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'La plus large et la plus lumineuse, deux fois plus large que les taches voisines',
+    distracteurs: ['La plus petite et la plus sombre', 'Aussi large que les autres taches', 'Noire : l’onde s’y annule'],
+  },
+  {
+    id: 'diffraction.n1.largeur-tache',
+    question: 'Largeur L de la tache centrale sur un écran à la distance D (petits angles) ?',
+    formats: ['qcm', 'retournement'],
+    reponse: '$L = \\dfrac{2 \\lambda D}{a}$',
+    distracteurs: ['$L = \\dfrac{\\lambda D}{a}$', '$L = \\dfrac{2 a D}{\\lambda}$', '$L = \\dfrac{\\lambda a}{2 D}$'],
+    aide: 'tan θ ≈ θ = (L / 2) / D, et θ = λ / a : L = 2λD / a.',
+  },
+  {
+    id: 'diffraction.n1.petits-angles',
+    question: 'Pour un petit angle exprimé en radians, $\\tan\\theta \\approx \\;$?',
+    formats: ['qcm', 'retournement'],
+    reponse: '$\\theta$',
+    distracteurs: ['$1$', '$\\dfrac{1}{\\theta}$', '$\\theta^{2}$'],
+    aide: 'C’est ce qui permet d’écrire θ = L / (2D) sur l’écran.',
+  },
+  {
+    id: 'diffraction.n1.toutes-ondes',
+    question: '« La diffraction ne concerne que la lumière. »',
+    formats: ['vraifaux'],
+    vrai: false,
+    reponse: 'Faux : toutes les ondes diffractent, la houle, le son, les ondes radio comme la lumière.',
+  },
+  {
+    id: 'diffraction.n1.consequence-son',
+    question: 'Pourquoi entend-on quelqu’un qui parle dans le couloir, porte ouverte, sans le voir ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'Le son, de longueur d’onde proche de la largeur de la porte, est diffracté ; la lumière, de λ bien plus petite, presque pas',
+    distracteurs: [
+      'Le son va plus vite que la lumière',
+      'La lumière est absorbée par l’air du couloir',
+      'Le son est réfléchi par le plafond, jamais diffracté',
+    ],
+  },
+  {
+    id: 'diffraction.n1.consequence-digue',
+    question: 'Derrière l’entrée étroite d’un port, la houle s’étale en demi-cercles. Comment s’appelle ce phénomène ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'La diffraction',
+    distracteurs: ['Les interférences', 'L’effet Doppler', 'L’atténuation'],
+  },
+  {
+    id: 'diffraction.n1.fil',
+    question: '« Un fil fin de diamètre a donne la même figure de diffraction qu’une fente de largeur a. »',
+    formats: ['vraifaux'],
+    vrai: true,
+    reponse: 'Vrai : on l’utilise pour mesurer le diamètre d’un cheveu ou d’un fil avec θ = λ / a.',
+  },
+];
+
+/* ---------- Niveau 2 · Situations, calculs de tête ---------- */
+
+/** Combinaisons (λ en nm, a en mm) qui donnent un θ rond. */
+const DIFFRACTION_COUPLES = [[500, 0.10], [600, 0.10], [500, 0.20], [600, 0.20], [500, 0.050], [600, 0.30]];
+
+const DIFFRACTION_N2 = [
+  {
+    id: 'diffraction.n2.theta',
+    question: 'Calculer l’angle caractéristique de diffraction',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const [l, a] = auHasard(DIFFRACTION_COUPLES);
+      const theta = (l * 1e-9) / (a * 1e-3);
+      return {
+        question: `Un laser de longueur d’onde ${l} nm éclaire une fente de largeur ${chNombre(a, 2)} mm. Angle caractéristique θ, en radians ?`,
+        reponse: `${chSci(theta)} rad`,
+        nombre: theta,
+        tolerance: 0.01,
+        unite: 'rad',
+        distracteurs: [`${chSci(theta * 1000)} rad`, `${chSci(1 / theta)} rad`, `${chSci(theta / 1000)} rad`, `${chSci(2 * theta)} rad`],
+        aide: `θ = λ / a = ${l} × 10^{-9} / (${chNombre(a, 2)} × 10^{-3}) = ${chSci(theta)} rad. λ et a d’abord en mètres.`,
+      };
+    },
+  },
+  {
+    id: 'diffraction.n2.largeur-tache',
+    question: 'Largeur de la tache centrale sur l’écran',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const [l, a, D] = auHasard([[500, 0.10, 1.0], [500, 0.10, 2.0], [600, 0.20, 1.0], [600, 0.20, 2.0], [500, 0.20, 2.0], [600, 0.10, 1.0]]);
+      const L = (2 * l * 1e-9 * D) / (a * 1e-3) * 1e3; // en mm
+      return {
+        question: `λ = ${l} nm, fente de largeur a = ${chNombre(a, 2)} mm, écran à D = ${chNombre(D, 2)} m. `
+          + 'Avec $L = \\dfrac{2 \\lambda D}{a}$, largeur L de la tache centrale en mm ?',
+        reponse: `${chNombre(L)} mm`,
+        nombre: L,
+        tolerance: 0.01,
+        unite: 'mm',
+        distracteurs: [`${chNombre(L / 2)} mm`, `${chNombre(L * 10)} mm`, `${chNombre(L / 1000)} mm`],
+        aide: `L = 2 × ${l} × 10^{-9} × ${chNombre(D)} / (${chNombre(a, 2)} × 10^{-3}) = ${chNombre(L / 1000)} m = ${chNombre(L)} mm.`,
+      };
+    },
+  },
+  {
+    id: 'diffraction.n2.theta-ecran',
+    question: 'Angle de diffraction mesuré sur l’écran',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const [Lmm, D] = auHasard([[10, 1.0], [12, 1.0], [20, 2.0], [6, 1.0], [24, 2.0]]);
+      const theta = (Lmm * 1e-3) / (2 * D);
+      return {
+        question: `Tache centrale de largeur L = ${Lmm} mm sur un écran à D = ${chNombre(D, 2)} m. `
+          + 'Avec $\\theta \\approx \\dfrac{L}{2D}$, combien vaut θ en radians ?',
+        reponse: `${chSci(theta)} rad`,
+        nombre: theta,
+        tolerance: 0.01,
+        unite: 'rad',
+        distracteurs: [`${chSci(2 * theta)} rad`, `${chSci(theta * 1000)} rad`, `${chSci(theta / 2)} rad`],
+        aide: `θ = L / (2D) = ${chNombre(Lmm)} × 10^{-3} / (2 × ${chNombre(D)}) = ${chSci(theta)} rad. L / 2 est la demi-largeur.`,
+      };
+    },
+  },
+  {
+    id: 'diffraction.n2.lambda',
+    question: 'Retrouver la longueur d’onde d’un laser',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const [Lmm, a, D, l] = auHasard([[12, 0.10, 1.0, 600], [10, 0.10, 1.0, 500], [6, 0.20, 1.0, 600], [10, 0.20, 2.0, 500]]);
+      return {
+        question: `Fente de largeur a = ${chNombre(a, 2)} mm, écran à D = ${chNombre(D, 2)} m : la tache centrale mesure L = ${Lmm} mm. `
+          + 'Avec $\\lambda = \\dfrac{a L}{2 D}$, longueur d’onde en nm ?',
+        reponse: `${l} nm`,
+        nombre: l,
+        tolerance: 0.01,
+        unite: 'nm',
+        distracteurs: [`${2 * l} nm`, `${l / 2} nm`, `${l * 1000} nm`],
+        aide: `λ = ${chNombre(a, 2)} × 10^{-3} × ${Lmm} × 10^{-3} / (2 × ${chNombre(D)}) = ${l} × 10^{-9} m = ${l} nm.`,
+      };
+    },
+  },
+  {
+    id: 'diffraction.n2.largeur-fente',
+    question: 'Retrouver la largeur d’une fente',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const [l, theta, a] = auHasard([[500, 5.0e-3, 0.10], [600, 3.0e-3, 0.20], [500, 1.0e-2, 0.050], [600, 6.0e-3, 0.10]]);
+      return {
+        question: `Laser de ${l} nm ; on mesure θ = ${chSci(theta)} rad. Largeur a de la fente, en mm ?`,
+        reponse: `${chNombre(a, 2)} mm`,
+        nombre: a,
+        tolerance: 0.01,
+        unite: 'mm',
+        distracteurs: [`${chNombre(a * 10)} mm`, `${chNombre(a / 10)} mm`, `${chNombre(a * 1000)} mm`],
+        aide: `a = λ / θ = ${l} × 10^{-9} / ${chSci(theta)} = ${chSci(a * 1e-3)} m = ${chNombre(a, 2)} mm.`,
+      };
+    },
+  },
+  {
+    id: 'diffraction.n2.changer-a',
+    question: 'Effet de la largeur de la fente sur la tache',
+    formats: ['qcm', 'saisie'],
+    generer() {
+      const L = auHasard([6, 10, 12]);
+      const [mot, k, effet] = auHasard([
+        ['deux fois plus étroite', 2, 'a divisée par 2 donne L multipliée par 2'],
+        ['trois fois plus étroite', 3, 'a divisée par 3 donne L multipliée par 3'],
+        ['deux fois plus large', 0.5, 'a multipliée par 2 donne L divisée par 2'],
+      ]);
+      const L2 = L * k;
+      return {
+        question: `Avec une fente, la tache centrale mesure ${L} mm. On la remplace par une fente ${mot}, sans rien changer d’autre. Nouvelle largeur, en mm ?`,
+        reponse: `${chNombre(L2)} mm`,
+        nombre: L2,
+        tolerance: 0.01,
+        unite: 'mm',
+        distracteurs: pieges(`${chNombre(L2)} mm`, [`${chNombre(L / k)} mm`, `${chNombre(L)} mm`, `${chNombre(L2 * 2)} mm`, `${chNombre(L + 2)} mm`]),
+        aide: `L = 2λD / a est inversement proportionnelle à a : ${effet}.`,
+      };
+    },
+  },
+  {
+    id: 'diffraction.n2.changer-lambda',
+    question: 'Effet de la longueur d’onde sur la tache',
+    formats: ['qcm', 'saisie'],
+    generer() {
+      const [l1, l2, L1] = auHasard([[600, 400, 12], [400, 600, 8], [500, 600, 10], [600, 300, 12]]);
+      const L2 = (L1 * l2) / l1;
+      return {
+        question: `Avec un laser de ${l1} nm, la tache centrale mesure ${L1} mm. Même fente, même écran, laser de ${l2} nm : largeur, en mm ?`,
+        reponse: `${chNombre(L2)} mm`,
+        nombre: L2,
+        tolerance: 0.01,
+        unite: 'mm',
+        distracteurs: pieges(`${chNombre(L2)} mm`, [`${chNombre((L1 * l1) / l2, 2)} mm`, `${chNombre(L1)} mm`, `${chNombre(L1 + (l2 - l1) / 100)} mm`]),
+        aide: `L est proportionnelle à λ : × ${chNombre(l2 / l1, 3)} → ${chNombre(L2)} mm.`,
+      };
+    },
+  },
+  {
+    id: 'diffraction.n2.changer-d',
+    question: 'On éloigne l’écran de 1,0 m à 2,0 m, sans toucher à la fente ni au laser. Que deviennent θ et L ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'θ ne change pas ; L double',
+    distracteurs: ['θ double ; L double', 'θ ne change pas ; L ne change pas', 'θ diminue de moitié ; L ne change pas'],
+    aide: 'θ = λ / a ne dépend pas de l’écran ; L = 2Dθ est proportionnelle à D.',
+  },
+  {
+    id: 'diffraction.n2.son-porte',
+    question: 'Diffraction du son par une porte',
+    formats: ['vraifaux'],
+    generer() {
+      const [f, lambda, marquee] = auHasard([[170, '2,0 m', true], [340, '1,0 m', true], [425, '0,80 m', true], [3400, '10 cm', false], [17000, '2,0 cm', false]]);
+      const vrai = pileOuFace();
+      const annonce = vrai === marquee ? 'est très marquée' : 'est négligeable';
+      return {
+        question: `« Un son de ${chNombre(f)} Hz (c = 340 m·s⁻¹) traverse une porte de 0,80 m de large : sa diffraction ${annonce}. »`,
+        vrai,
+        reponse: `${vrai ? 'Vrai' : 'Faux'} : λ = c / f = ${lambda}, `
+          + (marquee ? 'du même ordre que la porte ou plus : diffraction marquée.' : 'bien plus petite que la porte : diffraction faible.'),
+      };
+    },
+  },
+  {
+    id: 'diffraction.n2.houle',
+    question: 'Houle de longueur d’onde 20 m devant l’entrée d’un port. Pour quelle largeur d’entrée la diffraction est-elle la plus marquée ?',
+    formats: ['qcm'],
+    reponse: '15 m',
+    distracteurs: ['200 m', '500 m', '1 km'],
+    aide: 'Diffraction marquée quand a est du même ordre que λ, ou plus petite.',
+  },
+  {
+    id: 'diffraction.n2.conversion',
+    question: 'Écrire λ et a en mètres',
+    formats: ['qcm', 'saisie'],
+    generer() {
+      const l = auHasard([400, 500, 633, 650]);
+      return {
+        question: `λ = ${l} nm : combien de mètres ?`,
+        reponse: `${chSci(l * 1e-9, 3)} m`,
+        nombre: l * 1e-9,
+        tolerance: 0.001,
+        unite: 'm',
+        distracteurs: [`${chSci(l * 1e-6, 3)} m`, `${chSci(l * 1e-3, 3)} m`, `${chSci(l * 1e-12, 3)} m`],
+        aide: '1 nm = 10^{-9} m.',
+      };
+    },
+  },
+];
+
+/* ---------- Niveau 3 · Pièges et type bac, calculatrice permise ---------- */
+
+const DIFFRACTION_N3 = [
+  {
+    id: 'diffraction.n3.cheveu',
+    question: 'Diamètre d’un cheveu par diffraction',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const [Lcm, a] = auHasard([[3.9, 50], [2.6, 75], [1.95, 100], [6.5, 30]]);
+      return {
+        question: `Un cheveu est éclairé par un laser de 650 nm ; sur un écran à D = 1,50 m, la tache centrale mesure L = ${chNombre(Lcm)} cm. `
+          + 'Diamètre du cheveu, en µm ?',
+        reponse: `${a} µm`,
+        nombre: a,
+        tolerance: 0.02,
+        unite: 'µm',
+        distracteurs: [`${chNombre(a / 2)} µm`, `${a * 2} µm`, `${chNombre(a / 1000)} µm`],
+        aide: `a = 2λD / L = 2 × 650 × 10^{-9} × 1,50 / (${chNombre(Lcm)} × 10^{-2}) = ${chSci(a * 1e-6)} m = ${a} µm.`,
+      };
+    },
+  },
+  {
+    id: 'diffraction.n3.lambda-laser',
+    question: 'Longueur d’onde d’un laser, mesure sur l’écran',
+    formats: ['saisie'],
+    generer() {
+      const D = auHasard([1.20, 1.60, 2.00]);
+      const l = auHasard([532, 633, 650]);
+      const a = 0.10e-3;
+      const L = Math.round(((2 * l * 1e-9 * D) / a) * 1000) / 10; // en cm, au mm près
+      const lCalc = ((a * L * 1e-2) / (2 * D)) * 1e9;
+      return {
+        question: `Fente de 0,10 mm, écran à D = ${chNombre(D, 3)} m : la tache centrale mesure L = ${chNombre(L, 2)} cm. Longueur d’onde du laser, en nm ?`,
+        reponse: `${chNombre(Math.round(lCalc))} nm`,
+        nombre: lCalc,
+        tolerance: 0.02,
+        unite: 'nm',
+        aide: `λ = a L / (2D) = 1,0 × 10^{-4} × ${chNombre(L, 2)} × 10^{-2} / (2 × ${chNombre(D)}) ≈ ${chNombre(lCalc, 3)} nm.`,
+      };
+    },
+  },
+  {
+    id: 'diffraction.n3.pente',
+    question: 'Exploiter la droite θ = f(1/a)',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const l = auHasard([532, 633, 650]);
+      const x = auHasard([1.0e4, 2.0e4]);
+      const theta = Number((l * 1e-9 * x).toPrecision(3));
+      return {
+        question: `On trace θ en fonction de 1/a pour plusieurs fentes : une droite passant par l’origine et par le point (1/a = ${chSci(x)} m⁻¹ ; θ = ${chSci(theta, 3)} rad). `
+          + 'Longueur d’onde du laser, en nm ?',
+        reponse: `${l} nm : c’est la pente de la droite`,
+        nombre: l,
+        tolerance: 0.02,
+        unite: 'nm',
+        distracteurs: [`${chNombre(l * 2)} nm`, `${chNombre(Math.round(l / 2))} nm`, `${chSci(x / theta, 3)} nm`],
+        aide: `θ = λ × (1/a) : la pente vaut λ = ${chSci(theta, 3)} / ${chSci(x)} = ${chSci(l * 1e-9, 3)} m = ${l} nm.`,
+      };
+    },
+  },
+  {
+    id: 'diffraction.n3.pente-sens',
+    question: 'Pourquoi trace-t-on θ en fonction de 1/a, et non de a, pour exploiter θ = λ / a ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'Pour obtenir une droite passant par l’origine, dont la pente est λ',
+    distracteurs: [
+      'Parce que θ augmente avec a',
+      'Pour que les points soient plus espacés',
+      'Parce que θ en fonction de a est aussi une droite, mais de pente 1/λ',
+    ],
+    aide: 'θ en fonction de a est une hyperbole : on ne lit pas λ dessus. En fonction de 1/a, c’est une fonction linéaire.',
+  },
+  {
+    id: 'diffraction.n3.copie-degres',
+    consigne: 'Corrige la copie.',
+    formats: ['qcm', 'retournement'],
+    question: 'Copie d’élève : « θ = λ / a = 633 × 10⁻⁹ / 1,0 × 10⁻⁴ = 6,3 × 10⁻³ °. » Où est l’erreur ?',
+    reponse: 'L’unité : θ = λ / a donne un angle en radians, pas en degrés',
+    distracteurs: [
+      'Il fallait calculer a / λ',
+      'Il fallait garder λ en nanomètres',
+      'Aucune erreur',
+    ],
+  },
+  {
+    id: 'diffraction.n3.copie-facteur-2',
+    consigne: 'Corrige la copie.',
+    formats: ['qcm', 'retournement'],
+    question: 'Copie d’élève : « tan θ ≈ θ = L / D, donc L = λD / a. » Où est l’erreur ?',
+    reponse: 'θ se mesure sur une demi-tache : θ = L / (2D), donc L = 2λD / a',
+    distracteurs: [
+      'tan θ ≈ θ n’est pas permis',
+      'Il fallait écrire L = λa / D',
+      'Aucune erreur',
+    ],
+    aide: 'θ est l’angle entre le centre de la tache et sa première extinction : le côté opposé vaut L / 2.',
+  },
+  {
+    id: 'diffraction.n3.copie-nm',
+    consigne: 'Corrige la copie.',
+    formats: ['qcm', 'retournement'],
+    question: 'Copie d’élève : « λ = 600 nm et a = 0,20 mm, donc θ = 600 / 0,20 = 3 000 rad. » Où est l’erreur ?',
+    reponse: 'λ et a ne sont pas dans la même unité : θ = 6,00 × 10⁻⁷ / 2,0 × 10⁻⁴ = 3,0 × 10⁻³ rad',
+    distracteurs: [
+      'Il fallait diviser 0,20 par 600',
+      'Il fallait multiplier par 2',
+      'Aucune : 3 000 rad est un angle possible',
+    ],
+    aide: 'Un angle de 3 000 rad n’a aucun sens physique : c’est le signal d’une erreur de conversion.',
+  },
+  {
+    id: 'diffraction.n3.copie-demi-tache',
+    consigne: 'Corrige la copie.',
+    formats: ['qcm', 'retournement'],
+    question: 'Copie d’élève : « Je mesure 1,2 cm du centre de la tache centrale à sa première extinction ; c’est L. Donc λ = aL / (2D). » Où est l’erreur ?',
+    reponse: '1,2 cm est la demi-largeur : L = 2,4 cm, sinon λ est deux fois trop petite',
+    distracteurs: [
+      'Il fallait mesurer jusqu’à la deuxième extinction',
+      'La formule est λ = 2aL / D',
+      'Aucune erreur',
+    ],
+    aide: 'L se mesure d’une extinction à l’autre, de part et d’autre du centre. Mesurer plusieurs taches réduit l’incertitude.',
+  },
+  {
+    id: 'diffraction.n3.copie-chiffres',
+    consigne: 'Corrige la copie.',
+    formats: ['qcm', 'retournement'],
+    question: 'Copie d’élève, données a = 0,10 mm, D = 1,60 m, L = 2,1 cm : « λ = 6,5625 × 10⁻⁷ m. » Qu’en dit le correcteur ?',
+    reponse: 'Trop de chiffres significatifs : λ ≈ 6,6 × 10⁻⁷ m',
+    distracteurs: ['C’est parfait', 'Il faut écrire λ = 7 × 10⁻⁷ nm', 'Il faut écrire λ = 656,25 nm'],
+  },
+  {
+    id: 'diffraction.n3.longueur-onde-change',
+    question: '« La lumière diffractée par une fente a une longueur d’onde plus grande, puisque la tache s’élargit. »',
+    formats: ['vraifaux'],
+    vrai: false,
+    reponse: 'Faux : λ ne change pas. Ce sont les directions de propagation qui s’étalent.',
+  },
+  {
+    id: 'diffraction.n3.blu-ray',
+    question: 'Pourquoi un Blu-ray (laser à 405 nm) contient-il plus de données qu’un DVD (laser à 650 nm) ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'Plus λ est petite, moins le faisceau focalisé est élargi par la diffraction : la tache lue est plus petite, les données plus serrées',
+    distracteurs: [
+      'Le laser bleu est plus puissant et grave plus profond',
+      'Plus λ est petite, plus la diffraction est marquée',
+      'La diffraction ne joue aucun rôle dans la lecture optique',
+    ],
+  },
+  {
+    id: 'diffraction.n3.telescope',
+    question: 'Pourquoi construit-on des télescopes à très grand miroir pour distinguer deux étoiles proches ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'Plus l’ouverture est grande, plus θ = λ / a est petit : la diffraction brouille moins l’image',
+    distracteurs: [
+      'Plus l’ouverture est petite, moins la lumière est diffractée',
+      'Un grand miroir supprime la diffraction',
+      'Seulement pour capter plus de lumière : la diffraction ne joue pas',
+    ],
+    aide: 'Capter plus de lumière compte aussi, mais c’est la diffraction qui limite la résolution.',
+  },
+  {
+    id: 'diffraction.n3.petit-angle',
+    question: '« Avec θ = 5,0 × 10⁻³ rad, on peut écrire tan θ ≈ θ. »',
+    formats: ['vraifaux'],
+    vrai: true,
+    reponse: 'Vrai : θ est très petit devant 1 rad ; tan θ et θ diffèrent de moins de 0,01 %.',
+  },
+  {
+    id: 'diffraction.n3.precision',
+    question: 'Pour mesurer λ au mieux avec une fente, quel réglage choisir ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'Un écran éloigné et une fente fine : la tache est large, l’incertitude relative sur L petite',
+    distracteurs: [
+      'Un écran très proche, pour que la tache soit nette et petite',
+      'Une fente large, pour avoir plus de lumière',
+      'Peu importe : L ne dépend que de λ',
+    ],
+  },
+];
+
+inscrireChapitre({
+  cle: 'diffraction',
+  theme: 'Ondes et signaux',
+  titre: 'Diffraction',
+  resume: 'Trois niveaux : vocabulaire et formules ; petites situations à calculer de tête ; pièges, copies '
+    + 'd’élèves et exercices type bac, calculatrice permise. Les valeurs changent à chaque passage.',
+  n1: DIFFRACTION_N1,
+  n2: DIFFRACTION_N2,
+  n3: DIFFRACTION_N3,
+});
+
+// ---- 35-contenu-doppler.js ----
+/* Paquet « Effet Doppler » (terminale, Ondes et signaux 1.C).
+ *
+ * Programme (BO spécial n° 8 du 25/07/2019) : décrire et interpréter
+ * qualitativement l'effet Doppler ; établir l'expression du décalage pour un
+ * observateur fixe et un émetteur mobile, à une dimension ; l'exploiter avec
+ * des ondes acoustiques ou électromagnétiques ; en déduire une vitesse.
+ *
+ * Notations : f_E fréquence émise, f_R fréquence reçue, v vitesse de
+ * l'émetteur, c célérité de l'onde, Δf = f_R − f_E.
+ * Niveau 2 : valeurs choisies pour un calcul de tête (c = 340 m/s).
+ *
+ * PROPOSITION à auditer par Loïc (audit: 'brouillon', 35-contenu-chapitres.js).
+ * RÈGLE ABSOLUE (32-paquets.js) : un identifiant de carte ne change jamais.
+ */
+
+/* ---------- Niveau 1 · Vocabulaire, définitions, formules ---------- */
+
+const DOPPLER_N1 = [
+  {
+    id: 'doppler.n1.definition',
+    question: 'Qu’est-ce que l’effet Doppler ?',
+    formats: ['retournement', 'qcm'],
+    reponse: 'Le décalage entre la fréquence reçue et la fréquence émise, quand l’émetteur et le récepteur sont en mouvement l’un par rapport à l’autre',
+    distracteurs: [
+      'L’affaiblissement d’une onde au cours de sa propagation',
+      'Le changement de direction d’une onde qui passe par une ouverture',
+      'La variation de la célérité d’une onde quand l’émetteur se déplace',
+    ],
+  },
+  {
+    id: 'doppler.n1.decalage',
+    question: 'Comment se définit le décalage Doppler $\\Delta f$ ?',
+    formats: ['retournement', 'qcm'],
+    reponse: '$\\Delta f = f_R - f_E$ : fréquence reçue moins fréquence émise',
+    distracteurs: ['$\\Delta f = f_E - f_R$', '$\\Delta f = f_R + f_E$', '$\\Delta f = \\dfrac{f_R}{f_E}$'],
+    aide: 'Δf > 0 quand l’émetteur s’approche, Δf < 0 quand il s’éloigne.',
+  },
+  {
+    id: 'doppler.n1.approche-aigu',
+    question: '« Quand une source sonore s’approche d’un observateur immobile, il perçoit un son plus aigu que le son émis. »',
+    formats: ['vraifaux'],
+    vrai: true,
+    reponse: 'Vrai : la fréquence reçue est plus grande que la fréquence émise.',
+  },
+  {
+    id: 'doppler.n1.eloignement',
+    question: 'Une ambulance s’éloigne d’un piéton immobile. La fréquence qu’il perçoit est…',
+    formats: ['qcm', 'retournement'],
+    reponse: 'plus basse que la fréquence émise',
+    distracteurs: ['plus haute que la fréquence émise', 'égale à la fréquence émise', 'nulle'],
+    aide: 'Le son perçu est plus grave : Δf < 0.',
+  },
+  {
+    id: 'doppler.n1.emise-inchangee',
+    question: '« Quand l’ambulance s’approche, sa sirène émet un son de fréquence plus élevée. »',
+    formats: ['vraifaux'],
+    vrai: false,
+    reponse: 'Faux : la fréquence émise ne change pas. C’est la fréquence reçue qui est plus élevée.',
+  },
+  {
+    id: 'doppler.n1.celerite',
+    question: '« La célérité du son augmente quand la source sonore se déplace vers l’observateur. »',
+    formats: ['vraifaux'],
+    vrai: false,
+    reponse: 'Faux : la célérité ne dépend que du milieu de propagation. Ce sont les fronts d’onde qui se resserrent.',
+  },
+  {
+    id: 'doppler.n1.fronts',
+    question: 'Devant un émetteur en mouvement, que deviennent les fronts d’onde ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'Ils se resserrent : la longueur d’onde reçue diminue',
+    distracteurs: [
+      'Ils s’écartent : la longueur d’onde reçue augmente',
+      'Ils vont plus vite : la célérité augmente',
+      'Rien ne change devant l’émetteur, seulement derrière',
+    ],
+  },
+  {
+    id: 'doppler.n1.formule-approche',
+    question: 'Émetteur qui s’approche à la vitesse v d’un récepteur fixe : quelle expression de $f_R$ ?',
+    formats: ['qcm', 'retournement'],
+    reponse: '$f_R = f_E \\times \\dfrac{c}{c - v}$',
+    distracteurs: [
+      '$f_R = f_E \\times \\dfrac{c}{c + v}$',
+      '$f_R = f_E \\times \\dfrac{c - v}{c}$',
+      '$f_R = f_E \\times \\dfrac{v}{c}$',
+    ],
+    aide: 'Le dénominateur c − v est plus petit que c : f_R > f_E, le son est plus aigu.',
+  },
+  {
+    id: 'doppler.n1.formule-eloignement',
+    question: 'Émetteur qui s’éloigne à la vitesse v d’un récepteur fixe : quelle expression de $f_R$ ?',
+    formats: ['qcm', 'retournement'],
+    reponse: '$f_R = f_E \\times \\dfrac{c}{c + v}$',
+    distracteurs: [
+      '$f_R = f_E \\times \\dfrac{c}{c - v}$',
+      '$f_R = f_E \\times \\dfrac{c + v}{c}$',
+      '$f_R = f_E \\times \\dfrac{c}{v}$',
+    ],
+    aide: 'Le dénominateur c + v est plus grand que c : f_R < f_E, le son est plus grave.',
+  },
+  {
+    id: 'doppler.n1.approchee',
+    question: 'Quand $v \\ll c$, quelle expression approchée donne la valeur du décalage Doppler ?',
+    formats: ['qcm', 'retournement'],
+    reponse: '$|\\Delta f| \\approx f_E \\times \\dfrac{v}{c}$',
+    distracteurs: [
+      '$|\\Delta f| \\approx f_E \\times \\dfrac{c}{v}$',
+      '$|\\Delta f| \\approx \\dfrac{v}{f_E \\times c}$',
+      '$|\\Delta f| \\approx f_E \\times v \\times c$',
+    ],
+  },
+  {
+    id: 'doppler.n1.vitesse',
+    question: 'Du décalage Doppler à la vitesse ($v \\ll c$) : $v = \\;$?',
+    formats: ['qcm', 'retournement'],
+    reponse: '$v = c \\times \\dfrac{|\\Delta f|}{f_E}$',
+    distracteurs: [
+      '$v = c \\times \\dfrac{f_E}{|\\Delta f|}$',
+      '$v = \\dfrac{|\\Delta f|}{f_E \\times c}$',
+      '$v = |\\Delta f| \\times f_E \\times c$',
+    ],
+    aide: 'C’est le principe de la vélocimétrie : on mesure Δf, on en déduit v.',
+  },
+  {
+    id: 'doppler.n1.immobiles',
+    question: '« Un émetteur et un récepteur immobiles l’un par rapport à l’autre : le décalage Doppler est nul. »',
+    formats: ['vraifaux'],
+    vrai: true,
+    reponse: 'Vrai : sans mouvement relatif, f_R = f_E.',
+  },
+  {
+    id: 'doppler.n1.toutes-ondes',
+    question: '« L’effet Doppler ne concerne que les ondes sonores. »',
+    formats: ['vraifaux'],
+    vrai: false,
+    reponse: 'Faux : il concerne toutes les ondes, sonores comme électromagnétiques (radar, lumière des étoiles).',
+  },
+  {
+    id: 'doppler.n1.rouge',
+    question: 'La lumière d’une galaxie qui s’éloigne de nous est décalée…',
+    formats: ['qcm', 'retournement'],
+    reponse: 'vers le rouge : la longueur d’onde reçue est plus grande',
+    distracteurs: [
+      'vers le bleu : la longueur d’onde reçue est plus petite',
+      'vers le rouge : la longueur d’onde reçue est plus petite',
+      'vers le bleu : la fréquence reçue est plus petite',
+    ],
+    aide: 'Éloignement : fréquence reçue plus petite, donc longueur d’onde plus grande (λ = c / f).',
+  },
+  {
+    id: 'doppler.n1.applications',
+    question: 'Lequel de ces dispositifs ne repose pas sur l’effet Doppler ?',
+    formats: ['qcm'],
+    reponse: 'Le sonomètre, qui mesure un niveau d’intensité sonore',
+    distracteurs: [
+      'Le radar routier, qui mesure la vitesse d’un véhicule',
+      'L’échographie Doppler, qui mesure la vitesse du sang',
+      'La mesure de la vitesse d’une étoile par son spectre',
+    ],
+  },
+  {
+    id: 'doppler.n1.unites',
+    question: 'Dans $|\\Delta f| = f_E \\times \\dfrac{v}{c}$, en quelles unités exprimer v et c ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'Dans la même unité, par exemple les deux en m·s⁻¹',
+    distracteurs: ['v en km·h⁻¹ et c en m·s⁻¹', 'v en m·s⁻¹ et c en km·s⁻¹', 'Peu importe : le rapport n’a pas d’unité'],
+    aide: 'v / c est un rapport sans unité seulement si v et c sont dans la même unité : 90 km/h se convertit d’abord en 25 m/s.',
+  },
+];
+
+/* ---------- Niveau 2 · Situations, calculs de tête ---------- */
+
+const DOPPLER_N2 = [
+  {
+    id: 'doppler.n2.decalage-approche',
+    question: 'Calculer un décalage Doppler (expression approchée)',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      // f_E multiple de 340 et v = 340 / m : Δf = f_E / m, toujours entier.
+      const [m, v] = auHasard([[10, 34], [20, 17], [40, 8.5], [100, 3.4]]);
+      const fE = 340 * auHasard(m === 40 || m === 100 ? [5, 10] : [1, 2, 3, 5]);
+      const df = fE / m;
+      return {
+        question: `Une source émet un son de ${chNombre(fE)} Hz et s’approche à ${chNombre(v)} m·s⁻¹ d’un micro fixe. `
+          + 'c = 340 m·s⁻¹. Décalage Doppler $|\\Delta f|$, avec l’expression approchée ?',
+        reponse: `${chNombre(df)} Hz`,
+        nombre: df,
+        unite: 'Hz',
+        distracteurs: [`${chNombre(df * 10)} Hz`, `${chNombre(df / 10)} Hz`, `${chNombre(fE + df)} Hz`, `${chNombre(2 * df)} Hz`],
+        aide: `|Δf| ≈ f_E × v / c = ${chNombre(fE)} × ${chNombre(v)} / 340 = ${chNombre(fE)} / ${m} = ${chNombre(df)} Hz.`,
+      };
+    },
+  },
+  {
+    id: 'doppler.n2.vitesse-source',
+    question: 'Retrouver la vitesse d’une source à partir du décalage',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const fE = auHasard([500, 1000, 2000]);
+      const [rapport, v] = auHasard([[10, 34], [20, 17], [50, 6.8], [100, 3.4]]);
+      const df = fE / rapport;
+      return {
+        question: `Un haut-parleur émet à ${chNombre(fE)} Hz ; le micro fixe mesure un décalage de ${chNombre(df)} Hz. `
+          + 'c = 340 m·s⁻¹. Vitesse du haut-parleur ?',
+        reponse: `${chNombre(v)} m·s⁻¹`,
+        nombre: v,
+        unite: 'm·s⁻¹',
+        distracteurs: [`${chNombre(v * 10)} m·s⁻¹`, `${chNombre(v / 10)} m·s⁻¹`, `${chNombre(340 / v)} m·s⁻¹`],
+        aide: `v = c × |Δf| / f_E = 340 × ${chNombre(df)} / ${chNombre(fE)} = 340 / ${rapport} = ${chNombre(v)} m·s⁻¹.`,
+      };
+    },
+  },
+  {
+    id: 'doppler.n2.exacte-approche',
+    question: 'Fréquence reçue, expression exacte, émetteur qui s’approche',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      // c − v choisi pour que c / (c − v) se simplifie avec f_E.
+      const [v, reste] = auHasard([[20, 320], [40, 300], [90, 250], [70, 270]]);
+      const k = auHasard([1, 2, 3]);
+      const fE = reste * k;
+      const fR = 340 * k;
+      return {
+        question: `Émetteur à f_E = ${chNombre(fE)} Hz, qui s’approche à ${v} m·s⁻¹ d’un récepteur fixe ; c = 340 m·s⁻¹. `
+          + '$f_R = f_E \\times \\dfrac{c}{c - v}$. Combien vaut $f_R$ ?',
+        reponse: `${chNombre(fR)} Hz`,
+        nombre: fR,
+        unite: 'Hz',
+        distracteurs: [`${chNombre(Math.round(fE * 340 / (340 + v)))} Hz`, `${chNombre(fE)} Hz`, `${chNombre(fE - (fR - fE))} Hz`],
+        aide: `c − v = ${reste} m·s⁻¹ : f_R = ${chNombre(fE)} × 340 / ${reste} = ${k} × 340 = ${chNombre(fR)} Hz, plus aigu que f_E.`,
+      };
+    },
+  },
+  {
+    id: 'doppler.n2.exacte-eloignement',
+    question: 'Fréquence reçue, expression exacte, émetteur qui s’éloigne',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const [v, somme] = auHasard([[20, 360], [60, 400], [85, 425], [160, 500]]);
+      const k = auHasard([1, 2]);
+      const fE = somme * k;
+      const fR = 340 * k;
+      return {
+        question: `Émetteur à f_E = ${chNombre(fE)} Hz, qui s’éloigne à ${v} m·s⁻¹ d’un récepteur fixe ; c = 340 m·s⁻¹. `
+          + '$f_R = f_E \\times \\dfrac{c}{c + v}$. Combien vaut $f_R$ ?',
+        reponse: `${chNombre(fR)} Hz`,
+        nombre: fR,
+        unite: 'Hz',
+        distracteurs: [`${chNombre(fE)} Hz`, `${chNombre(fE + (fE - fR))} Hz`, `${chNombre(340 * k * 2)} Hz`],
+        aide: `c + v = ${somme} m·s⁻¹ : f_R = ${chNombre(fE)} × 340 / ${somme} = ${chNombre(fR)} Hz, plus grave que f_E.`,
+      };
+    },
+  },
+  {
+    id: 'doppler.n2.sens-du-mouvement',
+    question: 'Approche ou éloignement ?',
+    formats: ['vraifaux'],
+    generer() {
+      const fE = auHasard([440, 500, 1000, 1200]);
+      const ecart = auHasard([10, 20, 30]);
+      const approche = pileOuFace();
+      const fR = approche ? fE + ecart : fE - ecart;
+      const vrai = pileOuFace();
+      return {
+        question: `« Émis à ${chNombre(fE)} Hz, le son est reçu à ${chNombre(fR)} Hz par un micro fixe : `
+          + `l’émetteur ${vrai === approche ? 's’approche' : 's’éloigne'} du micro. »`,
+        vrai,
+        reponse: `${vrai ? 'Vrai' : 'Faux'} : ` + (approche
+          ? `l’émetteur s’approche, car f_R > f_E (Δf = +${ecart} Hz).`
+          : `l’émetteur s’éloigne, car f_R < f_E (Δf = −${ecart} Hz).`),
+      };
+    },
+  },
+  {
+    id: 'doppler.n2.kmh',
+    question: 'Décalage Doppler d’un véhicule, vitesse en km/h',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const [kmh, ms] = auHasard([[36, 10], [72, 20], [108, 30]]);
+      const fE = auHasard([340, 680, 1020]);
+      const df = (fE * ms) / 340;
+      return {
+        question: `Une moto roule à ${kmh} km·h⁻¹ vers un piéton. Son klaxon émet à ${chNombre(fE)} Hz ; c = 340 m·s⁻¹. `
+          + 'Décalage $|\\Delta f|$ perçu (expression approchée) ?',
+        reponse: `${chNombre(df)} Hz`,
+        nombre: df,
+        unite: 'Hz',
+        distracteurs: [`${chNombre((fE * kmh) / 340)} Hz`, `${chNombre(df / 10)} Hz`, `${chNombre(fE + df)} Hz`],
+        aide: `D’abord la conversion : ${kmh} km·h⁻¹ = ${kmh} / 3,6 = ${ms} m·s⁻¹. Puis |Δf| ≈ ${chNombre(fE)} × ${ms} / 340 = ${chNombre(df)} Hz.`,
+      };
+    },
+  },
+  {
+    id: 'doppler.n2.galaxie',
+    question: 'Vitesse d’une galaxie par le décalage de ses raies',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const [dl, v] = auHasard([[0.5, 300], [1, 600], [2, 1200], [5, 3000]]);
+      return {
+        question: `Une raie émise à λ = 500 nm est reçue décalée de ${chNombre(dl)} nm vers le rouge. `
+          + 'Avec $\\dfrac{\\Delta\\lambda}{\\lambda} = \\dfrac{v}{c}$ et c = 3,0 × 10^{5} km·s⁻¹, vitesse d’éloignement en km·s⁻¹ ?',
+        reponse: `${chNombre(v)} km·s⁻¹`,
+        nombre: v,
+        unite: 'km·s⁻¹',
+        distracteurs: [`${chNombre(v * 10)} km·s⁻¹`, `${chNombre(v / 10)} km·s⁻¹`, `${chNombre(v * 1000)} km·s⁻¹`],
+        aide: `v = c × Δλ / λ = 3,0 × 10^{5} × ${chNombre(dl)} / 500 = ${chNombre(v)} km·s⁻¹.`,
+      };
+    },
+  },
+  {
+    id: 'doppler.n2.ordre-frequences',
+    question: 'Un camion klaxonne en continu en passant devant toi. Dans quel ordre entends-tu les fréquences ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'D’abord plus aigu que f_E, puis plus grave que f_E',
+    distracteurs: [
+      'D’abord plus grave que f_E, puis plus aigu que f_E',
+      'De plus en plus aigu pendant l’approche, puis de plus en plus grave',
+      'Toujours f_E : seul le volume change',
+    ],
+    aide: 'À vitesse constante, la fréquence reçue est constante pendant l’approche (f_R > f_E), puis bascule au passage (f_R < f_E).',
+  },
+  {
+    id: 'doppler.n2.approximation-valide',
+    question: 'L’expression approchée est-elle justifiée ?',
+    formats: ['vraifaux'],
+    generer() {
+      const [v, ok] = auHasard([[3.4, true], [17, true], [10, true], [250, false], [170, false]]);
+      return {
+        question: `« Pour une source à ${chNombre(v)} m·s⁻¹ dans l’air (c = 340 m·s⁻¹), on peut utiliser $|\\Delta f| \\approx f_E \\dfrac{v}{c}$. »`,
+        vrai: ok,
+        reponse: ok
+          ? `Vrai : v / c = ${chNombre(Math.round((v / 340) * 1000) / 10)} %, donc v ≪ c.`
+          : `Faux : v / c ≈ ${chNombre(Math.round((v / 340) * 100))} %, v n’est pas négligeable devant c : il faut l’expression exacte.`,
+      };
+    },
+  },
+  {
+    id: 'doppler.n2.lambda-recue',
+    question: 'Émetteur qui s’approche : la longueur d’onde reçue est-elle plus grande ou plus petite que celle émise ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'Plus petite : λ_R = c / f_R avec f_R > f_E',
+    distracteurs: ['Plus grande : λ_R = c / f_R avec f_R > f_E', 'Égale : la célérité ne change pas', 'Plus grande, car l’émetteur pousse l’onde'],
+  },
+];
+
+/* ---------- Niveau 3 · Pièges et type bac, calculatrice permise ---------- */
+
+const DOPPLER_N3 = [
+  {
+    id: 'doppler.n3.deux-frequences',
+    question: 'Vitesse d’un véhicule à partir des fréquences à l’approche et à l’éloignement',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const v = auHasard([15, 20, 25, 30]);
+      const fE = auHasard([400, 440, 500]);
+      const f1 = Math.round((fE * 340) / (340 - v));
+      const f2 = Math.round((fE * 340) / (340 + v));
+      const vCalc = (340 * (f1 - f2)) / (f1 + f2);
+      const arrondi = Math.round(vCalc);
+      return {
+        question: `Au passage d’une voiture, un micro fixe enregistre ${chNombre(f1)} Hz à l’approche puis ${chNombre(f2)} Hz à l’éloignement. `
+          + 'On montre que $v = c \\times \\dfrac{f_1 - f_2}{f_1 + f_2}$, avec c = 340 m·s⁻¹. Vitesse de la voiture, en m·s⁻¹ ?',
+        reponse: `${chNombre(arrondi)} m·s⁻¹ (soit ${chNombre(Math.round(arrondi * 3.6))} km·h⁻¹ environ)`,
+        nombre: vCalc,
+        tolerance: 0.03,
+        unite: 'm·s⁻¹',
+        distracteurs: [`${chNombre(Math.round(vCalc * 2))} m·s⁻¹`, `${chNombre(Math.round(vCalc / 2))} m·s⁻¹`, `${chNombre(f1 - f2)} m·s⁻¹`],
+        aide: `v = 340 × (${f1} − ${f2}) / (${f1} + ${f2}) ≈ ${chNombre(vCalc, 3)} m·s⁻¹. On l’obtient en divisant les deux expressions exactes : f_1 / f_2 = (c + v) / (c − v).`,
+      };
+    },
+  },
+  {
+    id: 'doppler.n3.radar',
+    question: 'Radar routier : formule fournie, ondes électromagnétiques',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const kmh = auHasard([72, 90, 108, 126, 144]);
+      const v = kmh / 3.6;
+      const df = Math.round((2 * 24e9 * v) / 3e8);
+      return {
+        question: `Un radar émet une onde de fréquence f = 24 GHz ; l’onde réfléchie par la voiture revient décalée de ${chNombre(df)} Hz. `
+          + 'Formule fournie : $\\Delta f = \\dfrac{2 f v}{c}$, avec c = 3,00 × 10^{8} m·s⁻¹. Vitesse de la voiture en km·h⁻¹ ?',
+        reponse: `${kmh} km·h⁻¹ (v = ${chNombre(v, 3)} m·s⁻¹)`,
+        nombre: kmh,
+        tolerance: 0.02,
+        unite: 'km·h⁻¹',
+        distracteurs: [`${kmh * 2} km·h⁻¹`, `${chNombre(Math.round(kmh / 2))} km·h⁻¹`, `${chNombre(v, 3)} km·h⁻¹`],
+        aide: `v = Δf × c / (2f) = ${df} × 3,00 × 10^{8} / (2 × 24 × 10^{9}) = ${chNombre(v, 3)} m·s⁻¹, puis × 3,6. Le 2 vient de l’aller-retour : la voiture reçoit l’onde en mouvement, puis la renvoie en mouvement.`,
+      };
+    },
+  },
+  {
+    id: 'doppler.n3.raie-halpha',
+    question: 'Vitesse d’une galaxie par la raie Hα',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const lambda0 = 656.3;
+      const lambda = auHasard([658.5, 660.2, 662.9, 670.0]);
+      const v = (3.00e5 * (lambda - lambda0)) / lambda0;
+      return {
+        question: `La raie Hα de l’hydrogène, émise à λ₀ = 656,3 nm, est observée à λ = ${chNombre(lambda)} nm dans le spectre d’une galaxie. `
+          + 'Avec $\\dfrac{\\lambda - \\lambda_0}{\\lambda_0} = \\dfrac{v}{c}$ et c = 3,00 × 10^{5} km·s⁻¹, vitesse d’éloignement en km·s⁻¹ ?',
+        reponse: `${chNombre(v, 3)} km·s⁻¹ ; la galaxie s’éloigne (décalage vers le rouge)`,
+        nombre: v,
+        tolerance: 0.02,
+        unite: 'km·s⁻¹',
+        distracteurs: [`${chNombre(v * 1000, 3)} km·s⁻¹`, `${chNombre((3.00e5 * (lambda - lambda0)) / lambda, 3)} km·s⁻¹ (en divisant par λ)`,
+          `${chNombre(v / 1000, 3)} km·s⁻¹`],
+        aide: `v = c × (λ − λ₀) / λ₀ = 3,00 × 10^{5} × ${chNombre(Number((lambda - lambda0).toFixed(1)))} / 656,3. λ > λ₀ : éloignement.`,
+      };
+    },
+  },
+  {
+    id: 'doppler.n3.exacte-ou-approchee',
+    question: 'Fréquence reçue : expression exacte, calculatrice',
+    formats: ['saisie'],
+    generer() {
+      const fE = auHasard([440, 523, 880]);
+      const v = auHasard([25, 30, 45]);
+      const fR = (fE * 340) / (340 - v);
+      return {
+        question: `Une sirène à ${fE} Hz s’approche à ${v} m·s⁻¹ d’un observateur fixe (c = 340 m·s⁻¹). `
+          + 'Fréquence reçue, avec l’expression exacte, à 1 Hz près ?',
+        reponse: `${chNombre(Math.round(fR))} Hz`,
+        nombre: fR,
+        tolerance: 0.003,
+        unite: 'Hz',
+        aide: `f_R = ${fE} × 340 / (340 − ${v}) ≈ ${chNombre(fR, 4)} Hz. L’expression approchée donnerait ${chNombre(fE * (1 + v / 340), 4)} Hz : v / c ≈ ${chNombre(Math.round((v / 340) * 100))} %, l’écart n’est plus négligeable.`,
+      };
+    },
+  },
+  {
+    id: 'doppler.n3.copie-kmh',
+    consigne: 'Corrige la copie.',
+    formats: ['qcm', 'retournement'],
+    question: 'Copie d’élève : « Le klaxon émet à 1 000 Hz, la voiture roule à 90 km/h, c = 340 m/s. '
+      + '|Δf| = 1 000 × 90 / 340 = 265 Hz. » Où est l’erreur ?',
+    reponse: 'La vitesse n’est pas convertie : 90 km/h = 25 m/s, donc |Δf| ≈ 74 Hz',
+    distracteurs: [
+      'Il fallait diviser par 90 et multiplier par 340',
+      'Il fallait utiliser c = 3,00 × 10⁸ m/s',
+      'Il n’y a pas d’erreur : 265 Hz est juste',
+    ],
+    aide: 'v et c doivent être dans la même unité. 1 000 × 25 / 340 ≈ 74 Hz.',
+  },
+  {
+    id: 'doppler.n3.copie-signe',
+    consigne: 'Corrige la copie.',
+    formats: ['qcm', 'retournement'],
+    question: 'Copie d’élève : « f_E = 500 Hz, f_R = 480 Hz. Δf = f_E − f_R = 20 Hz > 0 : l’émetteur s’approche. » Où est l’erreur ?',
+    reponse: 'Δf = f_R − f_E = −20 Hz : l’émetteur s’éloigne',
+    distracteurs: [
+      'Le calcul est juste mais Δf s’exprime en m/s',
+      'Il fallait calculer Δf = f_R + f_E',
+      'Aucune : un décalage positif signifie bien une approche',
+    ],
+    aide: 'Pas besoin de calcul pour conclure : f_R < f_E, le son reçu est plus grave, l’émetteur s’éloigne.',
+  },
+  {
+    id: 'doppler.n3.copie-chiffres',
+    consigne: 'Corrige la copie.',
+    formats: ['qcm', 'retournement'],
+    question: 'Copie d’élève, données à deux ou trois chiffres significatifs : « v = 26,153846 m/s ». Qu’en dit le correcteur ?',
+    reponse: 'Trop de chiffres significatifs : on écrit v ≈ 26 m/s',
+    distracteurs: ['C’est parfait : la calculatrice est précise', 'Il faut arrondir à v = 30 m/s', 'Il faut écrire v = 26,2 km/h'],
+  },
+  {
+    id: 'doppler.n3.copie-lumiere',
+    consigne: 'Corrige la copie.',
+    formats: ['qcm', 'retournement'],
+    question: 'Copie d’élève, radar routier : « Δf = 2 f v / c avec c = 340 m/s. » Où est l’erreur ?',
+    reponse: 'Le radar émet une onde électromagnétique : c = 3,00 × 10⁸ m/s',
+    distracteurs: [
+      'Il ne faut pas de facteur 2',
+      'Il faut utiliser c − v au lieu de c',
+      'Aucune : c est toujours 340 m/s',
+    ],
+  },
+  {
+    id: 'doppler.n3.vitesse-constante',
+    question: '« Une source s’éloigne en ligne droite à vitesse constante : la fréquence perçue diminue au cours du temps. »',
+    formats: ['vraifaux'],
+    vrai: false,
+    reponse: 'Faux : à vitesse constante, la fréquence perçue est constante (plus basse que f_E). C’est l’intensité sonore qui diminue avec la distance.',
+  },
+  {
+    id: 'doppler.n3.son-fort',
+    question: '« Plus la sirène est puissante, plus le décalage Doppler est grand. »',
+    formats: ['vraifaux'],
+    vrai: false,
+    reponse: 'Faux : |Δf| ≈ f_E v / c ne dépend que de la fréquence émise, de la vitesse et de la célérité.',
+  },
+  {
+    id: 'doppler.n3.etablir',
+    question: 'Pour établir $f_R$, on regarde l’émetteur pendant une période $T_E$, en s’approchant à la vitesse v. Quelle relation entre longueurs d’onde ?',
+    formats: ['qcm', 'retournement'],
+    reponse: '$\\lambda_R = \\lambda_E - v T_E$',
+    distracteurs: ['$\\lambda_R = \\lambda_E + v T_E$', '$\\lambda_R = v T_E$', '$\\lambda_R = \\lambda_E \\times v T_E$'],
+    aide: 'Pendant T_E, l’onde parcourt λ_E = c T_E et l’émetteur v T_E : deux fronts successifs ne sont plus distants que de (c − v) T_E. '
+      + 'Avec f_R = c / λ_R, on obtient f_R = f_E × c / (c − v).',
+  },
+  {
+    id: 'doppler.n3.supersonique',
+    question: 'Pourquoi l’expression approchée $|\\Delta f| \\approx f_E \\dfrac{v}{c}$ convient-elle à un radar routier, mais pas au son d’un avion de chasse ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'Pour le radar, v ≪ c = 3 × 10⁸ m/s ; pour l’avion, v est du même ordre que la célérité du son',
+    distracteurs: [
+      'Parce que les ondes électromagnétiques ne subissent pas l’effet Doppler',
+      'Parce que l’avion émet un son trop fort',
+      'Parce que le radar fait un aller-retour',
+    ],
+  },
+  {
+    id: 'doppler.n3.echographie',
+    question: 'Échographie Doppler : la sonde émet à 5,0 MHz et reçoit un écho décalé de +1,3 kHz. Le sang dans ce vaisseau…',
+    formats: ['qcm', 'retournement'],
+    reponse: '…s’approche de la sonde : le décalage est positif',
+    distracteurs: ['…s’éloigne de la sonde : le décalage est positif', '…est immobile : 1,3 kHz est négligeable devant 5,0 MHz',
+      '…on ne peut rien dire sans la célérité des ultrasons'],
+  },
+  {
+    id: 'doppler.n3.ordre-de-grandeur',
+    question: 'Un TGV passe à 300 km·h⁻¹ en klaxonnant à 500 Hz (c = 340 m·s⁻¹). Ordre de grandeur de $|\\Delta f|$ à l’approche ?',
+    formats: ['qcm'],
+    reponse: 'Une centaine de hertz',
+    distracteurs: ['Un hertz', 'Dix mille hertz', 'Moins d’un hertz'],
+    aide: 'v ≈ 83 m·s⁻¹ ; l’expression exacte donne f_R ≈ 662 Hz, soit |Δf| ≈ 160 Hz. v / c ≈ 25 % : l’approchée (≈ 120 Hz) sous-estime.',
+  },
+];
+
+inscrireChapitre({
+  cle: 'doppler',
+  theme: 'Ondes et signaux',
+  titre: 'Effet Doppler',
+  resume: 'Trois niveaux : vocabulaire et formules ; petites situations à calculer de tête ; pièges, copies '
+    + 'd’élèves et exercices type bac, calculatrice permise. Les valeurs changent à chaque passage.',
+  n1: DOPPLER_N1,
+  n2: DOPPLER_N2,
+  n3: DOPPLER_N3,
+});
+
+// ---- 35-contenu-dosages.js ----
+/* Paquet « Dosages par étalonnage » (terminale, Constitution et transformations
+ * de la matière 1.B, avec les acquis de première).
+ *
+ * Programme (BO spécial n° 8 du 25/07/2019) : exploiter la loi de Beer-Lambert
+ * ou la loi de Kohlrausch pour déterminer une concentration ; citer leurs
+ * domaines de validité ; mesurer une conductance et tracer une courbe
+ * d'étalonnage pour déterminer une concentration.
+ *
+ * Dosages seulement, jamais de titrage (décision de Loïc, 31/10/2026) : ni
+ * équivalence, ni suivi pH-métrique ou conductimétrique d'un titrage.
+ *
+ * Notations : A absorbance, ε coefficient d'absorption molaire, ℓ longueur de
+ * cuve, c concentration en quantité de matière ; G conductance, σ conductivité,
+ * λ_i conductivité ionique molaire, [X_i] en mol·m⁻³ dans la loi de Kohlrausch.
+ * Niveau 2 : valeurs choisies pour un calcul de tête.
+ *
+ * PROPOSITION à auditer par Loïc (audit: 'brouillon', 35-contenu-chapitres.js).
+ * RÈGLE ABSOLUE (32-paquets.js) : un identifiant de carte ne change jamais.
+ */
+
+/* ---------- Niveau 1 · Vocabulaire, définitions, formules ---------- */
+
+/** Couleur absorbée → couleur perçue (cercle chromatique simplifié). */
+const DOSAGES_COULEURS = [
+  ['le bleu', 'jaune-orangé'],
+  ['le vert', 'magenta (pourpre)'],
+  ['le rouge', 'cyan (bleu-vert)'],
+  ['le violet', 'jaune-vert'],
+];
+
+const DOSAGES_N1 = [
+  {
+    id: 'dosages.n1.absorbance-unite',
+    question: 'Quelle est l’unité de l’absorbance A ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'Aucune : l’absorbance est sans unité',
+    distracteurs: ['Le mol·L⁻¹', 'Le L·mol⁻¹·cm⁻¹', 'Le nanomètre'],
+  },
+  {
+    id: 'dosages.n1.beer-lambert',
+    question: 'Quelle est l’expression de la loi de Beer-Lambert ?',
+    formats: ['qcm', 'retournement'],
+    reponse: '$A = \\varepsilon \\, \\ell \\, c$',
+    distracteurs: ['$A = \\dfrac{\\varepsilon \\, c}{\\ell}$', '$A = \\dfrac{c}{\\varepsilon \\, \\ell}$', '$A = \\varepsilon + \\ell + c$'],
+    aide: 'ε coefficient d’absorption molaire (L·mol⁻¹·cm⁻¹), ℓ longueur de cuve traversée (cm), c concentration (mol·L⁻¹).',
+  },
+  {
+    id: 'dosages.n1.couleur',
+    question: 'Couleur perçue d’une solution',
+    formats: ['qcm', 'retournement'],
+    generer() {
+      const [absorbee, percue] = auHasard(DOSAGES_COULEURS);
+      return {
+        question: `Une solution absorbe surtout ${absorbee}. De quelle couleur la voit-on ?`,
+        reponse: percue,
+        distracteurs: DOSAGES_COULEURS.map((c) => c[1]).filter((c) => c !== percue),
+        aide: 'On voit la couleur complémentaire de celle qui est absorbée : elles sont opposées sur le cercle chromatique.',
+      };
+    },
+  },
+  {
+    id: 'dosages.n1.lambda-max',
+    question: 'Pourquoi règle-t-on le spectrophotomètre sur la longueur d’onde $\\lambda_{max}$ du maximum d’absorption ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'L’absorbance y est la plus grande : la mesure est la plus sensible et la plus précise',
+    distracteurs: [
+      'C’est la seule longueur d’onde où la loi de Beer-Lambert s’applique',
+      'Pour que l’absorbance soit nulle avec le blanc',
+      'Parce que la solution y est transparente',
+    ],
+  },
+  {
+    id: 'dosages.n1.validite-beer-lambert',
+    question: 'Dans quelles conditions la loi de Beer-Lambert est-elle valable ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'Solutions diluées, lumière monochromatique, absorbance pas trop grande',
+    distracteurs: [
+      'Solutions concentrées, en lumière blanche',
+      'Seulement pour les solutions incolores',
+      'Pour toute solution, quelle que soit sa concentration',
+    ],
+  },
+  {
+    id: 'dosages.n1.proportionnalite',
+    question: '« Dans le domaine de validité de la loi de Beer-Lambert, si la concentration double, l’absorbance double. »',
+    formats: ['vraifaux'],
+    vrai: true,
+    reponse: 'Vrai : A = k × c, l’absorbance est proportionnelle à la concentration.',
+  },
+  {
+    id: 'dosages.n1.une-seule-espece',
+    question: '« Pour un dosage spectrophotométrique, l’espèce dosée doit être la seule à absorber à la longueur d’onde choisie. »',
+    formats: ['vraifaux'],
+    vrai: true,
+    reponse: 'Vrai : sinon l’absorbance mesurée additionne les contributions de plusieurs espèces.',
+  },
+  {
+    id: 'dosages.n1.conductance',
+    question: 'Comment la conductance G d’une portion de solution est-elle liée à sa résistance R ?',
+    formats: ['qcm', 'retournement'],
+    reponse: '$G = \\dfrac{1}{R}$, en siemens (S)',
+    distracteurs: ['$G = R$, en ohms (Ω)', '$G = \\dfrac{1}{R}$, en ohms (Ω)', '$G = U \\times I$, en watts (W)'],
+  },
+  {
+    id: 'dosages.n1.conductivite-unite',
+    question: 'Quelle est l’unité SI de la conductivité σ ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'Le S·m⁻¹',
+    distracteurs: ['Le S', 'Le S·m²·mol⁻¹', 'Le Ω·m'],
+  },
+  {
+    id: 'dosages.n1.kohlrausch',
+    question: 'Quelle est l’expression de la loi de Kohlrausch ?',
+    formats: ['qcm', 'retournement'],
+    reponse: '$\\sigma = \\sum_i \\lambda_i \\, [X_i]$',
+    distracteurs: ['$\\sigma = \\sum_i \\dfrac{\\lambda_i}{[X_i]}$', '$\\sigma = \\dfrac{1}{R}$', '$\\sigma = \\varepsilon \\, \\ell \\, c$'],
+    aide: 'On somme sur tous les ions de la solution : λ_i est la conductivité ionique molaire de l’ion X_i.',
+  },
+  {
+    id: 'dosages.n1.kohlrausch-unites',
+    question: 'Dans $\\sigma = \\sum \\lambda_i [X_i]$, en quelle unité exprimer les concentrations $[X_i]$ ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'En mol·m⁻³',
+    distracteurs: ['En mol·L⁻¹', 'En g·L⁻¹', 'En mmol·m⁻³'],
+    aide: 'σ en S·m⁻¹ et λ_i en S·m²·mol⁻¹ : il faut des mol·m⁻³. 1 mol·L⁻¹ = 1 000 mol·m⁻³.',
+  },
+  {
+    id: 'dosages.n1.lambda-ionique',
+    question: 'Unité de la conductivité ionique molaire $\\lambda_i$ ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'Le S·m²·mol⁻¹',
+    distracteurs: ['Le S·m⁻¹', 'Le S·mol·m⁻³', 'Le nanomètre'],
+  },
+  {
+    id: 'dosages.n1.validite-kohlrausch',
+    question: '« La loi de Kohlrausch reste valable pour des solutions très concentrées. »',
+    formats: ['vraifaux'],
+    vrai: false,
+    reponse: 'Faux : elle n’est valable que pour des solutions diluées.',
+  },
+  {
+    id: 'dosages.n1.sucre',
+    question: '« On peut doser une solution de sucre (saccharose) par conductimétrie. »',
+    formats: ['vraifaux'],
+    vrai: false,
+    reponse: 'Faux : le saccharose ne libère pas d’ions en solution, il ne conduit pas le courant.',
+  },
+  {
+    id: 'dosages.n1.gamme',
+    question: 'Qu’est-ce qu’une gamme d’étalonnage ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'Une série de solutions de concentrations connues de l’espèce à doser',
+    distracteurs: [
+      'Une série de mesures répétées sur l’échantillon inconnu',
+      'L’ensemble des longueurs d’onde du spectre',
+      'Une série de solutions de concentrations inconnues',
+    ],
+    aide: 'On la prépare souvent par dilutions d’une solution mère.',
+  },
+  {
+    id: 'dosages.n1.courbe',
+    question: 'Dans le domaine de validité, à quoi ressemble la courbe d’étalonnage A = f(c) ou σ = f(c) ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'Une droite qui passe par l’origine',
+    distracteurs: ['Une droite qui ne passe pas par l’origine', 'Une exponentielle décroissante', 'Une parabole'],
+  },
+  {
+    id: 'dosages.n1.concentration-masse',
+    question: 'Quelle relation entre concentration en masse $c_m$, concentration en quantité de matière c et masse molaire M ?',
+    formats: ['qcm', 'retournement'],
+    reponse: '$c_m = c \\times M$',
+    distracteurs: ['$c_m = \\dfrac{c}{M}$', '$c_m = \\dfrac{M}{c}$', '$c_m = c + M$'],
+    aide: 'g·L⁻¹ = mol·L⁻¹ × g·mol⁻¹.',
+  },
+];
+
+/* ---------- Niveau 2 · Situations, calculs de tête ---------- */
+
+const DOSAGES_N2 = [
+  {
+    id: 'dosages.n2.c-depuis-a',
+    question: 'Concentration à partir de l’absorbance',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const k = auHasard([100, 200]);
+      const A = auHasard([0.2, 0.3, 0.4, 0.6, 0.8]);
+      const c = (A / k) * 1000;
+      return {
+        question: `Étalonnage : A = k × c avec k = ${k} L·mol⁻¹. L’échantillon a une absorbance A = ${chNombre(A, 2)}. `
+          + 'Concentration, en mmol·L⁻¹ ?',
+        reponse: `${chNombre(c)} mmol·L⁻¹`,
+        nombre: c,
+        unite: 'mmol·L⁻¹',
+        distracteurs: [`${chNombre(A * k)} mmol·L⁻¹`, `${chNombre(c / 1000)} mmol·L⁻¹`, `${chNombre(c * 10)} mmol·L⁻¹`],
+        aide: `c = A / k = ${chNombre(A, 2)} / ${k} = ${chNombre(A / k)} mol·L⁻¹ = ${chNombre(c)} mmol·L⁻¹.`,
+      };
+    },
+  },
+  {
+    id: 'dosages.n2.a-depuis-c',
+    question: 'Absorbance attendue',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const k = auHasard([100, 150, 200, 250]);
+      const cm = auHasard([1, 2, 4]);
+      const A = (k * cm) / 1000;
+      return {
+        question: `A = k × c avec k = ${k} L·mol⁻¹. Absorbance d’une solution à ${cm} mmol·L⁻¹ ?`,
+        reponse: chNombre(A),
+        nombre: A,
+        distracteurs: [chNombre(k * cm), chNombre(A * 10), chNombre(A / 10)],
+        aide: `${cm} mmol·L⁻¹ = ${chNombre(cm / 1000)} mol·L⁻¹, donc A = ${k} × ${chNombre(cm / 1000)} = ${chNombre(A)}, sans unité.`,
+      };
+    },
+  },
+  {
+    id: 'dosages.n2.epsilon',
+    question: 'Absorbance par la loi de Beer-Lambert',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const eps = auHasard([1000, 2000, 5000]);
+      const c = auHasard(eps === 5000 ? [1, 2] : [1, 2, 3]) * 1e-4;
+      const A = eps * c;
+      return {
+        question: `ε = ${chNombre(eps)} L·mol⁻¹·cm⁻¹, cuve de ℓ = 1,0 cm, c = ${chSci(c)} mol·L⁻¹. Absorbance ?`,
+        reponse: chNombre(A),
+        nombre: A,
+        distracteurs: [chNombre(A * 10), chNombre(A / 10), chNombre(eps / (c * 1e4))],
+        aide: `A = ε ℓ c = ${chNombre(eps)} × 1,0 × ${chSci(c)} = ${chNombre(A)}.`,
+      };
+    },
+  },
+  {
+    id: 'dosages.n2.lecture-droite',
+    question: 'Lire la courbe d’étalonnage par proportionnalité',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const [cRef, aRef] = auHasard([[4, 0.8], [5, 1.0], [2, 0.6], [10, 0.5]]);
+      const rapport = auHasard([0.5, 0.25, 0.75]);
+      const A = aRef * rapport;
+      const c = cRef * rapport;
+      return {
+        question: `La droite d’étalonnage passe par l’origine et par le point (c = ${chNombre(cRef)} mmol·L⁻¹ ; A = ${chNombre(aRef, 2)}). `
+          + `L’échantillon donne A = ${chNombre(A, 2)}. Concentration, en mmol·L⁻¹ ?`,
+        reponse: `${chNombre(c)} mmol·L⁻¹`,
+        nombre: c,
+        unite: 'mmol·L⁻¹',
+        distracteurs: [`${chNombre(Math.round((cRef / rapport) * 10) / 10)} mmol·L⁻¹`, `${chNombre(cRef)} mmol·L⁻¹`, `${chNombre(c * 10)} mmol·L⁻¹`],
+        aide: `L’absorbance vaut ${chNombre(rapport)} fois celle du point de référence : la concentration aussi, ${chNombre(rapport)} × ${chNombre(cRef)} = ${chNombre(c)} mmol·L⁻¹.`,
+      };
+    },
+  },
+  {
+    id: 'dosages.n2.dilution',
+    question: 'Remonter à la concentration de l’échantillon dilué',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const F = auHasard([10, 20]);
+      const cDil = auHasard([1.5, 2, 2.5, 4]);
+      const c = F * cDil;
+      return {
+        question: `L’échantillon a été dilué ${F} fois avant la mesure ; la courbe d’étalonnage donne ${chNombre(cDil)} mmol·L⁻¹ pour la solution diluée. `
+          + 'Concentration de l’échantillon d’origine, en mmol·L⁻¹ ?',
+        reponse: `${chNombre(c)} mmol·L⁻¹`,
+        nombre: c,
+        unite: 'mmol·L⁻¹',
+        distracteurs: [`${chNombre(cDil)} mmol·L⁻¹`, `${chNombre(cDil / F)} mmol·L⁻¹`, `${chNombre(cDil + F)} mmol·L⁻¹`],
+        aide: `L’échantillon est ${F} fois plus concentré que la solution mesurée : c = ${F} × ${chNombre(cDil)} = ${chNombre(c)} mmol·L⁻¹.`,
+      };
+    },
+  },
+  {
+    id: 'dosages.n2.conversion',
+    question: 'Convertir une concentration pour la loi de Kohlrausch',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const c = auHasard([1.0e-3, 2.5e-3, 5.0e-2, 0.1, 2.0e-2]);
+      const m3 = c * 1000;
+      return {
+        question: `c = ${c >= 0.01 ? chNombre(c) : chSci(c)} mol·L⁻¹. Combien de mol·m⁻³ ?`,
+        reponse: `${chNombre(m3)} mol·m⁻³`,
+        nombre: m3,
+        unite: 'mol·m⁻³',
+        distracteurs: [`${chSci(c / 1000, 2)} mol·m⁻³`, `${chNombre(m3 / 10)} mol·m⁻³`, `${chNombre(m3 * 1000)} mol·m⁻³`],
+        aide: '1 m³ = 1 000 L : il y a 1 000 fois plus de matière dans un mètre cube que dans un litre. On multiplie par 1 000.',
+      };
+    },
+  },
+  {
+    id: 'dosages.n2.kohlrausch',
+    question: 'Conductivité d’une solution, loi de Kohlrausch',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const [sel, somme] = auHasard([['chlorure de sodium (Na⁺ + Cl⁻)', 12.6], ['chlorure de potassium (K⁺ + Cl⁻)', 15]]);
+      const c = auHasard([1, 2, 5]);
+      const sigma = somme * c;
+      return {
+        question: `Solution de ${sel} à c = ${c} mmol·L⁻¹. λ(cation) + λ(anion) = ${chNombre(somme)} mS·m²·mol⁻¹. `
+          + 'Conductivité σ, en mS·m⁻¹ ?',
+        reponse: `${chNombre(sigma)} mS·m⁻¹`,
+        nombre: sigma,
+        unite: 'mS·m⁻¹',
+        distracteurs: [`${chNombre(sigma / 1000)} mS·m⁻¹`, `${chNombre(sigma * 1000)} mS·m⁻¹`, `${chNombre(sigma / 10)} mS·m⁻¹`],
+        aide: `${c} mmol·L⁻¹ = ${c} mol·m⁻³. σ = (λ₊ + λ₋) × c = ${chNombre(somme)} × ${c} = ${chNombre(sigma)} mS·m⁻¹.`,
+      };
+    },
+  },
+  {
+    id: 'dosages.n2.sigma-kc',
+    question: 'Concentration à partir de la conductivité',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const c = auHasard([2, 2.5, 3, 5]);
+      const sigma = 12 * c;
+      return {
+        question: `Droite d’étalonnage : σ = 12 × c (σ en mS·m⁻¹, c en mmol·L⁻¹). On mesure σ = ${chNombre(sigma)} mS·m⁻¹. c = ? (mmol·L⁻¹)`,
+        reponse: `${chNombre(c)} mmol·L⁻¹`,
+        nombre: c,
+        unite: 'mmol·L⁻¹',
+        distracteurs: [`${chNombre(sigma * 12)} mmol·L⁻¹`, `${chNombre(c * 10)} mmol·L⁻¹`, `${chNombre(sigma - 12)} mmol·L⁻¹`],
+        aide: `c = σ / 12 = ${chNombre(sigma)} / 12 = ${chNombre(c)} mmol·L⁻¹.`,
+      };
+    },
+  },
+  {
+    id: 'dosages.n2.conductance',
+    question: 'Conductance à partir de la résistance',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const R = auHasard([200, 250, 500, 1000]);
+      const G = 1000 / R;
+      return {
+        question: `Le conductimètre mesure une résistance R = ${chNombre(R)} Ω entre ses électrodes. Conductance G, en mS ?`,
+        reponse: `${chNombre(G)} mS`,
+        nombre: G,
+        unite: 'mS',
+        distracteurs: [`${chNombre(R)} mS`, `${chNombre(G / 1000)} mS`, `${chNombre(G * 10)} mS`],
+        aide: `G = 1 / R = 1 / ${chNombre(R)} = ${chNombre(G / 1000)} S = ${chNombre(G)} mS.`,
+      };
+    },
+  },
+  {
+    id: 'dosages.n2.concentration-masse',
+    question: 'Concentration en masse',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const c = auHasard([0.05, 0.1, 0.2]);
+      const M = auHasard([50, 100, 200, 250]);
+      const cm = c * M;
+      return {
+        question: `Le dosage donne c = ${chNombre(c)} mol·L⁻¹ pour une espèce de masse molaire M = ${M} g·mol⁻¹. Concentration en masse, en g·L⁻¹ ?`,
+        reponse: `${chNombre(cm)} g·L⁻¹`,
+        nombre: cm,
+        unite: 'g·L⁻¹',
+        distracteurs: [`${chNombre(M / c)} g·L⁻¹`, `${chNombre(c / M)} g·L⁻¹`, `${chNombre(cm * 10)} g·L⁻¹`],
+        aide: `c_m = c × M = ${chNombre(c)} × ${M} = ${chNombre(cm)} g·L⁻¹.`,
+      };
+    },
+  },
+  {
+    id: 'dosages.n2.hors-gamme',
+    question: 'L’échantillon est-il dans la gamme ?',
+    formats: ['vraifaux'],
+    generer() {
+      const Amax = auHasard([1.0, 1.2]);
+      const A = auHasard([0.45, 0.8, 1.6, 2.1]);
+      const dans = A <= Amax;
+      const vrai = pileOuFace();
+      const annonce = vrai === dans;
+      return {
+        question: `« Les étalons vont de A = 0 à A = ${chNombre(Amax, 2)}. L’échantillon donne A = ${chNombre(A)} : `
+          + (annonce ? 'on peut lire sa concentration sur la droite. »' : 'il faut le diluer avant de conclure. »'),
+        vrai,
+        reponse: `${vrai ? 'Vrai' : 'Faux'} : ` + (dans
+          ? 'son absorbance est dans la gamme, la lecture sur la droite est fiable.'
+          : 'son absorbance dépasse la gamme : on dilue l’échantillon (puis on remultiplie par le facteur de dilution).'),
+      };
+    },
+  },
+];
+
+/* ---------- Niveau 3 · Pièges et type bac, calculatrice permise ---------- */
+
+const DOSAGES_N3 = [
+  {
+    id: 'dosages.n3.serum',
+    question: 'Sérum physiologique : dosage conductimétrique',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const sigma = auHasard([94, 96, 97, 99]);
+      const cDil = sigma / 12.6;
+      const cm = ((cDil * 20) / 1000) * 58.5;
+      return {
+        question: `Un sérum physiologique (chlorure de sodium, M = 58,5 g·mol⁻¹) est dilué 20 fois. La solution diluée a σ = ${sigma} mS·m⁻¹ ; `
+          + 'λ(Na⁺) + λ(Cl⁻) = 12,6 mS·m²·mol⁻¹. Concentration en masse du sérum, en g·L⁻¹ ?',
+        reponse: `${chNombre(cm, 2)} g·L⁻¹`,
+        nombre: cm,
+        tolerance: 0.03,
+        unite: 'g·L⁻¹',
+        distracteurs: [`${chNombre(cm / 20, 2)} g·L⁻¹`, `${chNombre(cm * 1000, 2)} g·L⁻¹`, `${chNombre((cDil * 20) / 1000, 2)} g·L⁻¹`],
+        aide: `c_dil = σ / (λ₊ + λ₋) = ${sigma} / 12,6 ≈ ${chNombre(cDil, 3)} mol·m⁻³ = ${chNombre(cDil / 1000, 3)} mol·L⁻¹ ; `
+          + `× 20 pour l’échantillon ; × 58,5 g·mol⁻¹ : ≈ ${chNombre(cm, 3)} g·L⁻¹. L’étiquette annonce 0,9 % (9,0 g·L⁻¹).`,
+      };
+    },
+  },
+  {
+    id: 'dosages.n3.dakin',
+    question: 'Permanganate dans le Dakin : dosage spectrophotométrique',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const A = auHasard([0.14, 0.15, 0.16]);
+      const c = A / 2300;
+      const mg = c * 158 * 1000;
+      return {
+        question: `Le Dakin contient des ions permanganate $\\ce{MnO4^-}$ (apportés par $\\ce{KMnO4}$, M = 158 g·mol⁻¹). `
+          + `À 530 nm, l’étalonnage donne A = k × c avec k = 2,3 × 10^{3} L·mol⁻¹ ; le Dakin a A = ${chNombre(A, 2)}. `
+          + 'Concentration en masse de $\\ce{KMnO4}$, en mg·L⁻¹ ?',
+        reponse: `${chNombre(mg, 2)} mg·L⁻¹`,
+        nombre: mg,
+        tolerance: 0.03,
+        unite: 'mg·L⁻¹',
+        distracteurs: [`${chNombre(mg / 1000, 2)} mg·L⁻¹`, `${chNombre(c * 1e6, 2)} mg·L⁻¹`, `${chNombre(A * 2300 * 158, 2)} mg·L⁻¹`],
+        aide: `c = A / k = ${chNombre(A, 2)} / 2,3 × 10^{3} ≈ ${chSci(c, 2)} mol·L⁻¹ ; c_m = c × M ≈ ${chSci(c * 158, 2)} g·L⁻¹ = ${chNombre(mg, 2)} mg·L⁻¹.`,
+      };
+    },
+  },
+  {
+    id: 'dosages.n3.ecart-etiquette',
+    question: 'Comparer le résultat à l’étiquette',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const ref = 9.0;
+      const mes = auHasard([8.6, 8.8, 9.3, 9.5]);
+      const ecart = (Math.abs(mes - ref) / ref) * 100;
+      return {
+        question: `Étiquette : 9,0 g·L⁻¹ de chlorure de sodium. Le dosage donne ${chNombre(mes)} g·L⁻¹. Écart relatif à l’étiquette, en % ?`,
+        reponse: `${chNombre(ecart, 2)} %`,
+        nombre: ecart,
+        tolerance: 0.05,
+        unite: '%',
+        distracteurs: [`${chNombre(Math.abs(mes - ref), 2)} %`, `${chNombre((Math.abs(mes - ref) / mes) * 1000, 2)} %`, `${chNombre(ecart * 10, 2)} %`],
+        aide: `|${chNombre(mes)} − 9,0| / 9,0 × 100 ≈ ${chNombre(ecart, 2)} %.`,
+      };
+    },
+  },
+  {
+    id: 'dosages.n3.menthe',
+    question: 'Sirop de menthe : tartrazine E102 (jaune, λ_max ≈ 430 nm) et bleu patenté E131 (λ_max ≈ 640 nm). Où mesurer pour doser le bleu patenté ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'À 640 nm, où la tartrazine n’absorbe pratiquement pas',
+    distracteurs: [
+      'À 430 nm, où le sirop absorbe le plus',
+      'À 530 nm, entre les deux maximums',
+      'En lumière blanche, pour voir la couleur verte',
+    ],
+    aide: 'Il faut à la fois une absorbance forte pour E131 et une seule espèce absorbante à cette longueur d’onde.',
+  },
+  {
+    id: 'dosages.n3.eau-minerale',
+    question: '« La conductivité d’une eau minérale suffit, avec la loi de Kohlrausch, à trouver sa concentration en ions calcium. »',
+    formats: ['vraifaux'],
+    vrai: false,
+    reponse: 'Faux : la conductivité additionne la contribution de tous les ions présents ; elle ne distingue pas le calcium des autres.',
+  },
+  {
+    id: 'dosages.n3.blanc',
+    question: 'À quoi sert le « blanc » avant les mesures d’absorbance ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'À régler A = 0 avec le solvant seul, pour ne mesurer que l’absorption de l’espèce dosée',
+    distracteurs: [
+      'À vérifier que la cuve est propre en mesurant une solution étalon',
+      'À choisir la longueur d’onde de travail',
+      'À mesurer l’absorbance maximale de l’appareil',
+    ],
+    aide: 'C’est ce qui fait passer la droite d’étalonnage par l’origine.',
+  },
+  {
+    id: 'dosages.n3.grande-absorbance',
+    question: '« Une absorbance de 2,5 se mesure aussi bien qu’une absorbance de 0,5. »',
+    formats: ['vraifaux'],
+    vrai: false,
+    reponse: 'Faux : à A = 2,5, il ne passe que 0,3 % de la lumière ; la mesure est imprécise et la loi de Beer-Lambert n’est souvent plus vérifiée. On dilue.',
+  },
+  {
+    id: 'dosages.n3.copie-kohlrausch',
+    consigne: 'Corrige la copie.',
+    formats: ['qcm', 'retournement'],
+    question: 'Copie d’élève : « c = 2,0 × 10⁻³ mol/L, λ(Na⁺) + λ(Cl⁻) = 12,6 × 10⁻³ S·m²·mol⁻¹, '
+      + 'σ = 12,6 × 10⁻³ × 2,0 × 10⁻³ = 2,5 × 10⁻⁵ S/m. » Où est l’erreur ?',
+    reponse: 'La concentration doit être en mol·m⁻³ : c = 2,0 mol·m⁻³, donc σ ≈ 2,5 × 10⁻² S·m⁻¹',
+    distracteurs: [
+      'Il fallait diviser λ par c',
+      'Il fallait additionner λ et c',
+      'Aucune : le calcul est juste',
+    ],
+    aide: 'Avec des mol·L⁻¹, le résultat est 1 000 fois trop petit.',
+  },
+  {
+    id: 'dosages.n3.copie-dilution',
+    consigne: 'Corrige la copie.',
+    formats: ['qcm', 'retournement'],
+    question: 'Copie d’élève : « J’ai dilué le jus 10 fois. Sur la courbe, je lis c = 2,4 mmol/L. Le jus contient donc 2,4 mmol/L. » Où est l’erreur ?',
+    reponse: 'Le facteur de dilution est oublié : le jus contient 10 × 2,4 = 24 mmol/L',
+    distracteurs: [
+      'Il fallait diviser par 10 : 0,24 mmol/L',
+      'On ne peut pas lire une concentration sur une courbe d’étalonnage',
+      'Aucune : la dilution ne change pas la concentration',
+    ],
+  },
+  {
+    id: 'dosages.n3.copie-longueur-onde',
+    consigne: 'Corrige la copie.',
+    formats: ['qcm', 'retournement'],
+    question: 'Copie d’élève : « La solution de sulfate de cuivre est bleue, je règle donc le spectrophotomètre sur le bleu, vers 450 nm. » Où est l’erreur ?',
+    reponse: 'Une solution bleue absorbe surtout dans l’orangé-rouge : on mesure vers 600 à 800 nm',
+    distracteurs: [
+      'Il faut mesurer en lumière blanche',
+      'Il faut mesurer dans l’ultraviolet, à 200 nm',
+      'Aucune : on mesure toujours à la couleur de la solution',
+    ],
+    aide: 'On voit la couleur qui n’est pas absorbée : à 450 nm, la solution bleue absorbe peu.',
+  },
+  {
+    id: 'dosages.n3.copie-unite-absorbance',
+    consigne: 'Corrige la copie.',
+    formats: ['qcm', 'retournement'],
+    question: 'Copie d’élève : « A = k × c = 150 L/mol × 3,0 × 10⁻³ mol/L = 0,45 L/mol. » Où est l’erreur ?',
+    reponse: 'L’absorbance est sans unité : A = 0,45',
+    distracteurs: ['Il fallait diviser : A = 0,000 02', 'L’absorbance s’exprime en mol/L', 'Aucune : l’unité vient de k'],
+    aide: 'L·mol⁻¹ × mol·L⁻¹ : les unités se simplifient.',
+  },
+  {
+    id: 'dosages.n3.copie-extrapolation',
+    consigne: 'Corrige la copie.',
+    formats: ['qcm', 'retournement'],
+    question: 'Copie d’élève : « Mes étalons vont jusqu’à A = 1,0. Mon échantillon a A = 1,8 : je prolonge la droite et je lis c = 9,0 mmol/L. » Qu’en dit le correcteur ?',
+    reponse: 'On ne prolonge pas la droite hors de la gamme : on dilue l’échantillon pour revenir dans la gamme',
+    distracteurs: [
+      'C’est la bonne méthode : la droite est valable partout',
+      'Il faut refaire le blanc avec l’échantillon',
+      'Il faut changer de longueur d’onde jusqu’à trouver A = 1,0',
+    ],
+    aide: 'Rien ne garantit que la proportionnalité tienne au-delà du dernier étalon.',
+  },
+  {
+    id: 'dosages.n3.choix-methode',
+    question: 'Quelle méthode convient pour doser le glucose d’une boisson incolore ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'Aucune des deux telle quelle : le glucose n’est ni coloré ni ionique',
+    distracteurs: [
+      'La conductimétrie, car la boisson conduit le courant',
+      'La spectrophotométrie dans le visible, à λ_max',
+      'Les deux, au choix',
+    ],
+    aide: 'La spectrophotométrie visible demande une espèce colorée ; la conductimétrie, une espèce ionique. Ici, il faudrait une autre méthode.',
+  },
+  {
+    id: 'dosages.n3.pente',
+    question: 'Coefficient directeur de la droite d’étalonnage',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const k = auHasard([1150, 1250, 1380, 2240]);
+      const c = auHasard([2.0e-4, 4.0e-4, 5.0e-4]);
+      const A = k * c;
+      return {
+        question: `Un étalon à c = ${chSci(c, 2)} mol·L⁻¹ donne A = ${chNombre(A, 3)} (droite passant par l’origine). `
+          + 'Coefficient k de A = k × c, en L·mol⁻¹ ?',
+        reponse: `${chNombre(k, 3)} L·mol⁻¹`,
+        nombre: k,
+        tolerance: 0.02,
+        unite: 'L·mol⁻¹',
+        distracteurs: [`${chSci(c / A, 2)} L·mol⁻¹`, `${chSci(A * c, 2)} L·mol⁻¹`, `${chNombre(k / 1000, 3)} L·mol⁻¹`],
+        aide: `k = A / c = ${chNombre(A, 3)} / ${chSci(c, 2)} ≈ ${chNombre(k, 3)} L·mol⁻¹. En pratique, on le tire de toute la série d’étalons (modélisation), pas d’un seul point.`,
+      };
+    },
+  },
+];
+
+inscrireChapitre({
+  cle: 'dosages',
+  theme: 'Analyse chimique',
+  titre: 'Dosages par étalonnage',
+  resume: 'Spectrophotométrie (Beer-Lambert) et conductimétrie (Kohlrausch), sans les titrages. Trois niveaux : '
+    + 'vocabulaire et formules ; petites situations à calculer de tête ; pièges, copies d’élèves et exercices type bac, '
+    + 'calculatrice permise. Les valeurs changent à chaque passage.',
+  n1: DOSAGES_N1,
+  n2: DOSAGES_N2,
+  n3: DOSAGES_N3,
+});
+
+// ---- 35-contenu-incertitudes.js ----
+/* Paquet « Mesure et incertitudes » (terminale, partie transversale du programme).
+ *
+ * Programme (BO spécial n° 8 du 25/07/2019) : variabilité de la mesure,
+ * histogramme, moyenne, écart-type ; incertitude-type ; évaluations de type A
+ * et de type B ; incertitudes-types composées (formule fournie) ; simulation
+ * Monte-Carlo ; écriture du résultat avec un nombre adapté de chiffres
+ * significatifs ; comparaison à une valeur de référence par le quotient
+ * z = |m_mes − m_ref| / u(m).
+ *
+ * Notations : s écart-type expérimental de la série, n nombre de mesures,
+ * u(x̄) = s / √n incertitude-type de type A sur la moyenne.
+ * Seuil de compatibilité z ⩽ 2 : convention du lycée, À VALIDER par Loïc.
+ * Niveau 2 : valeurs choisies pour un calcul de tête.
+ *
+ * PROPOSITION à auditer par Loïc (audit: 'brouillon', 35-contenu-chapitres.js).
+ * RÈGLE ABSOLUE (32-paquets.js) : un identifiant de carte ne change jamais.
+ */
+
+/** Nombre écrit avec d décimales, zéros significatifs gardés : 25,00 g n'est pas 25 g. */
+function incFr(x, d) {
+  return x.toFixed(d).replace('.', ',').replace('-', '−');
+}
+
+/** Écart-type expérimental (division par n − 1), comme np.std(x, ddof=1). */
+function incEcartType(serie) {
+  const moyenne = serie.reduce((a, b) => a + b, 0) / serie.length;
+  return Math.sqrt(serie.reduce((a, x) => a + (x - moyenne) ** 2, 0) / (serie.length - 1));
+}
+
+/* ---------- Niveau 1 · Vocabulaire, définitions, formules ---------- */
+
+const INCERTITUDES_N1 = [
+  {
+    id: 'incertitudes.n1.variabilite',
+    question: '« Quand on répète plusieurs fois la même mesure, avec le même protocole, on obtient toujours exactement la même valeur. »',
+    formats: ['vraifaux'],
+    vrai: false,
+    reponse: 'Faux : les valeurs sont dispersées. C’est la variabilité de la mesure.',
+  },
+  {
+    id: 'incertitudes.n1.incertitude-type',
+    question: 'Que représente l’incertitude-type u(x) associée au résultat d’une mesure ?',
+    formats: ['retournement', 'qcm'],
+    reponse: 'L’étendue des valeurs qu’on peut raisonnablement attribuer à la grandeur, sous la forme d’un écart-type',
+    distracteurs: [
+      'L’écart entre la valeur mesurée et la valeur vraie, toujours connu',
+      'L’erreur commise par l’élève pendant la manipulation',
+      'Le nombre de chiffres significatifs du résultat',
+    ],
+    aide: 'Elle quantifie le doute sur le résultat ; plus elle est petite, plus la mesure est précise.',
+  },
+  {
+    id: 'incertitudes.n1.ecart-type',
+    question: 'Que mesure l’écart-type expérimental s d’une série de mesures ?',
+    formats: ['retournement', 'qcm'],
+    reponse: 'La dispersion des valeurs autour de leur moyenne',
+    distracteurs: ['L’écart entre la moyenne et la valeur de référence', 'La plus grande valeur moins la plus petite', 'La valeur la plus fréquente de la série'],
+  },
+  {
+    id: 'incertitudes.n1.type-a',
+    question: 'Quand parle-t-on d’une évaluation de type A de l’incertitude-type ?',
+    formats: ['retournement', 'qcm'],
+    reponse: 'Quand on l’évalue par une approche statistique, à partir d’une série de mesures répétées',
+    distracteurs: [
+      'Quand on l’évalue à partir des indications du constructeur de l’instrument',
+      'Quand on l’évalue à partir d’une seule lecture sur une graduation',
+      'Quand on la calcule à partir d’une formule fournie, à partir d’autres incertitudes',
+    ],
+  },
+  {
+    id: 'incertitudes.n1.type-b',
+    question: 'Quand parle-t-on d’une évaluation de type B de l’incertitude-type ?',
+    formats: ['retournement', 'qcm'],
+    reponse: 'Quand on l’évalue autrement que par la statistique : notice, tolérance, graduation, mesure unique',
+    distracteurs: [
+      'Quand on calcule l’écart-type d’une série de mesures répétées',
+      'Quand on divise l’écart-type par la racine du nombre de mesures',
+      'Quand on compare le résultat à une valeur de référence',
+    ],
+  },
+  {
+    id: 'incertitudes.n1.formule-type-a',
+    question: 'Série de n mesures indépendantes, d’écart-type s : incertitude-type sur la moyenne $u(\\bar{x})$ ?',
+    formats: ['qcm', 'retournement'],
+    reponse: '$u(\\bar{x}) = \\dfrac{s}{\\sqrt{n}}$',
+    distracteurs: ['$u(\\bar{x}) = s$', '$u(\\bar{x}) = \\dfrac{s}{n}$', '$u(\\bar{x}) = s \\times \\sqrt{n}$'],
+    aide: 'Moyenner beaucoup de mesures réduit l’incertitude sur la moyenne, mais seulement comme √n.',
+  },
+  {
+    id: 'incertitudes.n1.formule-z',
+    question: 'Quel quotient sert à comparer un résultat $m_{mes}$ à une valeur de référence $m_{ref}$ ?',
+    formats: ['qcm', 'retournement'],
+    reponse: '$z = \\dfrac{|m_{mes} - m_{ref}|}{u(m)}$',
+    distracteurs: [
+      '$z = \\dfrac{u(m)}{|m_{mes} - m_{ref}|}$',
+      '$z = \\dfrac{|m_{mes} - m_{ref}|}{m_{ref}}$',
+      '$z = |m_{mes} - m_{ref}| \\times u(m)$',
+    ],
+    aide: 'z compte combien d’incertitudes-types séparent le résultat de la référence.',
+  },
+  {
+    id: 'incertitudes.n1.seuil-z',
+    question: '« Au lycée, on considère usuellement le résultat compatible avec la valeur de référence quand z ⩽ 2. »',
+    formats: ['vraifaux'],
+    vrai: true,
+    reponse: 'Vrai : au-delà de deux incertitudes-types d’écart, on cherche une cause (protocole, instrument, modèle).',
+  },
+  {
+    id: 'incertitudes.n1.valeur-reference',
+    question: 'Qu’est-ce qu’une valeur de référence ?',
+    formats: ['retournement', 'qcm'],
+    reponse: 'Une valeur admise de la grandeur, issue d’une table ou d’une mesure plus précise, à laquelle on compare son résultat',
+    distracteurs: [
+      'La première valeur mesurée de la série',
+      'La moyenne des mesures de la classe',
+      'La valeur exacte, toujours connue, de la grandeur',
+    ],
+  },
+  {
+    id: 'incertitudes.n1.histogramme',
+    question: 'Que représente l’histogramme d’une série de mesures ?',
+    formats: ['retournement', 'qcm'],
+    reponse: 'Le nombre de mesures tombées dans chaque intervalle de valeurs',
+    distracteurs: [
+      'L’évolution de la mesure au cours du temps',
+      'La valeur de chaque mesure dans l’ordre où elle a été faite',
+      'L’écart de chaque mesure à la valeur de référence',
+    ],
+    aide: 'Sa largeur rend compte de la dispersion ; son centre, de la moyenne.',
+  },
+  {
+    id: 'incertitudes.n1.dispersion',
+    question: 'Deux séries de mesures d’une même grandeur ont la même moyenne. Celle dont l’histogramme est le plus étroit…',
+    formats: ['qcm', 'retournement'],
+    reponse: '…a le plus petit écart-type : ses valeurs sont moins dispersées',
+    distracteurs: [
+      '…a le plus grand écart-type',
+      '…est forcément la plus proche de la valeur de référence',
+      '…compte forcément le plus de mesures',
+    ],
+  },
+  {
+    id: 'incertitudes.n1.composee',
+    question: 'Quand parle-t-on d’incertitude-type composée ?',
+    formats: ['retournement', 'qcm'],
+    reponse: 'Quand la grandeur est calculée à partir d’autres grandeurs, chacune avec sa propre incertitude-type',
+    distracteurs: [
+      'Quand on additionne les incertitudes de type A et de type B d’une même lecture',
+      'Quand on mesure plusieurs fois la même grandeur',
+      'Quand on arrondit l’incertitude à deux chiffres significatifs',
+    ],
+    aide: 'Au lycée, la formule qui combine les incertitudes est toujours fournie.',
+  },
+  {
+    id: 'incertitudes.n1.monte-carlo',
+    question: 'Quel est le principe d’une simulation de Monte-Carlo pour une incertitude composée ?',
+    formats: ['retournement', 'qcm'],
+    reponse: 'Tirer au hasard un grand nombre de valeurs des grandeurs d’entrée, calculer la grandeur à chaque fois, puis prendre l’écart-type des résultats',
+    distracteurs: [
+      'Refaire la mesure un grand nombre de fois au laboratoire',
+      'Calculer la grandeur une seule fois avec les valeurs moyennes',
+      'Choisir au hasard la mesure la plus proche de la référence',
+    ],
+  },
+  {
+    id: 'incertitudes.n1.chiffres-u',
+    question: 'Avec combien de chiffres significatifs écrit-on une incertitude-type ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'Un ou deux',
+    distracteurs: ['Autant que la calculatrice en donne', 'Toujours trois', 'Autant que la valeur mesurée'],
+    aide: 'Puis on arrondit la valeur au même rang que le dernier chiffre de l’incertitude.',
+  },
+  {
+    id: 'incertitudes.n1.instrument',
+    question: '« Changer d’instrument ou de protocole peut modifier l’incertitude-type d’une mesure. »',
+    formats: ['vraifaux'],
+    vrai: true,
+    reponse: 'Vrai : une burette plutôt qu’une éprouvette, une lecture mieux placée, réduisent l’incertitude.',
+  },
+  {
+    id: 'incertitudes.n1.independantes',
+    question: '« Pour évaluer une incertitude de type A, les mesures répétées doivent être indépendantes. »',
+    formats: ['vraifaux'],
+    vrai: true,
+    reponse: 'Vrai : chaque mesure est refaite entièrement, sans se laisser influencer par la précédente.',
+  },
+];
+
+/* ---------- Niveau 2 · Situations, calculs de tête ---------- */
+
+const INCERTITUDES_N2 = [
+  {
+    id: 'incertitudes.n2.type-a',
+    question: 'Incertitude-type de type A sur une moyenne',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      // s / √n tombe juste : √n vaut 2, 3, 4, 5 ou 10.
+      const [s, n, u, grandeur, unite] = auHasard([
+        [0.4, 4, 0.2, 'une période', 's'],
+        [0.6, 9, 0.2, 'un volume équivalent', 'mL'],
+        [1.2, 16, 0.3, 'une distance', 'cm'],
+        [2.0, 25, 0.4, 'une longueur', 'mm'],
+        [0.5, 100, 0.05, 'une durée', 's'],
+        [0.9, 9, 0.3, 'une masse', 'g'],
+      ]);
+      return {
+        question: `${n} élèves mesurent ${grandeur} ; l’écart-type de leurs mesures vaut s = ${chNombre(s)} ${unite}. `
+          + 'Incertitude-type sur la moyenne $u(\\bar{x})$ ?',
+        reponse: `${chNombre(u)} ${unite}`,
+        nombre: u,
+        unite,
+        distracteurs: [`${chNombre(s)} ${unite}`, `${chNombre(s / n)} ${unite}`, `${chNombre(s * Math.sqrt(n))} ${unite}`],
+        aide: `u = s / √n = ${chNombre(s)} / √${n} = ${chNombre(s)} / ${Math.sqrt(n)} = ${chNombre(u)} ${unite}.`,
+      };
+    },
+  },
+  {
+    id: 'incertitudes.n2.moyenne',
+    question: 'Moyenne d’une série de mesures',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      // Écarts à une valeur centrale, de somme connue : la moyenne se fait de tête.
+      const base = auHasard([12.0, 9.8, 25.0, 1.5]);
+      const [ecarts, decalage] = auHasard([
+        [[-0.2, 0.1, 0.3, -0.2], 0],
+        [[0.1, -0.1, 0.2, 0.2], 0.1],
+        [[0.0, 0.2, -0.1, 0.1, 0.3], 0.1],
+        [[-0.3, 0.1, 0.2, 0.0, 0.0], 0],
+      ]);
+      const valeurs = ecarts.map((e) => Number((base + e).toFixed(1)));
+      const moyenne = Number((base + decalage).toFixed(2));
+      return {
+        question: `Mesures de la même grandeur : ${valeurs.map((v) => incFr(v, 1)).join(' ; ')}. Valeur moyenne ?`,
+        reponse: chNombre(moyenne),
+        nombre: moyenne,
+        tolerance: 0.001,
+        distracteurs: pieges(chNombre(moyenne), [chNombre(Number((moyenne + 0.1).toFixed(2))),
+          chNombre(Number((moyenne - 0.1).toFixed(2))), chNombre(Number((moyenne + 0.2).toFixed(2))), chNombre(base + 1)]),
+        aide: `On regarde les écarts à ${chNombre(base)} : ${ecarts.map((e) => (e >= 0 ? `+${chNombre(e)}` : chNombre(e))).join(', ')}, `
+          + `de somme ${chNombre(Number((decalage * ecarts.length).toFixed(1)))}, soit ${chNombre(decalage)} en moyenne.`,
+      };
+    },
+  },
+  {
+    id: 'incertitudes.n2.z',
+    question: 'Calculer le quotient z',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const [ref, u, unite, grandeur, d] = auHasard([
+        [9.81, 0.05, 'm·s⁻²', 'g', 2],
+        [340, 5, 'm·s⁻¹', 'c', 0],
+        [2.70, 0.02, 'g·cm⁻³', 'ρ', 2],
+        [0.100, 0.002, 'mol·L⁻¹', 'c', 3],
+      ]);
+      const z = auHasard([0.5, 1, 1.5, 2, 3, 4]);
+      const dessus = pileOuFace();
+      const mes = Number((ref + (dessus ? 1 : -1) * z * u).toFixed(4));
+      return {
+        question: `Résultat : ${grandeur} = ${incFr(mes, d)} ${unite}, avec u = ${incFr(u, d)} ${unite}. `
+          + `Référence : ${incFr(ref, d)} ${unite}. Quotient $z = \\dfrac{|m_{mes} - m_{ref}|}{u}$ ?`,
+        reponse: chNombre(z),
+        nombre: z,
+        tolerance: 0.01,
+        distracteurs: pieges(chNombre(z), [chNombre(z * 2), chNombre(Number((1 / z).toFixed(2))), chNombre(-z),
+          chNombre(z + 1), chNombre(z + 0.5)]),
+        aide: `|${incFr(mes, d)} − ${incFr(ref, d)}| = ${chNombre(Number((z * u).toFixed(4)))} ${unite}, `
+          + `soit ${chNombre(z)} fois u. ${z <= 2 ? 'z ⩽ 2 : compatible.' : 'z > 2 : non compatible.'}`,
+      };
+    },
+  },
+  {
+    id: 'incertitudes.n2.compatible',
+    question: 'Résultat compatible avec la référence ?',
+    formats: ['vraifaux'],
+    generer() {
+      const [ref, u, unite, d] = auHasard([[9.81, 0.04, 'm·s⁻²', 2], [1.00, 0.02, 'g·mL⁻¹', 2], [440, 4, 'Hz', 0]]);
+      const z = auHasard([0.5, 1, 1.5, 2.5, 3, 5]);
+      const mes = Number((ref - z * u).toFixed(4));
+      const compatible = z <= 2;
+      const vrai = pileOuFace();
+      return {
+        question: `« Mesure : ${incFr(mes, d)} ${unite}, u = ${incFr(u, d)} ${unite} ; référence : ${incFr(ref, d)} ${unite}. `
+          + `Le résultat est ${vrai === compatible ? 'compatible' : 'non compatible'} avec la référence. »`,
+        vrai,
+        reponse: `${vrai ? 'Vrai' : 'Faux'} : l’écart vaut ${chNombre(Number((z * u).toFixed(4)))} ${unite}, soit z = ${chNombre(z)} `
+          + `${compatible ? '⩽ 2 : compatible.' : '> 2 : non compatible.'}`,
+      };
+    },
+  },
+  {
+    id: 'incertitudes.n2.ecriture',
+    question: 'Écrire correctement le résultat',
+    formats: ['qcm'],
+    generer() {
+      const [brut, u, juste, unite, faux] = auHasard([
+        ['12,3456', '0,03', '12,35', 'cm', ['12,3456', '12,3', '12']],
+        ['9,7832', '0,06', '9,78', 'm·s⁻²', ['9,7832', '9,8', '10']],
+        ['0,15467', '0,002', '0,155', 'mol·L⁻¹', ['0,15467', '0,15', '0,1547']],
+        ['342,71', '4', '343', 'm·s⁻¹', ['342,71', '342,7', '340,00']],
+        ['1,04738', '0,01', '1,05', 'g·mL⁻¹', ['1,04738', '1,047', '1,0']],
+      ]);
+      return {
+        question: `La calculatrice affiche ${brut} ${unite}, et l’incertitude-type vaut u = ${u} ${unite}. Quelle écriture du résultat ?`,
+        reponse: `${juste} ${unite}, avec u = ${u} ${unite}`,
+        distracteurs: faux.map((f) => `${f} ${unite}, avec u = ${u} ${unite}`),
+        aide: `La valeur s’arrondit au même rang que le dernier chiffre de u (${u}).`,
+      };
+    },
+  },
+  {
+    id: 'incertitudes.n2.type-b',
+    question: 'Incertitude-type de type B, formule fournie',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const [delta, u, instrument, unite] = auHasard([
+        [0.17, 0.1, 'Une pipette jaugée porte la tolérance', 'mL'],
+        [0.34, 0.2, 'Une fiole jaugée porte la tolérance', 'mL'],
+        [0.51, 0.3, 'Le constructeur d’un thermomètre indique', '°C'],
+        [0.085, 0.05, 'Une burette porte la tolérance', 'mL'],
+      ]);
+      return {
+        question: `${instrument} ± ${chNombre(delta)} ${unite}. Formule fournie : $u = \\dfrac{\\Delta}{\\sqrt{3}}$, `
+          + 'avec $\\sqrt{3} \\approx 1{,}7$. Incertitude-type ?',
+        reponse: `${chNombre(u)} ${unite}`,
+        nombre: u,
+        tolerance: 0.05,
+        unite,
+        distracteurs: [`${chNombre(delta)} ${unite}`, `${chNombre(Number((delta * 1.7).toFixed(3)))} ${unite}`,
+          `${chNombre(Number((delta / 3).toFixed(3)))} ${unite}`],
+        aide: `u = ${chNombre(delta)} / 1,7 = ${chNombre(u)} ${unite}. Mesure unique : c’est une évaluation de type B.`,
+      };
+    },
+  },
+  {
+    id: 'incertitudes.n2.effet-de-n',
+    question: 'Effet du nombre de mesures sur l’incertitude',
+    formats: ['qcm', 'retournement'],
+    generer() {
+      const [facteur, effet] = auHasard([[4, 'divisée par 2'], [9, 'divisée par 3'], [100, 'divisée par 10'], [25, 'divisée par 5']]);
+      return {
+        question: `On multiplie par ${facteur} le nombre de mesures, sans changer leur dispersion. L’incertitude-type sur la moyenne est…`,
+        reponse: effet,
+        distracteurs: pieges(effet, [`divisée par ${facteur}`, `multipliée par ${Math.sqrt(facteur)}`, 'inchangée',
+          'divisée par 2', 'divisée par 3', 'divisée par 10']),
+        aide: `u = s / √n : n × ${facteur} donne √n × ${Math.sqrt(facteur)}.`,
+      };
+    },
+  },
+  {
+    id: 'incertitudes.n2.relative',
+    question: 'Incertitude-type relative',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const [x, u, unite, d] = auHasard([[50.0, 0.5, 'mL', 1], [20.0, 0.2, 'g', 1], [2.00, 0.04, 's', 2], [250, 5, 'mm', 0],
+        [10.0, 0.3, 'cm', 1]]);
+      const pct = Number(((u / x) * 100).toFixed(2));
+      return {
+        question: `x = ${incFr(x, d)} ${unite}, u(x) = ${incFr(u, d)} ${unite}. Incertitude-type relative $\\dfrac{u(x)}{x}$, en % ?`,
+        reponse: `${chNombre(pct)} %`,
+        nombre: pct,
+        tolerance: 0.01,
+        unite: '%',
+        distracteurs: pieges(`${chNombre(pct)} %`, [`${chNombre(pct * 10)} %`, `${chNombre(pct / 10)} %`,
+          `${chNombre(Number((x / u).toFixed(1)))} %`]),
+        aide: `${incFr(u, d)} / ${incFr(x, d)} = ${chNombre(pct / 100)}, soit ${chNombre(pct)} %.`,
+      };
+    },
+  },
+  {
+    id: 'incertitudes.n2.quel-type',
+    question: 'Type A ou type B ?',
+    formats: ['qcm', 'retournement'],
+    generer() {
+      const [situation, type] = auHasard([
+        ['On lit une seule fois un volume sur une éprouvette graduée.', 'Type B'],
+        ['Vingt groupes mesurent la même période ; on calcule s / √n.', 'Type A'],
+        ['On utilise la tolérance gravée sur une fiole jaugée.', 'Type B'],
+        ['On chronomètre dix fois la même chute et on exploite l’écart-type.', 'Type A'],
+        ['On prend la précision indiquée dans la notice d’un multimètre.', 'Type B'],
+      ]);
+      return {
+        question: `${situation} Quelle évaluation de l’incertitude-type ?`,
+        reponse: type,
+        distracteurs: [type === 'Type A' ? 'Type B' : 'Type A', 'Incertitude composée', 'Aucune : il n’y a pas d’incertitude'],
+        aide: 'Type A : statistique, sur des mesures répétées. Type B : tout le reste (notice, tolérance, graduation).',
+      };
+    },
+  },
+  {
+    id: 'incertitudes.n2.meilleur-resultat',
+    question: 'Deux binômes mesurent la même masse : A trouve 12,4 g avec u = 0,3 g, B trouve 12,5 g avec u = 0,1 g. Lequel a le résultat le plus précis ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'B : son incertitude-type est la plus petite',
+    distracteurs: ['A : sa valeur est plus petite', 'Les deux : les valeurs sont presque égales', 'On ne peut pas savoir sans la valeur de référence'],
+  },
+];
+
+/* ---------- Niveau 3 · Pièges et type bac, calculatrice permise ---------- */
+
+const INCERTITUDES_N3 = [
+  {
+    id: 'incertitudes.n3.serie-calculatrice',
+    question: 'Série de mesures : écart-type et incertitude-type',
+    formats: ['saisie'],
+    generer() {
+      const [serie, d, unite] = auHasard([
+        [[1.52, 1.48, 1.55, 1.50, 1.47, 1.53], 2, 's'],
+        [[9.72, 9.85, 9.79, 9.91, 9.76, 9.83, 9.80, 9.74], 2, 'm·s⁻²'],
+        [[24.8, 25.1, 24.9, 25.3, 25.0], 1, 'mL'],
+        [[342, 338, 345, 340, 336, 343, 341, 339, 344], 0, 'm·s⁻¹'],
+      ]);
+      const s = incEcartType(serie);
+      const u = s / Math.sqrt(serie.length);
+      return {
+        question: `Mesures répétées, en ${unite} : ${serie.map((v) => incFr(v, d)).join(' ; ')}. `
+          + 'Incertitude-type sur la moyenne $u(\\bar{x}) = \\dfrac{s}{\\sqrt{n}}$, avec s l’écart-type expérimental (calculatrice) ?',
+        reponse: `u ≈ ${chNombre(u, 2)} ${unite} (s ≈ ${chNombre(s, 3)} ${unite}, n = ${serie.length})`,
+        nombre: u,
+        tolerance: 0.06,
+        unite,
+        aide: `Mode statistique de la calculatrice : s = σₙ₋₁ ≈ ${chNombre(s, 3)}, puis u = s / √${serie.length} ≈ ${chNombre(u, 2)}.`,
+      };
+    },
+  },
+  {
+    id: 'incertitudes.n3.composee-quotient',
+    question: 'Incertitude composée d’un quotient, formule fournie',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const [m, um, V, uV, dm, dV] = auHasard([[25.00, 0.02, 10.0, 0.1, 2, 1], [13.50, 0.05, 5.00, 0.05, 2, 2],
+        [52.3, 0.1, 20.0, 0.2, 1, 1], [7.85, 0.01, 1.00, 0.02, 2, 2]]);
+      const rho = m / V;
+      const u = rho * Math.sqrt((um / m) ** 2 + (uV / V) ** 2);
+      return {
+        question: `Masse volumique ρ = m / V avec m = ${incFr(m, dm)} g (u = ${incFr(um, dm)} g) et V = ${incFr(V, dV)} mL (u = ${incFr(uV, dV)} mL). `
+          + 'Formule fournie : $\\dfrac{u(\\rho)}{\\rho} = \\sqrt{\\left(\\dfrac{u(m)}{m}\\right)^2 + \\left(\\dfrac{u(V)}{V}\\right)^2}$. u(ρ) en g·mL⁻¹ ?',
+        reponse: `u(ρ) ≈ ${chNombre(u, 2)} g·mL⁻¹ (ρ = ${chNombre(rho, 4)} g·mL⁻¹)`,
+        nombre: u,
+        tolerance: 0.05,
+        unite: 'g·mL⁻¹',
+        distracteurs: pieges(`${chNombre(u, 2)} g·mL⁻¹`, [`${chNombre(Math.sqrt((um / m) ** 2 + (uV / V) ** 2), 2)} g·mL⁻¹`,
+          `${chNombre(um + uV, 2)} g·mL⁻¹`, `${chNombre(rho * (um / m + uV / V) * 10, 2)} g·mL⁻¹`, `${chNombre(um / uV, 2)} g·mL⁻¹`]),
+        aide: `u(ρ) / ρ ≈ ${chNombre(u / rho, 2)}, à multiplier par ρ = ${chNombre(rho, 4)} g·mL⁻¹. Ne pas oublier ce dernier produit.`,
+      };
+    },
+  },
+  {
+    id: 'incertitudes.n3.contribution',
+    question: 'Masse volumique ρ = m / V : m = 25,00 g avec u(m) = 0,02 g, V = 10,0 mL avec u(V) = 0,1 mL. Quelle mesure faut-il améliorer en priorité ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'Le volume : u(V)/V = 1 % contre u(m)/m = 0,08 %',
+    distracteurs: [
+      'La masse : son incertitude est la plus petite',
+      'La masse : 0,02 g est plus grand que 0,1 mL en valeur relative',
+      'Les deux comptent autant',
+    ],
+    aide: 'On compare les incertitudes relatives : c’est la plus grande qui domine l’incertitude composée.',
+  },
+  {
+    id: 'incertitudes.n3.composee-produit',
+    question: 'Incertitude composée d’un produit, formule fournie',
+    formats: ['saisie'],
+    generer() {
+      const [U, uU, I, uI, dU, dI] = auHasard([[6.00, 0.05, 0.250, 0.004, 2, 3], [12.0, 0.1, 1.50, 0.02, 1, 2],
+        [4.50, 0.03, 0.120, 0.002, 2, 3]]);
+      const P = U * I;
+      const u = P * Math.sqrt((uU / U) ** 2 + (uI / I) ** 2);
+      return {
+        question: `Puissance P = U × I, avec U = ${incFr(U, dU)} V (u = ${incFr(uU, dU)} V) et I = ${incFr(I, dI)} A (u = ${incFr(uI, dI)} A). `
+          + 'Formule fournie : $\\dfrac{u(P)}{P} = \\sqrt{\\left(\\dfrac{u(U)}{U}\\right)^2 + \\left(\\dfrac{u(I)}{I}\\right)^2}$. u(P) en W ?',
+        reponse: `u(P) ≈ ${chNombre(u, 2)} W (P = ${chNombre(P, 3)} W)`,
+        nombre: u,
+        tolerance: 0.05,
+        unite: 'W',
+        aide: `u(P) = ${chNombre(P, 3)} × √((${incFr(uU, dU)} / ${incFr(U, dU)})² + (${incFr(uI, dI)} / ${incFr(I, dI)})²) ≈ ${chNombre(u, 2)} W.`,
+      };
+    },
+  },
+  {
+    id: 'incertitudes.n3.conclure-g',
+    question: 'Conclure sur la compatibilité',
+    formats: ['qcm', 'retournement'],
+    generer() {
+      const [mes, u] = auHasard([[9.70, 0.05], [9.74, 0.04], [9.86, 0.03], [9.65, 0.10], [9.92, 0.04]]);
+      const z = Math.abs(mes - 9.81) / u;
+      const ok = z <= 2;
+      return {
+        question: `Un binôme mesure g = ${incFr(mes, 2)} m·s⁻² avec u(g) = ${incFr(u, 2)} m·s⁻². Référence au lycée : 9,81 m·s⁻². Conclusion ?`,
+        reponse: `z ≈ ${chNombre(z, 2)} ${ok ? '⩽ 2 : résultat compatible avec la référence' : '> 2 : résultat non compatible, on cherche une cause'}`,
+        distracteurs: [
+          `z ≈ ${chNombre(z, 2)} ${ok ? '> 2 : résultat non compatible, on cherche une cause' : '⩽ 2 : résultat compatible avec la référence'}`,
+          `z ≈ ${chNombre(u / Math.abs(mes - 9.81), 2)} : résultat ${ok ? 'non compatible' : 'compatible'}`,
+          'Compatible, puisque l’écart est inférieur à 1 m·s⁻²',
+        ],
+        aide: `z = |${incFr(mes, 2)} − 9,81| / ${incFr(u, 2)} ≈ ${chNombre(z, 2)}.`,
+      };
+    },
+  },
+  {
+    id: 'incertitudes.n3.choisir-ecriture',
+    question: 'c = 1,2345 mol·L⁻¹ à la calculatrice, et u(c) = 0,0321 mol·L⁻¹. Quelle écriture est correcte ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'c = 1,23 mol·L⁻¹ avec u(c) = 0,03 mol·L⁻¹',
+    distracteurs: [
+      'c = 1,2345 mol·L⁻¹ avec u(c) = 0,0321 mol·L⁻¹',
+      'c = 1,2 mol·L⁻¹ avec u(c) = 0,0321 mol·L⁻¹',
+      'c = 1,23 mol·L⁻¹ avec u(c) = 0,032 1 mol·L⁻¹',
+    ],
+    aide: 'u à un chiffre significatif (0,03), puis la valeur arrondie au centième, comme u.',
+  },
+  {
+    id: 'incertitudes.n3.histogramme-decentre',
+    question: 'L’histogramme des mesures de g de la classe est étroit, mais centré sur 9,60 m·s⁻², loin de 9,81 m·s⁻². Que conclure ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'Les mesures sont peu dispersées mais pas justes : une cause systématique (protocole, réglage) décale toutes les valeurs',
+    distracteurs: [
+      'Les mesures sont trop dispersées : il faut en faire davantage',
+      'Tout va bien : un histogramme étroit garantit un résultat juste',
+      'Il suffit de calculer s / √n pour corriger l’écart',
+    ],
+    aide: 'Faire plus de mesures réduit la dispersion de la moyenne, pas un décalage systématique.',
+  },
+  {
+    id: 'incertitudes.n3.s-et-n',
+    question: '« Plus on fait de mesures, plus l’écart-type expérimental s de la série diminue. »',
+    formats: ['vraifaux'],
+    vrai: false,
+    reponse: 'Faux : s reste à peu près le même, il décrit la dispersion des mesures. C’est u = s / √n, l’incertitude sur la moyenne, qui diminue.',
+  },
+  {
+    id: 'incertitudes.n3.monte-carlo-resultat',
+    question: 'Une simulation de Monte-Carlo calcule 10 000 fois ρ = m / V à partir de valeurs tirées au hasard. Que prend-on comme incertitude-type u(ρ) ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'L’écart-type des 10 000 valeurs de ρ obtenues',
+    distracteurs: [
+      'L’écart-type divisé par √10 000',
+      'La plus grande valeur moins la plus petite',
+      'La moyenne des 10 000 valeurs de ρ',
+    ],
+    aide: 'Chaque tirage est un résultat possible : leur dispersion est l’incertitude sur un résultat. On ne divise pas par √N.',
+  },
+  {
+    id: 'incertitudes.n3.copie-s',
+    consigne: 'Corrige la copie.',
+    formats: ['qcm', 'retournement'],
+    question: 'Copie d’élève : « 16 mesures de la période, s = 0,08 s. L’incertitude-type sur la moyenne vaut u = 0,08 s. » Où est l’erreur ?',
+    reponse: 'Il a pris s au lieu de s / √n : u = 0,08 / 4 = 0,02 s',
+    distracteurs: [
+      'Il fallait diviser par 16 : u = 0,005 s',
+      'Il fallait multiplier par √16 : u = 0,32 s',
+      'Aucune : pour une série, u = s',
+    ],
+  },
+  {
+    id: 'incertitudes.n3.copie-chiffres',
+    consigne: 'Corrige la copie.',
+    formats: ['qcm', 'retournement'],
+    question: 'Copie d’élève : « λ = 632,8461 nm avec u(λ) = 4,2735 nm. » Qu’en dit le correcteur ?',
+    reponse: 'Trop de chiffres : λ = 633 nm avec u(λ) = 4 nm',
+    distracteurs: [
+      'C’est parfait : on garde tous les chiffres de la calculatrice',
+      'λ = 632,8 nm avec u(λ) = 4,2735 nm',
+      'λ = 600 nm avec u(λ) = 4 nm',
+    ],
+  },
+  {
+    id: 'incertitudes.n3.copie-u-trop-precise',
+    consigne: 'Corrige la copie.',
+    formats: ['qcm', 'retournement'],
+    question: 'Copie d’élève : « L = 12 cm avec u(L) = 0,03 cm. » Où est l’erreur ?',
+    reponse: 'La valeur n’est pas arrondie au même rang que l’incertitude : il faut L = 12,00 cm',
+    distracteurs: [
+      'u(L) doit être écrite 0,030 0 cm',
+      'Il faut arrondir u(L) à 0 cm',
+      'Aucune : 12 cm est plus lisible',
+    ],
+    aide: 'Écrire 12 cm suggère une incertitude de l’ordre du centimètre, cent fois plus grande que u(L).',
+  },
+  {
+    id: 'incertitudes.n3.copie-valeur-absolue',
+    consigne: 'Corrige la copie.',
+    formats: ['qcm', 'retournement'],
+    question: 'Copie d’élève : « z = (9,65 − 9,81) / 0,05 = −3,2 ; z < 2 donc le résultat est compatible. » Où est l’erreur ?',
+    reponse: 'Il manque la valeur absolue : z = 3,2 > 2, le résultat n’est pas compatible',
+    distracteurs: [
+      'Il fallait diviser par 9,81 et non par 0,05',
+      'Le calcul est juste, mais il fallait comparer à 1',
+      'Aucune : un z négatif est toujours compatible',
+    ],
+  },
+  {
+    id: 'incertitudes.n3.copie-conclusion',
+    consigne: 'Corrige la copie.',
+    formats: ['qcm', 'retournement'],
+    question: 'Copie d’élève : « z = 0,6, ce qui est très petit : la mesure est fausse et non compatible. » Où est l’erreur ?',
+    reponse: 'La conclusion est inversée : z = 0,6 ⩽ 2, le résultat est compatible avec la référence',
+    distracteurs: [
+      'z ne peut pas être inférieur à 1',
+      'Il fallait conclure que la mesure est exacte, sans aucune incertitude',
+      'Aucune : plus z est petit, moins la mesure est bonne',
+    ],
+  },
+  {
+    id: 'incertitudes.n3.incertitude-nulle',
+    question: '« Si toutes mes mesures répétées donnent la même valeur, l’incertitude-type de mon résultat est nulle. »',
+    formats: ['vraifaux'],
+    vrai: false,
+    reponse: 'Faux : la statistique ne voit plus rien, mais l’instrument a toujours une incertitude (graduation, notice) : on l’évalue en type B.',
+  },
+];
+
+inscrireChapitre({
+  cle: 'incertitudes',
+  theme: 'Mesure et incertitudes',
+  titre: 'Mesure et incertitudes',
+  resume: 'Trois niveaux : vocabulaire et formules ; petites situations à calculer de tête (s / √n, z, écriture du résultat) ; '
+    + 'pièges, copies d’élèves et exercices type bac, calculatrice permise. Les valeurs changent à chaque passage.',
+  n1: INCERTITUDES_N1,
+  n2: INCERTITUDES_N2,
+  n3: INCERTITUDES_N3,
+});
+
+// ---- 35-contenu-interferences.js ----
+/* Paquet « Interférences » (terminale, Ondes et signaux 1.B).
+ *
+ * Programme (BO spécial n° 8 du 25/07/2019) : caractériser le phénomène
+ * d'interférences de deux ondes et en citer des conséquences concrètes ;
+ * établir les conditions d'interférences constructives et destructives de deux
+ * ondes issues de deux sources ponctuelles en phase (milieu homogène) ; les
+ * tester à la surface de l'eau ; trous d'Young : prévoir les lieux avec
+ * l'expression linéarisée δ = b x / D donnée, établir et exploiter
+ * l'interfrange ; somme de deux sinusoïdes synchrones selon la phase (le code
+ * Python est dans 35-contenu-python.js, pas ici).
+ *
+ * Notations : d₁, d₂ distances aux sources, δ = d₂ − d₁ différence de marche,
+ * λ longueur d'onde, b distance entre les deux trous (ou fentes), D distance
+ * des trous à l'écran, i interfrange, x position sur l'écran.
+ * Niveau 2 : valeurs choisies pour un calcul de tête.
+ *
+ * PROPOSITION à auditer par Loïc (audit: 'brouillon', 35-contenu-chapitres.js).
+ * RÈGLE ABSOLUE (32-paquets.js) : un identifiant de carte ne change jamais.
+ */
+
+/* ---------- Niveau 1 · Vocabulaire, définitions, formules ---------- */
+
+const INTERFERENCES_N1 = [
+  {
+    id: 'interferences.n1.definition',
+    question: 'Qu’appelle-t-on interférences ?',
+    formats: ['retournement', 'qcm'],
+    reponse: 'La superposition de deux ondes de même fréquence, qui donne des zones où l’amplitude est renforcée et d’autres où elle est atténuée',
+    distracteurs: [
+      'L’étalement d’une onde qui passe par une ouverture étroite',
+      'Le décalage de fréquence dû au mouvement de la source',
+      'L’affaiblissement d’une onde au cours de sa propagation',
+    ],
+  },
+  {
+    id: 'interferences.n1.coherence',
+    question: 'À quelle condition deux sources peuvent-elles donner des interférences observables ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'Elles doivent être cohérentes : même fréquence et déphasage constant',
+    distracteurs: [
+      'Elles doivent avoir la même amplitude, quelle que soit leur fréquence',
+      'Elles doivent être placées à moins d’un mètre l’une de l’autre',
+      'Elles doivent émettre de la lumière blanche',
+    ],
+    aide: 'En pratique, on éclaire deux trous avec une même source (un laser) : les deux ondes sont alors cohérentes.',
+  },
+  {
+    id: 'interferences.n1.deux-lampes',
+    question: '« Deux lampes de poche qui éclairent le même mur y donnent des franges d’interférences. »',
+    formats: ['vraifaux'],
+    vrai: false,
+    reponse: 'Faux : deux sources indépendantes ne sont pas cohérentes, leur déphasage varie sans cesse. Les franges se brouillent.',
+  },
+  {
+    id: 'interferences.n1.difference-de-marche',
+    question: 'Un point M est à la distance d₁ de la source S₁ et d₂ de la source S₂. Comment se définit la différence de marche δ ?',
+    formats: ['retournement', 'qcm'],
+    reponse: '$\\delta = d_2 - d_1$ : la différence des distances parcourues par les deux ondes',
+    distracteurs: ['$\\delta = d_1 + d_2$', '$\\delta = \\dfrac{d_2}{d_1}$', '$\\delta = d_1 \\times d_2$'],
+  },
+  {
+    id: 'interferences.n1.constructives',
+    question: 'Deux sources en phase : condition d’interférences constructives en M ?',
+    formats: ['qcm', 'retournement'],
+    reponse: '$\\delta = k\\lambda$, avec k entier',
+    distracteurs: [
+      '$\\delta = \\left(k + \\frac{1}{2}\\right)\\lambda$, avec k entier',
+      '$\\delta = \\dfrac{\\lambda}{k}$, avec k entier',
+      '$\\delta = 0$ seulement',
+    ],
+    aide: 'Les deux ondes arrivent en phase : leurs amplitudes s’ajoutent.',
+  },
+  {
+    id: 'interferences.n1.destructives',
+    question: 'Deux sources en phase : condition d’interférences destructives en M ?',
+    formats: ['qcm', 'retournement'],
+    reponse: '$\\delta = \\left(k + \\frac{1}{2}\\right)\\lambda$, avec k entier',
+    distracteurs: ['$\\delta = k\\lambda$, avec k entier', '$\\delta = 2k\\lambda$, avec k entier', '$\\delta = \\dfrac{\\lambda}{2k}$, avec k entier'],
+    aide: 'Les deux ondes arrivent en opposition de phase : elles s’annulent si elles ont la même amplitude.',
+  },
+  {
+    id: 'interferences.n1.amplitude-constructive',
+    question: '« En un point d’interférences constructives, l’amplitude de l’onde résultante est maximale. »',
+    formats: ['vraifaux'],
+    vrai: true,
+    reponse: 'Vrai : les deux ondes arrivent en phase, leurs élongations s’ajoutent à chaque instant.',
+  },
+  {
+    id: 'interferences.n1.en-phase',
+    question: 'On additionne deux signaux sinusoïdaux synchrones de même amplitude A, en phase. Amplitude de la somme ?',
+    formats: ['qcm', 'retournement'],
+    reponse: '2A',
+    distracteurs: ['A', '0', 'A / 2', 'A²'],
+  },
+  {
+    id: 'interferences.n1.opposition',
+    question: 'On additionne deux signaux sinusoïdaux synchrones de même amplitude A, en opposition de phase. Amplitude de la somme ?',
+    formats: ['qcm', 'retournement'],
+    reponse: '0 : les deux signaux s’annulent à chaque instant',
+    distracteurs: ['2A', 'A', 'A / 2'],
+  },
+  {
+    id: 'interferences.n1.interfrange-definition',
+    question: 'Dans une figure d’interférences, qu’appelle-t-on l’interfrange i ?',
+    formats: ['retournement', 'qcm'],
+    reponse: 'La distance entre les centres de deux franges brillantes consécutives (ou de deux franges sombres consécutives)',
+    distracteurs: [
+      'La largeur de la frange brillante centrale',
+      'La distance entre les deux trous d’Young',
+      'La distance entre une frange brillante et la frange sombre voisine',
+    ],
+  },
+  {
+    id: 'interferences.n1.interfrange-formule',
+    question: 'Trous d’Young distants de b, écran à la distance D : expression de l’interfrange ?',
+    formats: ['qcm', 'retournement'],
+    reponse: '$i = \\dfrac{\\lambda D}{b}$',
+    distracteurs: ['$i = \\dfrac{\\lambda b}{D}$', '$i = \\dfrac{b D}{\\lambda}$', '$i = \\dfrac{\\lambda}{b D}$'],
+    aide: 'i augmente avec λ et avec D ; il diminue quand on écarte les trous (b plus grand).',
+  },
+  {
+    id: 'interferences.n1.delta-young',
+    question: 'Trous d’Young : quelle expression linéarisée de la différence de marche en un point d’abscisse x de l’écran ?',
+    formats: ['qcm', 'retournement'],
+    reponse: '$\\delta = \\dfrac{b\\,x}{D}$',
+    distracteurs: ['$\\delta = \\dfrac{D\\,x}{b}$', '$\\delta = \\dfrac{\\lambda\\,x}{D}$', '$\\delta = b\\,x\\,D$'],
+    aide: 'Cette expression est donnée dans les sujets ; il faut savoir l’exploiter : frange brillante si b x / D = kλ.',
+  },
+  {
+    id: 'interferences.n1.unites',
+    question: 'Dans $i = \\dfrac{\\lambda D}{b}$, en quelles unités exprimer λ, D et b ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'Toutes dans la même unité, par exemple en mètres ; i sort alors en mètres',
+    distracteurs: ['λ en nm, D en m, b en mm, i sort en mm', 'Peu importe : la formule est sans unité', 'λ en m, D et b en cm'],
+  },
+  {
+    id: 'interferences.n1.eau-immobile',
+    question: 'Dans une cuve à ondes, deux pointes en phase frappent l’eau. Les points où l’eau reste immobile sont des lieux…',
+    formats: ['qcm', 'retournement'],
+    reponse: '…d’interférences destructives',
+    distracteurs: ['…d’interférences constructives', '…de diffraction', '…où les ondes ne sont pas encore arrivées'],
+  },
+  {
+    id: 'interferences.n1.consequences',
+    question: 'Lequel de ces phénomènes n’est pas une conséquence des interférences ?',
+    formats: ['qcm'],
+    reponse: 'L’arc-en-ciel, dû à la dispersion de la lumière par les gouttes',
+    distracteurs: [
+      'Les couleurs changeantes d’une bulle de savon',
+      'Le silence produit par un casque antibruit',
+      'Les irisations d’une flaque d’essence sur la route',
+    ],
+  },
+  {
+    id: 'interferences.n1.centre',
+    question: '« Pour deux sources en phase, un point situé à égale distance des deux sources est un lieu d’interférences constructives. »',
+    formats: ['vraifaux'],
+    vrai: true,
+    reponse: 'Vrai : δ = 0 = 0 × λ. C’est la frange brillante centrale des trous d’Young.',
+  },
+];
+
+/* ---------- Niveau 2 · Situations, calculs de tête ---------- */
+
+/** δ / λ entier (constructive) ou demi-entier (destructive), au hasard. */
+function natureInterferences() {
+  const constructive = pileOuFace();
+  const rapport = entierEntre(1, 3) + (constructive ? 0 : 0.5);
+  return { constructive, rapport };
+}
+
+const INTERFERENCES_N2 = [
+  {
+    id: 'interferences.n2.cuve',
+    question: 'Cuve à ondes : constructives ou destructives ?',
+    formats: ['qcm'],
+    generer() {
+      const lambda = auHasard([1.0, 2.0, 4.0]);
+      const { constructive, rapport } = natureInterferences();
+      const d1 = auHasard([4, 6, 8, 10]);
+      const d2 = d1 + rapport * lambda;
+      return {
+        question: `Deux pointes en phase créent des ondes de longueur d’onde λ = ${chNombre(lambda, 2)} cm. `
+          + `Un point M est à ${chNombre(d1)} cm de S₁ et à ${chNombre(d2)} cm de S₂. Que se passe-t-il en M ?`,
+        reponse: constructive
+          ? `Interférences constructives : δ = ${chNombre(d2 - d1)} cm = ${chNombre(rapport)} λ`
+          : `Interférences destructives : δ = ${chNombre(d2 - d1)} cm = ${chNombre(rapport)} λ`,
+        distracteurs: constructive
+          ? [`Interférences destructives : δ = ${chNombre(d2 - d1)} cm = ${chNombre(rapport)} λ`, 'Ni l’un ni l’autre : δ n’est pas nul',
+            'On ne peut pas conclure sans la fréquence']
+          : [`Interférences constructives : δ = ${chNombre(d2 - d1)} cm = ${chNombre(rapport)} λ`, 'Ni l’un ni l’autre : δ n’est pas nul',
+            'On ne peut pas conclure sans la fréquence'],
+        aide: `δ = d₂ − d₁ = ${chNombre(d2 - d1)} cm et δ / λ = ${chNombre(rapport)} : `
+          + (constructive ? 'un nombre entier, les ondes arrivent en phase.' : 'un demi-entier, les ondes arrivent en opposition de phase.'),
+      };
+    },
+  },
+  {
+    id: 'interferences.n2.haut-parleurs',
+    question: 'Deux haut-parleurs en phase : le micro entend-il un maximum ?',
+    formats: ['vraifaux'],
+    generer() {
+      const [f, lambda] = auHasard([[680, 0.5], [1700, 0.2], [340, 1.0]]);
+      const { constructive, rapport } = natureInterferences();
+      const d1 = auHasard([2, 3, 4]);
+      const d2 = Number((d1 + rapport * lambda).toFixed(2));
+      const vrai = pileOuFace();
+      const annonce = vrai === constructive ? 'un maximum' : 'un minimum';
+      return {
+        question: `« Deux haut-parleurs en phase émettent à ${chNombre(f)} Hz (c = 340 m·s⁻¹). Un micro placé à ${chNombre(d1)} m de l’un et `
+          + `${chNombre(d2)} m de l’autre capte ${annonce} d’intensité sonore. »`,
+        vrai,
+        reponse: `${vrai ? 'Vrai' : 'Faux'} : λ = c / f = ${chNombre(lambda)} m et δ = ${chNombre(d2 - d1)} m = ${chNombre(rapport)} λ, `
+          + (constructive ? 'interférences constructives : un maximum.' : 'interférences destructives : un minimum.'),
+      };
+    },
+  },
+  {
+    id: 'interferences.n2.interfrange',
+    question: 'Calculer un interfrange',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const lambda = auHasard([500, 600]);
+      const b = auHasard([0.1, 0.2, 0.5]);
+      const D = auHasard([1, 2]);
+      // λ (nm) × D (m) / b (mm) donne i en µm ; / 1000 pour des mm.
+      const i = (lambda * D) / b / 1000;
+      return {
+        question: `Trous d’Young : λ = ${lambda} nm, b = ${chNombre(b, 2)} mm, D = ${chNombre(D, 2)} m. Interfrange i en mm ?`,
+        reponse: `${chNombre(i)} mm`,
+        nombre: i,
+        unite: 'mm',
+        distracteurs: [`${chNombre(i * 10)} mm`, `${chNombre(i / 10)} mm`, `${chNombre((lambda * b) / D / 1000)} mm`],
+        aide: `i = λD / b = ${lambda} × 10^{-9} × ${chNombre(D)} / (${chNombre(b)} × 10^{-3}) = ${chNombre(i)} × 10^{-3} m = ${chNombre(i)} mm.`,
+      };
+    },
+  },
+  {
+    id: 'interferences.n2.longueur-onde',
+    question: 'Retrouver la longueur d’onde à partir de l’interfrange',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const lambda = auHasard([500, 600, 400]);
+      const b = auHasard([0.1, 0.2, 0.5]);
+      const D = auHasard([1, 2]);
+      const i = (lambda * D) / b / 1000;
+      return {
+        question: `Trous d’Young : b = ${chNombre(b, 2)} mm, D = ${chNombre(D, 2)} m ; on mesure i = ${chNombre(i)} mm. Longueur d’onde en nm ?`,
+        reponse: `${lambda} nm`,
+        nombre: lambda,
+        unite: 'nm',
+        distracteurs: [`${chNombre(lambda * 10)} nm`, `${chNombre(lambda / 10)} nm`, `${chNombre(lambda * 1000)} nm`],
+        aide: `λ = i b / D = ${chNombre(i)} × 10^{-3} × ${chNombre(b)} × 10^{-3} / ${chNombre(D)} = ${lambda} × 10^{-9} m.`,
+      };
+    },
+  },
+  {
+    id: 'interferences.n2.ecart-trous',
+    question: 'Retrouver l’écart entre les trous',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const lambda = auHasard([500, 600]);
+      const b = auHasard([0.1, 0.2, 0.5]);
+      const D = auHasard([1, 2]);
+      const i = (lambda * D) / b / 1000;
+      return {
+        question: `Laser de λ = ${lambda} nm, écran à D = ${chNombre(D, 2)} m ; l’interfrange vaut i = ${chNombre(i)} mm. Écart b entre les trous, en mm ?`,
+        reponse: `${chNombre(b)} mm`,
+        nombre: b,
+        unite: 'mm',
+        distracteurs: [`${chNombre(b * 10)} mm`, `${chNombre(b / 10)} mm`, `${chNombre(i)} mm`],
+        aide: `b = λD / i = ${lambda} × 10^{-9} × ${chNombre(D)} / (${chNombre(i)} × 10^{-3}) = ${chNombre(b)} × 10^{-3} m.`,
+      };
+    },
+  },
+  {
+    id: 'interferences.n2.effet-D',
+    question: 'Que devient l’interfrange quand on éloigne l’écran ?',
+    formats: ['qcm'],
+    generer() {
+      const [facteur, mot] = auHasard([[2, 'double'], [3, 'triple']]);
+      const i = auHasard([1.5, 2.0, 2.5, 3.0]);
+      return {
+        question: `Avec des trous d’Young, i = ${chNombre(i)} mm. On ${mot} la distance D entre les trous et l’écran. Nouvel interfrange ?`,
+        reponse: `${chNombre(i * facteur, 2)} mm`,
+        distracteurs: [`${chNombre(i / facteur)} mm`, `${chNombre(i)} mm`, `${chNombre(i * facteur * facteur)} mm`],
+        aide: `i = λD / b est proportionnel à D : il est multiplié par ${facteur}.`,
+      };
+    },
+  },
+  {
+    id: 'interferences.n2.effet-b',
+    question: 'Que devient l’interfrange quand on écarte les trous ?',
+    formats: ['qcm'],
+    generer() {
+      const [facteur, mot] = auHasard([[2, 'double'], [3, 'triple']]);
+      const i = auHasard([3.0, 6.0, 1.5]);
+      return {
+        question: `Avec des trous d’Young, i = ${chNombre(i)} mm. On ${mot} l’écart b entre les trous. Nouvel interfrange ?`,
+        reponse: `${chNombre(i / facteur)} mm`,
+        distracteurs: [`${chNombre(i * facteur)} mm`, `${chNombre(i)} mm`, `${chNombre(i / (facteur * facteur), 2)} mm`],
+        aide: `i = λD / b est inversement proportionnel à b : il est divisé par ${facteur}.`,
+      };
+    },
+  },
+  {
+    id: 'interferences.n2.point-ecran',
+    question: 'Frange brillante ou sombre en un point de l’écran ?',
+    formats: ['qcm'],
+    generer() {
+      // λ = 500 nm, b = 0,50 mm, D = 1,0 m : δ = b x / D = 500 nm par mm d'abscisse.
+      const x = auHasard([1, 1.5, 2, 2.5, 3]);
+      const rapport = x;
+      const brillante = Number.isInteger(rapport);
+      return {
+        question: `Trous d’Young : λ = 500 nm, b = 0,50 mm, D = 1,0 m. En un point d’abscisse x = ${chNombre(x)} mm, `
+          + 'avec $\\delta = \\dfrac{b\\,x}{D}$, on observe…',
+        reponse: brillante
+          ? `une frange brillante : δ = ${chNombre(500 * x)} nm = ${chNombre(rapport)} λ`
+          : `une frange sombre : δ = ${chNombre(500 * x)} nm = ${chNombre(rapport)} λ`,
+        distracteurs: brillante
+          ? [`une frange sombre : δ = ${chNombre(500 * x)} nm = ${chNombre(rapport)} λ`, 'la frange centrale', 'aucune frange : x est trop grand']
+          : [`une frange brillante : δ = ${chNombre(500 * x)} nm = ${chNombre(rapport)} λ`, 'la frange centrale', 'aucune frange : x est trop grand'],
+        aide: `δ = 0,50 × 10^{-3} × ${chNombre(x)} × 10^{-3} / 1,0 = ${chNombre(500 * x)} × 10^{-9} m ; δ / λ = ${chNombre(rapport)}.`,
+      };
+    },
+  },
+  {
+    id: 'interferences.n2.somme-signaux',
+    question: 'Amplitude de la somme de deux signaux sinusoïdaux synchrones',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const a = auHasard([1, 2, 3, 5]);
+      const enPhase = pileOuFace();
+      const resultat = enPhase ? 2 * a : 0;
+      return {
+        question: `Deux tensions sinusoïdales de même fréquence et de même amplitude ${a} V, `
+          + `${enPhase ? 'en phase' : 'en opposition de phase'}. Amplitude de leur somme, en V ?`,
+        reponse: `${resultat} V`,
+        nombre: resultat,
+        unite: 'V',
+        distracteurs: pieges(`${resultat} V`, [`${a} V`, `${2 * a} V`, '0 V', `${chNombre(a / 2)} V`, `${a * a} V`]),
+        aide: enPhase
+          ? 'En phase, les deux signaux montent et descendent ensemble : les amplitudes s’ajoutent.'
+          : 'En opposition de phase, quand l’un vaut +u, l’autre vaut −u : la somme est nulle à chaque instant.',
+      };
+    },
+  },
+  {
+    id: 'interferences.n2.plusieurs-interfranges',
+    question: 'Interfrange à partir de plusieurs franges',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const n = auHasard([5, 10]);
+      const i = auHasard([1.2, 1.5, 2.0, 2.5]);
+      const L = n * i;
+      return {
+        question: `Sur l’écran, ${n + 1} franges brillantes successives s’étalent sur ${chNombre(L)} mm, du centre de la première au centre de la dernière. Interfrange en mm ?`,
+        reponse: `${chNombre(i)} mm`,
+        nombre: i,
+        unite: 'mm',
+        distracteurs: [`${chNombre(L / (n + 1), 2)} mm`, `${chNombre(L)} mm`, `${chNombre(L / (n - 1), 2)} mm`],
+        aide: `${n + 1} franges brillantes délimitent ${n} interfranges : i = ${chNombre(L)} / ${n} = ${chNombre(i)} mm.`,
+      };
+    },
+  },
+  {
+    id: 'interferences.n2.couleur',
+    question: 'On remplace un laser vert (λ = 532 nm) par un laser rouge (λ = 650 nm), sans rien changer d’autre. Les franges…',
+    formats: ['qcm', 'retournement'],
+    reponse: '…s’écartent : i est proportionnel à λ',
+    distracteurs: ['…se resserrent : i est inversement proportionnel à λ', '…ne bougent pas : seule la couleur change', '…disparaissent'],
+  },
+];
+
+/* ---------- Niveau 3 · Pièges et type bac, calculatrice permise ---------- */
+
+const INTERFERENCES_N3 = [
+  {
+    id: 'interferences.n3.dix-interfranges',
+    question: 'Type bac : longueur d’onde d’un laser par les trous d’Young',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const L = auHasard([47.3, 44.6, 52.0, 40.5]);
+      const b = 0.2;
+      const D = 1.5;
+      const lambda = ((L / 10) * b) / D * 1000;
+      return {
+        question: `Trous d’Young : b = 0,20 mm, D = 1,50 m. On mesure ${chNombre(L, 3)} mm pour 10 interfranges. `
+          + 'Longueur d’onde du laser, en nm ?',
+        reponse: `${chNombre(lambda, 3)} nm`,
+        nombre: lambda,
+        tolerance: 0.01,
+        unite: 'nm',
+        distracteurs: [`${chNombre(lambda * 10, 3)} nm`, `${chNombre(((L / 9) * b) / D * 1000, 3)} nm`, `${chNombre(lambda / 10, 3)} nm`],
+        aide: `i = ${chNombre(L, 3)} / 10 = ${chNombre(L / 10, 3)} mm, puis λ = i b / D = ${chNombre(L / 10, 3)} × 10^{-3} × 0,20 × 10^{-3} / 1,50 ≈ ${chNombre(lambda, 3)} × 10^{-9} m.`,
+      };
+    },
+  },
+  {
+    id: 'interferences.n3.pourquoi-dix',
+    question: 'Pourquoi mesure-t-on la longueur de 10 interfranges plutôt qu’un seul ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'Pour diviser l’incertitude relative sur i : l’erreur de lecture de la règle porte sur une longueur dix fois plus grande',
+    distracteurs: [
+      'Parce que la formule i = λD / b est valable seulement pour 10 franges',
+      'Pour que la valeur de i soit dix fois plus grande',
+      'Parce que la frange centrale est trop large pour être mesurée',
+    ],
+  },
+  {
+    id: 'interferences.n3.copie-franges',
+    consigne: 'Corrige la copie.',
+    formats: ['qcm', 'retournement'],
+    question: 'Copie d’élève : « Je compte 6 franges brillantes sur 12 mm, du centre de la première au centre de la dernière, donc i = 12 / 6 = 2,0 mm. » Où est l’erreur ?',
+    reponse: '6 franges brillantes ne délimitent que 5 interfranges : i = 12 / 5 = 2,4 mm',
+    distracteurs: [
+      'Il fallait compter les franges sombres',
+      'Il fallait multiplier : i = 12 × 6 = 72 mm',
+      'Aucune : i = 2,0 mm est juste',
+    ],
+  },
+  {
+    id: 'interferences.n3.copie-b-D',
+    consigne: 'Corrige la copie.',
+    formats: ['qcm', 'retournement'],
+    question: 'Copie d’élève : « λ = 600 nm, b = 0,20 mm, D = 2,0 m. i = λ b / D = 600 × 10⁻⁹ × 0,20 × 10⁻³ / 2,0 = 6,0 × 10⁻¹¹ m. » Où est l’erreur ?',
+    reponse: 'b et D sont inversés : i = λD / b = 6,0 × 10⁻³ m, soit 6,0 mm',
+    distracteurs: [
+      'λ devait rester en nm',
+      'Il manque un facteur 2 au dénominateur',
+      'Aucune : un interfrange est toujours très petit',
+    ],
+    aide: 'Un résultat de 10⁻¹¹ m, plus petit qu’un atome, aurait dû alerter : les franges se mesurent à la règle.',
+  },
+  {
+    id: 'interferences.n3.copie-nature',
+    consigne: 'Corrige la copie.',
+    formats: ['qcm', 'retournement'],
+    question: 'Copie d’élève : « λ = 2,0 cm et δ = 3,0 cm. δ est un multiple de λ car 3,0 > 2,0 : les interférences sont constructives. » Où est l’erreur ?',
+    reponse: 'δ / λ = 1,5, un demi-entier : les interférences sont destructives',
+    distracteurs: [
+      'δ / λ = 1,5 : c’est un multiple de λ, donc constructives',
+      'Il fallait calculer δ × λ',
+      'On ne peut pas conclure sans connaître la fréquence',
+    ],
+  },
+  {
+    id: 'interferences.n3.copie-unites',
+    consigne: 'Corrige la copie.',
+    formats: ['qcm', 'retournement'],
+    question: 'Copie d’élève : « λ = 650 nm, D = 1,5 m, b = 0,30 mm. i = 650 × 1,5 / 0,30 = 3 250 m. » Où est l’erreur ?',
+    reponse: 'Les unités ne sont pas converties : i = 650 × 10⁻⁹ × 1,5 / (0,30 × 10⁻³) ≈ 3,3 × 10⁻³ m',
+    distracteurs: [
+      'Il fallait écrire i = 3 250 mm',
+      'La formule est i = λ b / D',
+      'Aucune : le calcul est juste',
+    ],
+  },
+  {
+    id: 'interferences.n3.lumiere-blanche',
+    question: 'Trous d’Young éclairés en lumière blanche : pourquoi la frange centrale est-elle blanche et les autres irisées ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'Au centre, δ = 0 est constructif pour toutes les longueurs d’onde ; ailleurs, i dépend de λ et les franges des couleurs se décalent',
+    distracteurs: [
+      'Au centre, la lumière ne passe que par un seul trou',
+      'La lumière blanche ne donne pas d’interférences : on voit seulement de la diffraction',
+      'Les couleurs sont dues à la réfraction dans les trous',
+    ],
+  },
+  {
+    id: 'interferences.n3.plus-visible',
+    question: 'Les franges sont trop serrées pour être mesurées. Quel réglage les écarte ?',
+    formats: ['qcm'],
+    reponse: 'Prendre des trous plus rapprochés, ou reculer l’écran',
+    distracteurs: [
+      'Prendre des trous plus écartés',
+      'Rapprocher l’écran des trous',
+      'Prendre un laser bleu à la place du rouge',
+    ],
+    aide: 'i = λD / b : augmenter D ou λ, diminuer b.',
+  },
+  {
+    id: 'interferences.n3.etablir',
+    question: 'Pourquoi deux ondes issues de sources en phase arrivent-elles en phase en M quand δ = kλ ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'Le retard de l’une sur l’autre vaut δ / c = kT : un nombre entier de périodes',
+    distracteurs: [
+      'Parce qu’elles parcourent alors la même distance',
+      'Parce que leurs amplitudes sont égales',
+      'Parce que leur retard vaut une demi-période',
+    ],
+    aide: 'Un retard de kT ne change rien à une onde périodique. Un retard de (k + ½)T la met en opposition de phase : δ = (k + ½)λ.',
+  },
+  {
+    id: 'interferences.n3.energie',
+    question: '« Dans une zone d’interférences destructives, l’énergie de l’onde disparaît : il y a une perte d’énergie. »',
+    formats: ['vraifaux'],
+    vrai: false,
+    reponse: 'Faux : l’énergie est redistribuée. Ce qui manque dans les franges sombres se retrouve dans les franges brillantes.',
+  },
+  {
+    id: 'interferences.n3.antibruit',
+    question: 'Comment fonctionne un casque antibruit actif ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'Il capte le bruit et émet une onde de même fréquence en opposition de phase : interférences destructives à l’oreille',
+    distracteurs: [
+      'Il émet une onde en phase avec le bruit, qui l’absorbe',
+      'Il émet un son de fréquence plus élevée qui masque le bruit',
+      'Il diffracte le bruit loin de l’oreille',
+    ],
+  },
+  {
+    id: 'interferences.n3.cuve-calcul',
+    question: 'Type bac : cuve à ondes, de la fréquence à la nature des interférences',
+    formats: ['qcm'],
+    generer() {
+      const [f, v, lambda] = auHasard([[20, 0.30, 1.5], [25, 0.30, 1.2], [15, 0.24, 1.6]]);
+      const { constructive, rapport } = natureInterferences();
+      const d1 = auHasard([5.0, 6.0, 7.5]);
+      const d2 = Number((d1 + rapport * lambda).toFixed(2));
+      return {
+        question: `Deux pointes en phase vibrent à ${f} Hz ; les ondes se propagent à ${chNombre(v, 2)} m·s⁻¹. `
+          + `Un point M est à ${chNombre(d1)} cm de S₁ et à ${chNombre(d2)} cm de S₂. En M, les interférences sont…`,
+        reponse: `${constructive ? 'constructives' : 'destructives'} : λ = v / f = ${chNombre(lambda)} cm et δ / λ = ${chNombre(rapport)}`,
+        distracteurs: [
+          `${constructive ? 'destructives' : 'constructives'} : λ = v / f = ${chNombre(lambda)} cm et δ / λ = ${chNombre(rapport)}`,
+          `${constructive ? 'destructives' : 'constructives'} : λ = v × f = ${chNombre(v * f * 100)} cm`,
+          'impossibles à prévoir : les deux distances sont différentes',
+        ],
+        aide: `λ = ${chNombre(v, 2)} / ${f} = ${chNombre(lambda / 100)} m = ${chNombre(lambda)} cm ; δ = ${chNombre(Number((d2 - d1).toFixed(2)))} cm.`,
+      };
+    },
+  },
+  {
+    id: 'interferences.n3.bulle',
+    question: 'Pourquoi une bulle de savon se colore-t-elle ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'La lumière réfléchie par les deux faces du film interfère ; selon l’épaisseur, certaines longueurs d’onde sont renforcées, d’autres éteintes',
+    distracteurs: [
+      'Le savon contient des colorants qui absorbent certaines couleurs',
+      'La bulle diffracte la lumière comme une fente fine',
+      'L’effet Doppler décale la couleur quand la bulle bouge',
+    ],
+  },
+  {
+    id: 'interferences.n3.conditions-programme',
+    question: '« Les conditions δ = kλ (constructives) et δ = (k + ½)λ (destructives) valent pour deux sources quelconques. »',
+    formats: ['vraifaux'],
+    vrai: false,
+    reponse: 'Faux : elles supposent deux sources cohérentes en phase, dans un milieu homogène. Si les sources sont en opposition de phase, les deux conditions s’échangent.',
+  },
+];
+
+inscrireChapitre({
+  cle: 'interferences',
+  theme: 'Ondes et signaux',
+  titre: 'Interférences',
+  resume: 'Trois niveaux : vocabulaire, conditions et formules ; différence de marche et trous d’Young de tête ; '
+    + 'pièges, copies d’élèves et exercices type bac, calculatrice permise. Les valeurs changent à chaque passage.',
+  n1: INTERFERENCES_N1,
+  n2: INTERFERENCES_N2,
+  n3: INTERFERENCES_N3,
+});
+
 // ---- 35-contenu-python.js ----
 /* Paquet « Python pour l'ECE » : un niveau par niveau du parcours Python de
  * Résonance (tutorat_pc_isaac/outils/python/). Seul le niveau 1 est écrit.
@@ -6837,6 +9784,7 @@ Paquets.inscrire({
     + 'variables, affichage, numpy, listes, statistiques, graphiques, messages d’erreur. Les valeurs changent à chaque passage.',
   niveaux: ['terminale'],
   resonance: true,
+  audit: 'ouvert',
   progression: 'niveaux',
   formatFixe: 'mixte',
   consignesParFormat: true,
@@ -6844,6 +9792,595 @@ Paquets.inscrire({
     { cle: 'n1', titre: 'Niveau 1 · La boîte à outils de l’ECE', consigne: null,
       cartes: [...PY_N1_E1, ...PY_N1_E2, ...PY_N1_E3, ...PY_N1_E4, ...PY_N1_E5, ...PY_N1_E6, ...PY_N1_E7, ...PY_N1_E8] },
   ],
+});
+
+// ---- 35-contenu-son.js ----
+/* Paquet « Intensité et niveau sonores » (terminale, Ondes et signaux 1.A).
+ *
+ * Programme (BO spécial n° 8 du 25/07/2019) : intensité sonore, intensité
+ * sonore de référence, niveau d'intensité sonore ; exploiter l'expression du
+ * niveau d'intensité sonore ; illustrer l'atténuation géométrique et
+ * l'atténuation par absorption (en dB) ; logarithme décimal et sa réciproque.
+ *
+ * Notations : I intensité sonore (W·m⁻²), I₀ = 1,0 × 10⁻¹² W·m⁻²,
+ * L = 10 log(I / I₀) en dB, atténuation A = L₁ − L₂ en dB.
+ * Niveau 2 : puissances de dix entières, ×2 → +3 dB, ×10 → +10 dB,
+ * distance ×2 → −6 dB, ×10 → −20 dB : tout se fait de tête.
+ *
+ * PROPOSITION à auditer par Loïc (audit: 'brouillon', 35-contenu-chapitres.js).
+ * RÈGLE ABSOLUE (32-paquets.js) : un identifiant de carte ne change jamais.
+ */
+
+/* ---------- Niveau 1 · Vocabulaire, définitions, formules ---------- */
+
+const SON_N1 = [
+  {
+    id: 'son.n1.intensite-definition',
+    question: 'Qu’est-ce que l’intensité sonore I ?',
+    formats: ['retournement', 'qcm'],
+    reponse: 'La puissance sonore reçue par unité de surface',
+    distracteurs: [
+      'La puissance totale émise par la source',
+      'La fréquence du son perçu',
+      'Le niveau sonore mesuré par un sonomètre, en décibels',
+    ],
+    aide: 'I = P / S, en W·m⁻².',
+  },
+  {
+    id: 'son.n1.unite-intensite',
+    question: 'Dans quelle unité s’exprime l’intensité sonore I ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'W·m⁻²',
+    distracteurs: ['dB', 'W', 'Hz'],
+    aide: 'Une puissance (W) par unité de surface (m²). Le décibel est l’unité du niveau d’intensité sonore L, pas de I.',
+  },
+  {
+    id: 'son.n1.unite-niveau',
+    question: 'Dans quelle unité s’exprime le niveau d’intensité sonore L ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'Le décibel (dB)',
+    distracteurs: ['Le watt par mètre carré (W·m⁻²)', 'Le hertz (Hz)', 'Le watt (W)'],
+  },
+  {
+    id: 'son.n1.formule-niveau',
+    question: 'Quelle expression donne le niveau d’intensité sonore L ?',
+    formats: ['qcm', 'retournement'],
+    reponse: '$L = 10 \\log\\left(\\dfrac{I}{I_0}\\right)$',
+    distracteurs: [
+      '$L = \\log\\left(\\dfrac{I}{I_0}\\right)$',
+      '$L = 10 \\log\\left(\\dfrac{I_0}{I}\\right)$',
+      '$L = 10 \\times \\dfrac{I}{I_0}$',
+    ],
+    aide: 'Le facteur 10 transforme les bels en décibels ; log est le logarithme décimal.',
+  },
+  {
+    id: 'son.n1.reciproque',
+    question: 'Retrouver l’intensité à partir du niveau : $I = \\;$?',
+    formats: ['qcm', 'retournement'],
+    reponse: '$I = I_0 \\times 10^{L/10}$',
+    distracteurs: ['$I = I_0 \\times 10^{10L}$', '$I = 10^{L/10}$', '$I = I_0 \\times \\dfrac{L}{10}$'],
+    aide: 'On isole le log : log(I / I₀) = L / 10, puis on prend la réciproque : I / I₀ = 10^{L/10}.',
+  },
+  {
+    id: 'son.n1.i0',
+    question: 'Que vaut l’intensité sonore de référence $I_0$ ?',
+    formats: ['qcm', 'retournement'],
+    reponse: '$I_0 = 1{,}0 \\times 10^{-12}$ W·m⁻², le seuil d’audibilité',
+    distracteurs: [
+      '$I_0 = 1{,}0 \\times 10^{12}$ W·m⁻², le seuil de douleur',
+      '$I_0 = 1{,}0$ W·m⁻², le seuil de douleur',
+      '$I_0 = 0$ W·m⁻², le silence absolu',
+    ],
+  },
+  {
+    id: 'son.n1.zero-db',
+    question: '« Un niveau d’intensité sonore de 0 dB correspond à une intensité sonore nulle. »',
+    formats: ['vraifaux'],
+    vrai: false,
+    reponse: 'Faux : L = 0 dB quand I = I₀ = 1,0 × 10⁻¹² W·m⁻², le seuil d’audibilité, car log(1) = 0.',
+  },
+  {
+    id: 'son.n1.seuil-douleur',
+    question: 'Vers quel niveau d’intensité sonore se situe le seuil de douleur ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'Environ 120 dB',
+    distracteurs: ['Environ 0 dB', 'Environ 60 dB', 'Environ 1 000 dB'],
+    aide: '120 dB correspond à I ≈ 1 W·m⁻² : mille milliards de fois I₀.',
+  },
+  {
+    id: 'son.n1.log-decimal',
+    question: '« Dans $L = 10 \\log(I / I_0)$, log désigne le logarithme népérien, la touche ln de la calculatrice. »',
+    formats: ['vraifaux'],
+    vrai: false,
+    reponse: 'Faux : c’est le logarithme décimal, la touche log. Avec ln, le résultat est faux, sans aucun message d’erreur.',
+  },
+  {
+    id: 'son.n1.rapport-sans-unite',
+    question: '« Le rapport $I / I_0$ n’a pas d’unité. »',
+    formats: ['vraifaux'],
+    vrai: true,
+    reponse: 'Vrai : deux intensités en W·m⁻² se divisent ; c’est pourquoi on peut en prendre le logarithme.',
+  },
+  {
+    id: 'son.n1.intensites-additives',
+    question: 'Deux sources sonores fonctionnent ensemble. Qu’est-ce qui s’additionne ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'Les intensités sonores, en W·m⁻²',
+    distracteurs: ['Les niveaux d’intensité sonore, en dB', 'Les fréquences, en Hz', 'Les logarithmes des niveaux'],
+    aide: 'I = I₁ + I₂, puis L = 10 log(I / I₀). Additionner des décibels est faux.',
+  },
+  {
+    id: 'son.n1.attenuation-definition',
+    question: 'Comment se définit l’atténuation A entre deux points ?',
+    formats: ['qcm', 'retournement'],
+    reponse: '$A = L_1 - L_2$, une différence de niveaux, en dB',
+    distracteurs: ['$A = I_1 - I_2$, en W·m⁻²', '$A = \\dfrac{L_1}{L_2}$, sans unité', '$A = L_1 + L_2$, en dB'],
+  },
+  {
+    id: 'son.n1.attenuation-geometrique',
+    question: 'D’où vient l’atténuation géométrique d’un son ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'La puissance se répartit sur une surface de plus en plus grande en s’éloignant de la source',
+    distracteurs: [
+      'Le milieu absorbe une partie de l’énergie',
+      'La fréquence du son diminue avec la distance',
+      'La célérité du son diminue avec la distance',
+    ],
+    aide: 'C’est l’absorption qui dissipe l’énergie dans le milieu (mur, laine de verre, air).',
+  },
+  {
+    id: 'son.n1.absorption',
+    question: 'Une cloison en laine de roche diminue le niveau sonore d’une pièce à l’autre. Quel type d’atténuation ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'Une atténuation par absorption : le matériau absorbe une partie de l’énergie',
+    distracteurs: [
+      'Une atténuation géométrique : la surface de l’onde augmente',
+      'Un effet Doppler : la fréquence diminue',
+      'Une diffraction : l’onde contourne la cloison',
+    ],
+  },
+  {
+    id: 'son.n1.source-ponctuelle',
+    question: 'Source ponctuelle de puissance P, qui émet dans toutes les directions : intensité à la distance d ?',
+    formats: ['qcm', 'retournement'],
+    reponse: '$I = \\dfrac{P}{4 \\pi d^2}$',
+    distracteurs: ['$I = \\dfrac{P}{4 \\pi d}$', '$I = P \\times 4 \\pi d^2$', '$I = \\dfrac{P}{\\pi d^2}$'],
+    aide: '4πd² est l’aire de la sphère de rayon d sur laquelle la puissance se répartit.',
+  },
+  {
+    id: 'son.n1.niveau-pas-proportionnel',
+    question: '« Le niveau d’intensité sonore est proportionnel à l’intensité sonore. »',
+    formats: ['vraifaux'],
+    vrai: false,
+    reponse: 'Faux : L dépend du logarithme de I. Multiplier I par 10 ajoute 10 dB, il ne multiplie pas L par 10.',
+  },
+];
+
+/* ---------- Niveau 2 · Situations, calculs de tête ---------- */
+
+const SON_N2 = [
+  {
+    id: 'son.n2.niveau-depuis-intensite',
+    question: 'Niveau d’intensité sonore d’une intensité donnée',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const k = entierEntre(2, 9);
+      const L = 10 * (12 - k);
+      return {
+        question: `Un micro reçoit une intensité sonore I = 10^{-${k}} W·m⁻². I₀ = 10^{-12} W·m⁻². Niveau d’intensité sonore L ?`,
+        reponse: `${L} dB`,
+        nombre: L,
+        unite: 'dB',
+        distracteurs: pieges(`${L} dB`, [`${12 - k} dB`, `${10 * k} dB`, `−${10 * k} dB`, `${10 * (12 + k)} dB`]),
+        aide: `I / I₀ = 10^{-${k}} / 10^{-12} = 10^{${12 - k}}, donc L = 10 × ${12 - k} = ${L} dB.`,
+      };
+    },
+  },
+  {
+    id: 'son.n2.intensite-depuis-niveau',
+    question: 'Intensité sonore d’un niveau donné',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const L = 10 * entierEntre(3, 11);
+      const n = L / 10 - 12;
+      const I = 10 ** n;
+      return {
+        question: `Un sonomètre affiche L = ${L} dB. I₀ = 10^{-12} W·m⁻². Intensité sonore I, en W·m⁻² ?`,
+        reponse: `10^{${n}} W·m⁻²`,
+        nombre: I,
+        unite: 'W·m⁻²',
+        distracteurs: pieges(`10^{${n}} W·m⁻²`, [`10^{${-n}} W·m⁻²`, `10^{${L / 10}} W·m⁻²`, `10^{${n - 1}} W·m⁻²`, `${L / 10} W·m⁻²`]),
+        aide: `I = I₀ × 10^{L/10} = 10^{-12} × 10^{${L / 10}} = 10^{${n}} W·m⁻².`,
+      };
+    },
+  },
+  {
+    id: 'son.n2.deux-sources',
+    question: 'Deux sources identiques fonctionnent ensemble',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const L = auHasard([50, 60, 70, 80, 90]);
+      return {
+        question: `Une machine seule produit ${L} dB à l’endroit où se trouve l’ouvrier. On allume une deuxième machine identique. Niveau total ?`,
+        reponse: `${L + 3} dB`,
+        nombre: L + 3,
+        unite: 'dB',
+        distracteurs: pieges(`${L + 3} dB`, [`${2 * L} dB`, `${L} dB`, `${L + 10} dB`, `${L + 6} dB`]),
+        aide: 'L’intensité double : L = 10 log(2I / I₀) = 10 log 2 + 10 log(I / I₀) ≈ 3 + L₁. Doubler l’intensité ajoute 3 dB.',
+      };
+    },
+  },
+  {
+    id: 'son.n2.dix-sources',
+    question: 'Plusieurs sources identiques fonctionnent ensemble',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const L = auHasard([40, 50, 60, 70]);
+      const [n, ajout] = auHasard([[10, 10], [100, 20], [1000, 30]]);
+      return {
+        question: `Un élève qui parle produit ${L} dB au fond de la salle. ${chNombre(n)} élèves parlent en même temps, chacun au même niveau. Niveau total ?`,
+        reponse: `${L + ajout} dB`,
+        nombre: L + ajout,
+        unite: 'dB',
+        distracteurs: pieges(`${L + ajout} dB`, [`${chNombre(L * n)} dB`, `${L + n} dB`, `${L + ajout / 10} dB`, `${L} dB`]),
+        aide: `L’intensité est multipliée par ${chNombre(n)} = 10^{${ajout / 10}} : on ajoute 10 × ${ajout / 10} = ${ajout} dB.`,
+      };
+    },
+  },
+  {
+    id: 'son.n2.combien-sources',
+    question: 'Combien de sources identiques pour gagner des décibels ?',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const L = auHasard([60, 70, 80]);
+      const [ajout, n] = auHasard([[3, 2], [10, 10], [20, 100]]);
+      return {
+        question: `Une enceinte produit ${L} dB. Combien d’enceintes identiques faut-il, ensemble, pour atteindre ${L + ajout} dB ?`,
+        reponse: `${n} enceintes`,
+        nombre: n,
+        distracteurs: pieges(`${n} enceintes`, [`${ajout} enceintes`, `${n + 1} enceintes`, `${n * 10} enceintes`, `${n * 2} enceintes`]),
+        aide: ajout === 3
+          ? '+3 dB : l’intensité double, il faut 2 enceintes.'
+          : `+${ajout} dB : l’intensité est multipliée par 10^{${ajout / 10}} = ${n}, il faut ${n} enceintes.`,
+      };
+    },
+  },
+  {
+    id: 'son.n2.facteur-intensite',
+    question: 'Le niveau augmente : par combien l’intensité est-elle multipliée ?',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const [dL, facteur] = auHasard([[3, 2], [10, 10], [20, 100], [30, 1000], [40, 10000]]);
+      const L1 = auHasard([30, 40, 50, 60]);
+      return {
+        question: `Le niveau d’intensité sonore passe de ${L1} dB à ${L1 + dL} dB. Par combien l’intensité sonore est-elle multipliée ?`,
+        reponse: `Par ${chNombre(facteur)}`,
+        nombre: facteur,
+        distracteurs: pieges(`Par ${chNombre(facteur)}`, [`Par ${dL}`, `Par ${chNombre(dL / 10)}`, `Par ${chNombre((L1 + dL) / L1, 2)}`, `Par ${chNombre(facteur * 10)}`]),
+        aide: dL === 3
+          ? '+3 dB correspond à une intensité doublée.'
+          : `+${dL} dB = ${dL / 10} × 10 dB : l’intensité est multipliée par 10^{${dL / 10}} = ${chNombre(facteur)}.`,
+      };
+    },
+  },
+  {
+    id: 'son.n2.distance',
+    question: 'Niveau sonore quand on s’éloigne d’une source ponctuelle',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const L = auHasard([70, 80, 90, 100]);
+      const [facteur, perte] = auHasard([[2, 6], [10, 20]]);
+      const d = auHasard([1, 2, 5]);
+      return {
+        question: `À ${d} m d’une source ponctuelle, L = ${L} dB. Sans absorption, quel niveau à ${d * facteur} m ?`,
+        reponse: `${L - perte} dB`,
+        nombre: L - perte,
+        unite: 'dB',
+        distracteurs: pieges(`${L - perte} dB`, [`${L / facteur} dB`, `${L - 3} dB`, `${L - facteur} dB`, `${L - 10} dB`]),
+        aide: `I = P / (4πd²) : distance × ${facteur}, intensité divisée par ${facteur * facteur}. `
+          + (facteur === 2 ? 'Diviser par 4 = diviser deux fois par 2 : −3 − 3 = −6 dB.' : 'Diviser par 100 = 10^{2} : −20 dB.'),
+      };
+    },
+  },
+  {
+    id: 'son.n2.attenuation-mur',
+    question: 'Atténuation apportée par une paroi',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const L1 = auHasard([75, 80, 85, 90, 95]);
+      const A = auHasard([25, 30, 35, 40, 45]);
+      return {
+        question: `Dans une salle de répétition, L = ${L1} dB ; dans le couloir, derrière la porte isolante, L = ${L1 - A} dB. Atténuation de la porte ?`,
+        reponse: `${A} dB`,
+        nombre: A,
+        unite: 'dB',
+        distracteurs: pieges(`${A} dB`, [`${L1 + (L1 - A)} dB`, `${chNombre(Math.round((L1 / (L1 - A)) * 10) / 10)} dB`, `${A * 10} dB`]),
+        aide: `A = L₁ − L₂ = ${L1} − ${L1 - A} = ${A} dB : une atténuation par absorption.`,
+      };
+    },
+  },
+  {
+    id: 'son.n2.attenuation-facteur',
+    question: 'Atténuation quand l’intensité est divisée par une puissance de dix',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const k = entierEntre(1, 5);
+      const A = 10 * k;
+      return {
+        question: `Un casque antibruit divise l’intensité sonore par ${chNombre(10 ** k)}. Atténuation, en dB ?`,
+        reponse: `${A} dB`,
+        nombre: A,
+        unite: 'dB',
+        distracteurs: pieges(`${A} dB`, [`${k} dB`, `${chNombre(10 ** k)} dB`, `${A + 10} dB`, `${A / 2} dB`]),
+        aide: `Diviser I par 10^{${k}}, c’est retirer 10 × ${k} = ${A} dB.`,
+      };
+    },
+  },
+  {
+    id: 'son.n2.sources-inegales',
+    question: 'Deux sources très différentes',
+    formats: ['qcm', 'saisie'],
+    generer() {
+      const L1 = auHasard([70, 80, 90]);
+      const L2 = L1 - auHasard([20, 30]);
+      return {
+        question: `Une tondeuse produit ${L1} dB et, au même endroit, un oiseau chante à ${L2} dB. Niveau total, à 1 dB près ?`,
+        reponse: `${L1} dB`,
+        nombre: L1,
+        tolerance: 0.013,
+        unite: 'dB',
+        distracteurs: pieges(`${L1} dB`, [`${L1 + L2} dB`, `${L1 + 3} dB`, `${(L1 + L2) / 2} dB`]),
+        aide: `L’oiseau a une intensité ${chNombre(10 ** ((L1 - L2) / 10))} fois plus faible : elle ne change presque rien à la somme des intensités.`,
+      };
+    },
+  },
+  {
+    id: 'son.n2.ordre-grandeur',
+    question: 'Ordre de grandeur d’intensité sonore',
+    formats: ['qcm'],
+    generer() {
+      const [situation, L] = auHasard([
+        ['une conversation', 60], ['une salle de classe bruyante', 70], ['un concert de rock', 110],
+        ['une bibliothèque', 30], ['une rue animée', 80],
+      ]);
+      const n = L / 10 - 12;
+      return {
+        question: `Pour ${situation}, un sonomètre affiche environ ${L} dB. Intensité sonore correspondante ?`,
+        reponse: `10^{${n}} W·m⁻²`,
+        distracteurs: pieges(`10^{${n}} W·m⁻²`, [`10^{${n + 2}} W·m⁻²`, `10^{${n - 2}} W·m⁻²`, `${L} W·m⁻²`, `10^{${L / 10}} W·m⁻²`]),
+        aide: `I = 10^{-12} × 10^{${L / 10}} = 10^{${n}} W·m⁻².`,
+      };
+    },
+  },
+];
+
+/* ---------- Niveau 3 · Pièges et type bac, calculatrice permise ---------- */
+
+/** Un niveau au dixième de dB, en gardant le zéro : 68,0 dB. */
+function sonDixieme(L) {
+  return (Math.round(L * 10) / 10).toFixed(1).replace('.', ',').replace('-', '−');
+}
+
+const SON_N3 = [
+  {
+    id: 'son.n3.niveau-calculatrice',
+    question: 'Niveau d’intensité sonore, calculatrice',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const a = auHasard([2.5, 3.2, 4.0, 6.3, 8.0]);
+      const n = entierEntre(3, 8);
+      const I = a * 10 ** -n;
+      const L = 10 * Math.log10(I / 1e-12);
+      return {
+        question: `Intensité mesurée : I = ${chSci(I, 2)} W·m⁻² ; I₀ = 1,0 × 10^{-12} W·m⁻². Niveau L, au dixième de dB ?`,
+        reponse: `${sonDixieme(L)} dB`,
+        nombre: L,
+        tolerance: 0.002,
+        unite: 'dB',
+        distracteurs: [`${sonDixieme(10 * Math.log(I / 1e-12))} dB`, `${sonDixieme(10 * Math.log10(I))} dB`,
+          `${sonDixieme(Math.log10(I / 1e-12))} dB`],
+        aide: `L = 10 log(${chSci(I, 2)} / 1,0 × 10^{-12}) ≈ ${chNombre(L, 3)} dB. Les pièges : ln au lieu de log, oubli de I₀, oubli du facteur 10.`,
+      };
+    },
+  },
+  {
+    id: 'son.n3.intensite-calculatrice',
+    question: 'Intensité sonore à partir d’un niveau, calculatrice',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const L = auHasard([45, 65, 75, 85, 95, 105]);
+      const I = 1e-12 * 10 ** (L / 10);
+      return {
+        question: `Un sonomètre affiche L = ${L} dB. I₀ = 1,0 × 10^{-12} W·m⁻². Intensité sonore, à deux chiffres significatifs ?`,
+        reponse: `${chSci(I, 2)} W·m⁻²`,
+        nombre: I,
+        tolerance: 0.02,
+        unite: 'W·m⁻²',
+        distracteurs: [`${chSci(10 ** (L / 10), 2)} W·m⁻²`, `1,0 × 10^{${L - 12}} W·m⁻²`, `${chSci(1e-12 * L / 10, 2)} W·m⁻²`],
+        aide: `I = I₀ × 10^{L/10} = 1,0 × 10^{-12} × 10^{${chNombre(L / 10)}} ≈ ${chSci(I, 2)} W·m⁻².`,
+      };
+    },
+  },
+  {
+    id: 'son.n3.deux-sources-differentes',
+    question: 'Deux sources de niveaux différents',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const L1 = auHasard([60, 70]);
+      const L2 = L1 + auHasard([2, 5, 6]);
+      const L = 10 * Math.log10(10 ** (L1 / 10) + 10 ** (L2 / 10));
+      return {
+        question: `Au même point, une première source seule donne ${L1} dB et une seconde seule ${L2} dB. Niveau total, au dixième de dB ?`,
+        reponse: `${sonDixieme(L)} dB`,
+        nombre: L,
+        tolerance: 0.002,
+        unite: 'dB',
+        distracteurs: [`${L1 + L2} dB`, `${L2 + 3} dB`, `${chNombre((L1 + L2) / 2)} dB`],
+        aide: `I = I₁ + I₂ = I₀ (10^{${chNombre(L1 / 10)}} + 10^{${chNombre(L2 / 10)}}), puis L = 10 log(I / I₀) ≈ ${chNombre(L, 3)} dB.`,
+      };
+    },
+  },
+  {
+    id: 'son.n3.source-ponctuelle',
+    question: 'Niveau sonore d’une source ponctuelle de puissance connue',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const P = auHasard([0.1, 1, 5]);
+      const d = auHasard([2, 5, 10]);
+      const I = P / (4 * Math.PI * d * d);
+      const L = 10 * Math.log10(I / 1e-12);
+      return {
+        question: `Un haut-parleur, assimilé à une source ponctuelle, émet une puissance sonore de ${chNombre(P)} W dans toutes les directions. `
+          + `Niveau d’intensité sonore à ${d} m, au dixième de dB ? I₀ = 1,0 × 10^{-12} W·m⁻².`,
+        reponse: `${sonDixieme(L)} dB (I ≈ ${chSci(I, 2)} W·m⁻²)`,
+        nombre: L,
+        tolerance: 0.002,
+        unite: 'dB',
+        distracteurs: [`${sonDixieme(10 * Math.log10(P / (4 * Math.PI * d) / 1e-12))} dB`,
+          `${sonDixieme(10 * Math.log10(P / 1e-12))} dB`,
+          `${sonDixieme(10 * Math.log10(P / (Math.PI * d * d) / 1e-12))} dB`],
+        aide: `I = P / (4πd²) = ${chNombre(P)} / (4π × ${d * d}) ≈ ${chSci(I, 2)} W·m⁻², puis L = 10 log(I / I₀) ≈ ${chNombre(L, 3)} dB.`,
+      };
+    },
+  },
+  {
+    id: 'son.n3.distance-quelconque',
+    question: 'Niveau à une autre distance de la source',
+    formats: ['saisie'],
+    generer() {
+      const L1 = auHasard([80, 90]);
+      const d2 = auHasard([3, 5, 8]);
+      const L2 = L1 - 20 * Math.log10(d2 / 2);
+      return {
+        question: `À 2,0 m d’une source ponctuelle, L₁ = ${L1} dB. Sans absorption, $L_2 = L_1 - 20 \\log\\left(\\dfrac{d_2}{d_1}\\right)$. `
+          + `Niveau à ${chNombre(d2)},0 m, au dixième de dB ?`,
+        reponse: `${sonDixieme(L2)} dB`,
+        nombre: L2,
+        tolerance: 0.002,
+        unite: 'dB',
+        aide: `L₂ = ${L1} − 20 log(${d2} / 2) ≈ ${L1} − ${chNombre(20 * Math.log10(d2 / 2), 3)} ≈ ${chNombre(L2, 3)} dB. `
+          + 'Le 20 vient du carré de la distance : 10 log(d₂² / d₁²) = 20 log(d₂ / d₁).',
+      };
+    },
+  },
+  {
+    id: 'son.n3.combien-instruments',
+    question: 'Combien d’instruments pour atteindre un niveau ?',
+    formats: ['saisie', 'qcm'],
+    generer() {
+      const [cible, n] = auHasard([[83, 20], [85, 32], [86, 40], [90, 100]]);
+      return {
+        question: `Un violon joue à 70 dB au premier rang. Combien de violons identiques faut-il, ensemble, pour atteindre ${cible} dB ?`,
+        reponse: `${n} violons`,
+        nombre: n,
+        tolerance: 0.02,
+        distracteurs: pieges(`${n} violons`, [`${cible - 70} violons`, `${sonDixieme((cible / 70))} violons`, `${Math.round(n / 2)} violons`]),
+        aide: `N × I₁ = I donc N = 10^{(${cible} − 70)/10} = 10^{${chNombre((cible - 70) / 10)}} ≈ ${chNombre(10 ** ((cible - 70) / 10), 3)}, soit ${n} violons.`,
+      };
+    },
+  },
+  {
+    id: 'son.n3.copie-addition-db',
+    consigne: 'Corrige la copie.',
+    formats: ['qcm', 'retournement'],
+    question: 'Copie d’élève : « Deux machines identiques produisent chacune 80 dB. Ensemble : L = 80 + 80 = 160 dB. » Où est l’erreur ?',
+    reponse: 'Ce sont les intensités qui s’additionnent : l’intensité double, L = 83 dB',
+    distracteurs: [
+      'Il fallait faire la moyenne : L = 80 dB',
+      'Il fallait multiplier : L = 80 × 80 = 6 400 dB',
+      'Aucune : deux machines font deux fois plus de bruit',
+    ],
+    aide: 'L = 10 log(2I / I₀) = 10 log 2 + 80 ≈ 83 dB. 160 dB dépasserait largement le seuil de douleur.',
+  },
+  {
+    id: 'son.n3.copie-oubli-i0',
+    consigne: 'Corrige la copie.',
+    formats: ['qcm', 'retournement'],
+    question: 'Copie d’élève : « I = 1,0 × 10⁻⁵ W·m⁻², donc L = 10 log(1,0 × 10⁻⁵) = −50 dB. » Où est l’erreur ?',
+    reponse: 'Il a oublié de diviser par I₀ : L = 10 log(10⁻⁵ / 10⁻¹²) = 70 dB',
+    distracteurs: [
+      'Il fallait utiliser ln : L = 10 ln(10⁻⁵)',
+      'Le facteur 10 est en trop : L = log(10⁻⁵) = −5 dB',
+      'Aucune : un niveau sonore est toujours négatif',
+    ],
+  },
+  {
+    id: 'son.n3.copie-ln',
+    consigne: 'Corrige la copie.',
+    formats: ['qcm', 'retournement'],
+    question: 'Copie d’élève : « I = 1,0 × 10⁻⁵ W·m⁻², L = 10 ln(I / I₀) = 161,2 dB. » Qu’en dit le correcteur ?',
+    reponse: 'Il a pris ln au lieu de log : L = 70 dB. 161 dB pour une salle de classe est absurde',
+    distracteurs: [
+      'Le calcul est juste : c’est le niveau d’une salle de classe',
+      'Il fallait diviser I₀ par I',
+      'Il fallait écrire 161 dB, avec trois chiffres significatifs',
+    ],
+    aide: 'Un résultat au-dessus de 120 dB (seuil de douleur) pour une situation ordinaire doit alerter.',
+  },
+  {
+    id: 'son.n3.copie-distance',
+    consigne: 'Corrige la copie.',
+    formats: ['qcm', 'retournement'],
+    question: 'Copie d’élève : « À 1 m d’une source ponctuelle, L = 80 dB. À 2 m, la distance double, donc L = 80 / 2 = 40 dB. » Où est l’erreur ?',
+    reponse: 'C’est l’intensité qui est divisée par 4, pas le niveau par 2 : L ≈ 74 dB',
+    distracteurs: [
+      'L’intensité est divisée par 2, donc L = 77 dB',
+      'Le niveau ne dépend pas de la distance : L = 80 dB',
+      'Il fallait diviser par 4 : L = 20 dB',
+    ],
+    aide: 'I = P / (4πd²) : d × 2, I ÷ 4, soit −10 log 4 ≈ −6 dB.',
+  },
+  {
+    id: 'son.n3.copie-chiffres',
+    consigne: 'Corrige la copie.',
+    formats: ['qcm', 'retournement'],
+    question: 'Copie d’élève, intensité donnée à deux chiffres significatifs : « L = 76,19331 dB ». Qu’en dit le correcteur ?',
+    reponse: 'Trop de chiffres : on écrit L ≈ 76 dB',
+    distracteurs: ['C’est parfait : la calculatrice est précise', 'Il faut écrire L ≈ 80 dB', 'Il faut écrire L ≈ 76,19 dB'],
+  },
+  {
+    id: 'son.n3.intensite-double',
+    question: '« Si l’intensité sonore double, le niveau d’intensité sonore double aussi. »',
+    formats: ['vraifaux'],
+    vrai: false,
+    reponse: 'Faux : il augmente de 10 log 2 ≈ 3 dB. Pour doubler un niveau de 60 dB, il faudrait multiplier l’intensité par un million.',
+  },
+  {
+    id: 'son.n3.niveau-negatif',
+    question: '« Un niveau d’intensité sonore peut être négatif. »',
+    formats: ['vraifaux'],
+    vrai: true,
+    reponse: 'Vrai : quand I < I₀, le rapport I / I₀ est inférieur à 1 et son logarithme est négatif. Ce son est inaudible.',
+  },
+  {
+    id: 'son.n3.protection',
+    question: 'Un ouvrier travaille près d’une machine à 105 dB. Ses bouchons d’oreille apportent une atténuation de 25 dB. Quel niveau atteint son tympan ?',
+    formats: ['qcm', 'retournement'],
+    reponse: '80 dB : on soustrait l’atténuation au niveau',
+    distracteurs: ['4,2 dB : on divise par l’atténuation', '130 dB : on ajoute l’atténuation', '102 dB : on retire 3 dB par protection'],
+  },
+  {
+    id: 'son.n3.inverse-carre',
+    question: 'Pourquoi, sans absorption, l’intensité d’une source ponctuelle varie-t-elle comme $1 / d^2$ ?',
+    formats: ['qcm', 'retournement'],
+    reponse: 'La même puissance se répartit sur une sphère d’aire 4πd², qui croît comme d²',
+    distracteurs: [
+      'L’air absorbe d’autant plus d’énergie que la distance est grande',
+      'La célérité du son diminue avec la distance',
+      'La fréquence diminue avec la distance',
+    ],
+  },
+];
+
+inscrireChapitre({
+  cle: 'son',
+  theme: 'Ondes et signaux',
+  titre: 'Intensité et niveau sonores',
+  resume: 'Trois niveaux : vocabulaire et formules ; petites situations à calculer de tête (décibels et puissances de dix) ; '
+    + 'pièges, copies d’élèves et exercices type bac, calculatrice permise. Les valeurs changent à chaque passage.',
+  n1: SON_N1,
+  n2: SON_N2,
+  n3: SON_N3,
 });
 
 // ---- 36-bibliotheque.js ----
@@ -7149,6 +10686,11 @@ function calendrierCarte(paquet, jour, dateEvaluation) {
 /** Paquets livrés retirés de l'application, et celui qui les remplace dans les bibliothèques. */
 const PAQUETS_REMPLACES = { 'chimie-bases': 'unites', reflexes: 'conversions', nomenclature: 'conversions' };
 
+/** Un paquet livré en brouillon (audit: 'brouillon') n'est montré qu'à un enseignant. */
+function visiblePourMoi(paquet) {
+  return Boolean(paquet) && (paquet.audit !== 'brouillon' || Porte.enseignant());
+}
+
 const Bibliotheque = {
   /** Clés des paquets ajoutés (intégrés ou publiés par un enseignant). */
   adoptes: null,
@@ -7165,11 +10707,12 @@ const Bibliotheque = {
   /** Tant que l'élève n'a rien choisi : les paquets intégrés de son niveau. Un paquet
    *  « resonance » (Python de spé PC) ne vient d'office qu'aux comptes passés par
    *  Résonance : les autres terminales du site (enseignement scientifique) l'ajoutent
-   *  elles-mêmes si elles le veulent. */
+   *  elles-mêmes si elles le veulent. Un paquet en brouillon n'est visible que d'un
+   *  enseignant, le temps de l'audit. */
   cles() {
-    if (this.adoptes) return this.adoptes;
+    if (this.adoptes) return this.adoptes.filter((cle) => visiblePourMoi(Paquets.get(cle)));
     const compte = Nuage.compte();
-    return Paquets.liste.filter((p) => p.origine === 'integre'
+    return Paquets.liste.filter((p) => p.origine === 'integre' && visiblePourMoi(p)
       && (!Profil.niveau || p.niveaux.includes(Profil.niveau))
       && (!p.resonance || (compte && compte.resonance))).map((p) => p.cle);
   },
@@ -12220,7 +15763,7 @@ Ecrans.paquets = {
       actions.append(el('button', { type: 'button', class: 'bouton', onclick: () => aller('editer-objectif', 'nouveau') },
         '+ Objectif (bac blanc, contrôle…)'));
     }
-    pile.append(actions, blocObjectifs());
+    pile.append(actions, blocAuditBibliotheque(), blocObjectifs());
 
     if (!paquets.length) {
       pile.append(el('div', { class: 'panneau pile vide' },
@@ -12251,7 +15794,7 @@ Ecrans.paquet = {
   parent: 'paquets',
   porte: 'tous',
   rendre(zone, cle) {
-    const paquet = Paquets.get(cle);
+    const paquet = visiblePourMoi(Paquets.get(cle)) ? Paquets.get(cle) : null;
     if (!paquet) {
       zone.append(el('div', { class: 'panneau pile' },
         el('p', { text: 'Paquet introuvable. Il a peut-être été supprimé ou retiré de la bibliothèque commune.' }),
@@ -12405,7 +15948,8 @@ function ligneCatalogue(paquet) {
       el('div', { class: 'badges' },
         theme && el('span', { class: 'badge', text: theme }),
         ...(niveaux || []).map((n) => el('span', { class: 'badge', text: nomNiveau(n) })),
-        miens && el('span', { class: 'badge accent', text: 'Publié par moi' })),
+        miens && el('span', { class: 'badge accent', text: 'Publié par moi' }),
+        paquet.brouillon && el('span', { class: 'badge urgent', text: 'Brouillon : invisible des élèves' })),
       description && el('p', { class: 'discret', text: description }),
       el('div', { class: 'rangee' },
         miens ? null : bouton,
@@ -12451,9 +15995,9 @@ Ecrans.catalogue = {
       recherche,
       resultats));
 
-    const integres = Paquets.liste.filter((p) => p.origine === 'integre').map((p) => ({
+    const integres = Paquets.liste.filter((p) => p.origine === 'integre' && visiblePourMoi(p)).map((p) => ({
       cle: p.cle, titre: p.titre, theme: p.theme, niveaux: p.niveaux, nombre: p.cartes.length,
-      description: p.resume, enLigne: false, couleur: '#1B2A4A',
+      description: p.resume, enLigne: false, couleur: '#1B2A4A', brouillon: p.audit === 'brouillon',
     }));
     let enLigne = [];
     let message = null;
@@ -14508,6 +18052,301 @@ Ecrans['editer-objectif'] = {
     } else {
       titre.focus();
     }
+  },
+};
+
+// ---- 89-audit-ecrans.js ----
+/* Audit des paquets livrés : l'enseignant relit, carte par carte, ce que verra l'élève.
+ *
+ * Écrans « audit » (les paquets à relire, niveau par niveau) et « audit-niveau »
+ * (#/audit-niveau/<paquet>~<section>) : chaque carte avec sa réponse, ses pièges,
+ * son aide ; une carte générative se retire à volonté. Pour chaque carte, un
+ * avis (bien, à revoir) et une remarque libre ; pour chaque niveau, « relu ».
+ *
+ * Réservé à un compte enseignant, dans l'entrée flashcards. Les remarques sont
+ * rangées dans le profil (clé « audit ») : en ligne avec le compte, donc
+ * retrouvées sur un autre appareil, sans table nouvelle. « Exporter » en fait un
+ * fichier Markdown à confier à Claude pour corriger les paquets.
+ *
+ * Sont listés les paquets qui portent audit: 'brouillon' (invisibles des
+ * élèves) ou audit: 'ouvert' (déjà visibles). Valider un paquet, c'est retirer
+ * cette propriété dans son fichier : l'écran ne publie rien lui-même.
+ */
+
+const AVIS_AUDIT = { bien: '👍 Bien', revoir: '✏️ À revoir' };
+
+const Audit = {
+  donnees: null,
+  minuteur: null,
+
+  async charger() {
+    const stocke = await Depot.lire('audit');
+    this.donnees = { cartes: {}, sections: {}, ...(stocke || {}) };
+    return this.donnees;
+  },
+
+  paquets() {
+    return Paquets.liste.filter((p) => p.origine === 'integre' && p.audit);
+  },
+
+  carte(id) {
+    return this.donnees.cartes[id] || { avis: null, note: '' };
+  },
+
+  section(paquet, cle) {
+    return this.donnees.sections[`${paquet.cle}/${cle}`] || { relu: null, note: '' };
+  },
+
+  async noterCarte(id, changements) {
+    const suite = { ...this.carte(id), ...changements, date: Dates.aujourdhui() };
+    const cartes = { ...this.donnees.cartes };
+    if (!suite.avis && !suite.note) delete cartes[id];
+    else cartes[id] = suite;
+    this.donnees = { ...this.donnees, cartes };
+    await this.enregistrer();
+  },
+
+  async noterSection(paquet, cle, changements) {
+    const id = `${paquet.cle}/${cle}`;
+    this.donnees = { ...this.donnees, sections: { ...this.donnees.sections, [id]: { ...this.section(paquet, cle), ...changements } } };
+    await this.enregistrer();
+  },
+
+  enregistrer() {
+    return Depot.ecrire('audit', this.donnees);
+  },
+
+  /** Une remarque tapée part après une courte pause, et au plus tard en quittant le champ. */
+  plusTard(action) {
+    clearTimeout(this.minuteur);
+    this.minuteur = setTimeout(action, 800);
+  },
+
+  /** Où en est un niveau : cartes, avis donnés, cartes à revoir. */
+  bilan(paquet, section) {
+    const avis = section.cartes.map((c) => this.carte(c.id));
+    return {
+      total: section.cartes.length,
+      vues: avis.filter((a) => a.avis).length,
+      aRevoir: avis.filter((a) => a.avis === 'revoir' || (a.note && a.avis !== 'bien')).length,
+      remarques: avis.filter((a) => a.note).length,
+      relu: this.section(paquet, section.cle).relu,
+    };
+  },
+
+  aRelire() {
+    return this.paquets().reduce((n, p) => n + p.sections.filter((s) => !this.section(p, s.cle).relu).length, 0);
+  },
+
+  /** Les remarques en Markdown, avec l'énoncé de chaque carte pour la retrouver d'un coup d'œil. */
+  exporter() {
+    const lignes = [`# Audit des paquets — remarques du ${Dates.formater(Dates.aujourdhui(), true)}`, ''];
+    for (const paquet of this.paquets()) {
+      lignes.push(`## ${paquet.titre} (\`${paquet.cle}\`, ${paquet.audit})`, '');
+      for (const section of paquet.sections) {
+        const etat = this.section(paquet, section.cle);
+        const bilan = this.bilan(paquet, section);
+        lignes.push(`### ${section.titre} — ${etat.relu ? `relu le ${Dates.formater(etat.relu)}` : 'pas encore relu'}`
+          + ` · ${bilan.vues}/${bilan.total} cartes jugées`, '');
+        if (etat.note) lignes.push(`> ${etat.note.replace(/\n/g, '\n> ')}`, '');
+        for (const carte of section.cartes) {
+          const a = this.carte(carte.id);
+          if (!a.avis && !a.note) continue;
+          const enonce = String(carte.question || '').replace(/\s+/g, ' ').slice(0, 120);
+          lignes.push(`- \`${carte.id}\` — ${a.avis ? AVIS_AUDIT[a.avis] : 'remarque'} — *${enonce}*`);
+          if (a.note) lignes.push(`  - ${a.note.replace(/\n/g, '\n    ')}`);
+        }
+        lignes.push('');
+      }
+    }
+    return lignes.join('\n');
+  },
+};
+
+function telechargerTexte(nom, texte) {
+  const lien = el('a', { href: URL.createObjectURL(new Blob([texte], { type: 'text/markdown;charset=utf-8' })), download: nom });
+  document.body.append(lien);
+  lien.click();
+  setTimeout(() => {
+    URL.revokeObjectURL(lien.href);
+    lien.remove();
+  }, 1000);
+}
+
+/** Encadré de « Ma bibliothèque », pour un enseignant : ce qui reste à relire. */
+function blocAuditBibliotheque() {
+  if (!Porte.enseignant() || !Audit.paquets().length) return null;
+  const bouton = boutonMenu('Audit des paquets', 'Chargement…', () => aller('audit'), 'accent');
+  Audit.charger().then(() => {
+    const n = Audit.aRelire();
+    bouton.querySelector('.detail').textContent = n
+      ? `${pluriel(n, 'niveau')} à relire, sur ${pluriel(Audit.paquets().length, 'paquet')} en audit`
+      : 'Tout est relu : exporte tes remarques pour les corrections.';
+  });
+  return bouton;
+}
+
+Ecrans.audit = {
+  titre: 'Audit des paquets',
+  titreCourt: 'Audit',
+  parent: 'paquets',
+  porte: 'eleve',
+  async rendre(zone) {
+    if (!Porte.enseignant()) {
+      zone.append(el('div', { class: 'panneau' }, el('p', { text: 'Réservé à un compte enseignant.' })));
+      return;
+    }
+    await Audit.charger();
+    const pile = el('div', { class: 'pile' });
+    zone.append(pile);
+    pile.append(
+      el('p', { class: 'discret', text: 'Les paquets livrés avec l’application, à relire avant de les ouvrir aux élèves. '
+        + 'Un brouillon reste invisible des élèves tant qu’il n’est pas validé dans le code. Tes avis et remarques '
+        + 'sont gardés dans ton compte : exporte-les pour les corrections.' }),
+      el('div', { class: 'rangee' },
+        el('button', {
+          type: 'button',
+          class: 'bouton accent',
+          onclick: () => {
+            telechargerTexte(`audit-paquets-${Dates.aujourdhui()}.md`, Audit.exporter());
+            annoncer('Remarques exportées.');
+          },
+        }, 'Exporter mes remarques (.md)')));
+
+    for (const paquet of Audit.paquets()) {
+      const lignes = paquet.sections.map((section) => {
+        const b = Audit.bilan(paquet, section);
+        const detail = [
+          pluriel(b.total, 'carte'),
+          b.vues ? `${b.vues} jugée${b.vues > 1 ? 's' : ''}` : null,
+          b.aRevoir ? `${b.aRevoir} à revoir` : null,
+          b.relu ? `✓ relu le ${Dates.formater(b.relu)}` : 'à relire',
+        ].filter(Boolean).join(' · ');
+        return boutonMenu(section.titre, detail, () => aller('audit-niveau', `${paquet.cle}~${section.cle}`), b.relu ? '' : 'principal');
+      });
+      pile.append(el('section', { class: 'panneau pile' },
+        el('div', { class: 'ligne-entete' },
+          el('h2', { text: paquet.titre }),
+          el('span', { class: `badge ${paquet.audit === 'brouillon' ? 'urgent' : 'accent'}`,
+            text: paquet.audit === 'brouillon' ? 'Brouillon : invisible des élèves' : 'Ouvert aux élèves' })),
+        paquet.resume && el('p', { class: 'discret', text: paquet.resume }),
+        ...lignes));
+    }
+  },
+};
+
+/** Ce que voit l'élève, et ce qu'il doit répondre, pour un tirage d'une carte. */
+function detailCarteAudit(carte) {
+  const t = carte.generer ? { ...carte, ...carte.generer() } : carte;
+  const formats = Paquets.formatsDe(carte).map((f) => FORMATS[f]).join(', ');
+  const ligne = (libelle, contenu) => contenu && el('div', { class: 'pile serree' },
+    el('strong', { class: 'discret', text: libelle }), contenu);
+  const valeurs = [
+    t.nombre !== undefined && `valeur ${chNombre(t.nombre)}${t.tolerance ? ` (écart admis ${Math.round(t.tolerance * 100)} %)` : ''}`,
+    (t.unite || carte.unite) && `unité affichée : ${t.unite || carte.unite}`,
+    t.ecritureScientifique && 'écriture scientifique exigée',
+  ].filter(Boolean).join(' · ');
+  const pieges = t.distracteurs && t.distracteurs.length
+    ? el('ul', {}, ...t.distracteurs.map((d) => el('li', {}, texteCarte(d))))
+    : Paquets.formatsDe(carte).includes('qcm') && el('p', { class: 'discret', text: 'Pris parmi les réponses du niveau.' });
+  return el('div', { class: 'pile serree' },
+    el('p', { class: 'discret', text: `${formats}${carte.consigne ? ` · consigne : « ${carte.consigne} »` : ''}` }),
+    ligne('Énoncé', texteCarte(t.question)),
+    typeof t.vrai === 'boolean' && ligne('Attendu', el('p', { text: t.vrai ? 'Vrai' : 'Faux' })),
+    ligne('Réponse', texteCarte(t.reponse)),
+    valeurs && el('p', { class: 'discret', text: valeurs }),
+    t.saisie && t.saisie.length ? ligne('Acceptées aussi à l’écrit', el('p', { text: t.saisie.join(' · ') })) : null,
+    ligne('Pièges', pieges),
+    t.aide && ligne('Aide', texteCarte(t.aide)));
+}
+
+function blocCarteAudit(carte) {
+  const avis = Audit.carte(carte.id);
+  const contenu = el('div', {});
+  const tirer = () => contenu.replaceChildren(detailCarteAudit(carte));
+  tirer();
+
+  const note = el('textarea', { rows: 2, placeholder: 'Ce qui te plaît ou te gêne (facultatif)', 'aria-label': 'Remarque sur la carte' });
+  note.value = avis.note || '';
+  const sauver = () => Audit.noterCarte(carte.id, { note: note.value.trim() });
+  note.addEventListener('input', () => Audit.plusTard(sauver));
+  note.addEventListener('change', sauver);
+
+  const boutons = el('div', { class: 'puces', role: 'group', 'aria-label': 'Avis sur la carte' });
+  const majBoutons = () => {
+    for (const b of boutons.children) b.setAttribute('aria-pressed', String(b.dataset.avis === (Audit.carte(carte.id).avis || '')));
+  };
+  for (const [cle, libelle] of Object.entries(AVIS_AUDIT)) {
+    boutons.append(el('button', {
+      type: 'button',
+      class: 'puce',
+      'data-avis': cle,
+      onclick: async () => {
+        // Un second appui retire l'avis.
+        await Audit.noterCarte(carte.id, { avis: Audit.carte(carte.id).avis === cle ? null : cle });
+        majBoutons();
+      },
+    }, libelle));
+  }
+  majBoutons();
+
+  return el('section', { class: 'panneau pile serree' },
+    el('div', { class: 'ligne-entete' },
+      el('code', { class: 'discret', text: carte.id }),
+      carte.generer && el('button', { type: 'button', class: 'bouton', onclick: tirer }, '🎲 Autre tirage')),
+    contenu,
+    boutons,
+    note);
+}
+
+Ecrans['audit-niveau'] = {
+  titre: 'Audit',
+  titreCourt: 'Niveau',
+  parent: 'audit',
+  porte: 'eleve',
+  async rendre(zone, param) {
+    const [cle, cleSection] = String(param || '').split('~');
+    const paquet = Paquets.get(cle);
+    const section = paquet && Paquets.section(paquet, cleSection);
+    if (!Porte.enseignant() || !section) {
+      zone.append(el('div', { class: 'panneau' }, el('p', { text: 'Niveau introuvable, ou réservé à un compte enseignant.' })));
+      return;
+    }
+    await Audit.charger();
+    definirTitre(`${paquet.titre} · ${section.titre.split(' · ')[0]}`);
+    const pile = el('div', { class: 'pile' });
+    zone.append(pile);
+
+    const etat = Audit.section(paquet, section.cle);
+    const remarque = el('textarea', { rows: 3, placeholder: 'Remarque générale sur ce niveau : ce qui manque, l’équilibre, la difficulté…',
+      'aria-label': 'Remarque sur le niveau' });
+    remarque.value = etat.note || '';
+    const sauver = () => Audit.noterSection(paquet, section.cle, { note: remarque.value.trim() });
+    remarque.addEventListener('input', () => Audit.plusTard(sauver));
+    remarque.addEventListener('change', sauver);
+
+    const relu = el('button', { type: 'button', class: 'bouton bloc' });
+    const majRelu = () => {
+      const date = Audit.section(paquet, section.cle).relu;
+      relu.textContent = date ? `✓ Relu le ${Dates.formater(date)} · annuler` : 'Marquer ce niveau comme relu';
+      relu.classList.toggle('principal', !date);
+    };
+    relu.onclick = async () => {
+      await Audit.noterSection(paquet, section.cle, { relu: Audit.section(paquet, section.cle).relu ? null : Dates.aujourdhui() });
+      majRelu();
+    };
+    majRelu();
+
+    pile.append(
+      el('p', { class: 'discret', text: `${section.titre} · ${pluriel(section.cartes.length, 'carte')}. `
+        + 'Une carte marquée 🎲 tire de nouvelles valeurs à chaque passage : retire-la pour en voir d’autres.' }),
+      el('button', {
+        type: 'button',
+        class: 'bouton',
+        onclick: () => lancerContenu({ paquet, section: section.cle, format: 'mixte', type: 'libre', retour: ['audit-niveau', param] }),
+      }, 'Essayer ce niveau comme un élève'),
+      ...section.cartes.map(blocCarteAudit),
+      el('section', { class: 'panneau pile serree' }, el('h2', { text: 'Ce niveau' }), remarque, relu));
   },
 };
 

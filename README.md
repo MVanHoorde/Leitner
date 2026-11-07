@@ -155,6 +155,26 @@ parcours (`tutorat_pc_isaac/outils/python/`) :
   Fiche d'audit tirée du code : `node outils/audit-paquet.mjs
   src/js/35-contenu-python.js docs/audit-python-n1.md`.
 
+Six chapitres de terminale, chacun en trois niveaux (`src/js/35-contenu-*.js`,
+outils communs dans `35-contenu-chapitres.js`) : « Intensité et niveau sonores »,
+« Diffraction », « Interférences », « Effet Doppler », « Mesure et
+incertitudes », « Dosages par étalonnage » (spectrophotométrie et
+conductimétrie, sans les titrages). Niveau 1 : vocabulaire, définitions,
+formules ; niveau 2 : petites situations, calculs de tête ; niveau 3 : pièges,
+copies d'élèves à corriger, type bac, calculatrice permise. Notions tirées du
+programme (BO spécial n° 8 du 25/07/2019). **Brouillons** (`audit: 'brouillon'`) :
+invisibles des élèves tant que Loïc ne les a pas validés. Fiches :
+`node outils/audit-paquet.mjs src/js/35-contenu-chapitres.js src/js/35-contenu-doppler.js docs/audit-doppler.md`.
+
+**Audit des paquets** (`src/js/89-audit-ecrans.js`) : pour un compte enseignant,
+un encadré de « Ma bibliothèque » mène aux paquets livrés qui portent `audit`
+(`'brouillon'`, ou `'ouvert'` s'ils sont déjà visibles des élèves). Chaque
+niveau se relit carte par carte (réponse, pièges, aide ; « 🎲 Autre tirage »
+pour une carte générative), avec un avis (bien, à revoir), une remarque libre,
+et « relu » par niveau. Rangé dans le profil (clé `audit`, donc en ligne avec le
+compte, sans table). « Exporter mes remarques » en fait un fichier Markdown à
+confier à Claude. Valider un paquet, c'est retirer `audit` dans son fichier.
+
 Quatre formats : carte retournée, QCM
 (trois pièges tirés parmi cinq à sept), réponse écrite (comparaison numérique
 avec tolérance réglable, écriture scientifique exigée au besoin), vrai ou faux.
