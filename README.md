@@ -125,6 +125,20 @@ Avec une date d'évaluation, aucune carte n'est repoussée au-delà de la veille
 et le quota de nouvelles cartes monte si besoin pour que tout ait été vu trois
 jours avant.
 
+### Écrire à M. Van Hoorde, et les nouveautés (enseignants)
+
+Un compte enseignant voit, en bas à droite, le bouton ✉️ « Écrire à M. Van
+Hoorde » (`src/js/90-gestion.js`, appelé à chaque affichage par `afficher()`) :
+un message, ses réponses. Les messages vont dans `messages_gestion`, sur la base
+du site du cours (`Site-Web-Portfolio/bdd/schema/038-gestion-collegues.sql`) :
+Loïc les lit et y répond dans l'onglet *Gestion* du tableau de bord du cours.
+Son propre bouton s'appelle « Messages des collègues » et ouvre ce tableau de
+bord. À l'arrivée, une fenêtre « ✨ Nouveautés » montre une fois les éditions de
+`NOUVEAUTES_LEITNER` (en tête du même fichier) pas encore vues ; la dernière vue
+est rangée dans `reglages_enseignant.nouveautes_vues.leitner`.
+🔴 Toute évolution qui touche les collègues ajoute une édition à cette liste
+(consigne de Loïc du 11/11/2026). Ordre de publication : le `038` d'abord.
+
 ## Les paquets intégrés
 
 Les cartes sont écrites dans le code (`src/js/33-*` à `35-*`), jamais en base : elles se

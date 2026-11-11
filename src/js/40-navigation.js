@@ -38,6 +38,9 @@ document.addEventListener('keydown', (evenement) => {
 });
 
 async function afficher() {
+  // Compte enseignant : bouton « Écrire à M. Van Hoorde » et nouveautés (90-gestion.js),
+  // dès le choix d'entrée, avant toute porte.
+  Gestion.maj().catch((erreur) => console.error('gestion', erreur));
   // Le choix d'entrée et le trombinoscope ne sont proposés qu'à un compte
   // enseignant ; tout autre visiteur va directement aux flashcards.
   if (!Porte.courante || (Porte.courante === 'prof' && !Porte.enseignant())) {
